@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { app, BrowserWindow, shell } from "electron";
 import { sendEvent } from "../ipc/rpc";
 
@@ -35,14 +36,29 @@ export function createMainWindow(): BrowserWindow {
     }
     return { action: "deny" };
   });
-  win.webContents.on("will-navigate", (event) => event.preventDefault());
 
-  const devServerUrl = process.env.ELECTRON_RENDERER_URL;
-  if (!app.isPackaged && devServerUrl) {
-    void win.loadURL(devServerUrl);
-  } else {
-    void win.loadFile(join(import.meta.dirname, "../renderer/index.html"));
-  }
+  const devServerUrl = app.isPackaged ? undefined : process.env.ELECTRON_RENDERER_URL;
+  const appUrl = devServerUrl ?? pathToFileURL(join(import.meta.dirname, "../renderer/index.html")).href;
+
+  // Only the app's own page may load in the window; reloads (including dev full reloads) stay allowed
+  win.webContents.on("will-navigate", (event, url) => {
+    if (!isAppUrl(url, appUrl)) {
+      event.preventDefault();
+    }
+  });
+
+  void win.loadURL(appUrl);
 
   return win;
+}
+
+/** Check that a navigation target is the app's own page, ignoring query and hash */
+function isAppUrl(target: string, appUrl: string): boolean {
+  try {
+    const a = new URL(target);
+    const b = new URL(appUrl);
+    return a.origin === b.origin && a.pathname === b.pathname;
+  } catch {
+    return false;
+  }
 }
