@@ -29,6 +29,24 @@ button {
   cursor: pointer;
 }
 
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--g-action-secondary-bg);
+  border: 2px solid var(--g-surface-app);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--g-action-secondary-hover);
+}
+
 :focus-visible {
   outline: var(--g-border-width) solid var(--g-focus-ring);
   outline-offset: -2px;

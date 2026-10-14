@@ -1,0 +1,29 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: var(--g-panel-padding);
+  background: var(--g-surface-panel);
+  border: var(--g-border-width) solid var(--g-panel-borderColor);
+  border-radius: var(--g-radius-panel);
+  box-shadow: var(--g-panel-shadow);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.title {
+  font-size: 15px;
+  font-weight: 700;
+}

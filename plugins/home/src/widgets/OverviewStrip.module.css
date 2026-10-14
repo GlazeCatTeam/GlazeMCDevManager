@@ -1,0 +1,38 @@
+.strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  background: var(--g-surface-panel);
+  border: var(--g-border-width) solid var(--g-panel-borderColor);
+  border-radius: var(--g-radius-panel);
+  box-shadow: var(--g-panel-shadow);
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px 24px;
+}
+
+.cell + .cell {
+  border-left: var(--g-border-width) solid var(--g-border-divider);
+}
+
+.label {
+  font-size: 13px;
+  color: var(--g-text-muted);
+}
+
+.value {
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.sub {
+  font-size: 13px;
+}
+
+.subValue {
+  font-weight: 700;
+}

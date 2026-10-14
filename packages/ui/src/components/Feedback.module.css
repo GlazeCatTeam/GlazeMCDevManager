@@ -1,0 +1,41 @@
+.tag {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  height: 22px;
+  padding: 0 8px;
+  border: var(--g-border-width) solid var(--g-tag-borderColor);
+  border-radius: var(--g-radius-control);
+  color: var(--g-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: var(--g-border-width) solid var(--g-status-warning-border);
+  border-radius: var(--g-radius-control);
+  background: var(--g-status-warning-bg);
+  color: var(--g-status-warning);
+}
+
+.message {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.track {
+  height: 10px;
+  background: var(--g-surface-sunken);
+  border-radius: var(--g-radius-control);
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  background: var(--g-progress-fill);
+}

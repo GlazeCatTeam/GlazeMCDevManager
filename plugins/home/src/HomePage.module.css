@@ -1,0 +1,33 @@
+.page {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 36px 40px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.columns {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 20px;
+}
+
+/* Fixed height so switching rankings or changing content never resizes the cards */
+.column {
+  flex: 1 1 420px;
+  min-width: 0;
+  height: 560px;
+}
+
+.profitColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.profitMain {
+  flex: 1;
+  min-height: 0;
+}

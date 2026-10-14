@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { currentAccount } from "../mock/session";
-import { PagePlaceholder } from "../routes/PagePlaceholder";
+import { RouteView } from "../routes/pages";
 import styles from "./AppShell.module.css";
 import { loadNavEntries } from "./nav";
 import { Sidebar } from "./Sidebar";
@@ -18,7 +18,7 @@ export function AppShell() {
       <div className={styles.body}>
         <Sidebar entries={entries} activeRoute={activeRoute} account={currentAccount} onNavigate={setActiveRoute} />
         <main className={styles.main}>
-          <PagePlaceholder title={activeEntry?.title ?? ""} />
+          <RouteView route={activeRoute} title={activeEntry?.title ?? ""} />
         </main>
       </div>
     </div>

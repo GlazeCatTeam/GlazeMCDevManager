@@ -3,9 +3,14 @@
   "name": "Ore UI",
   "version": "0.0.0",
   "description": "基岩版 Ore UI 的方块语言 + 简约：直角、厚底边按钮、单一绿色强调，减少装饰和层级",
-  "engines": { "glaze": "^0.1.0" },
+  "engines": {
+    "glaze": "^0.1.0"
+  },
   "defaultVariant": "dark",
-  "icons": { "set": "icons", "style": "pixel" },
+  "icons": {
+    "set": "icons",
+    "style": "pixel"
+  },
   "fonts": [],
   "tokens": {
     "base": {
@@ -42,8 +47,8 @@
       "action.primary.bg": "{green.600}",
       "action.primary.edge": "{green.700}",
       "action.primary.text": "#FFFFFF",
-      "action.secondary.bg": "{gray.600}",
-      "action.secondary.edge": "{gray.700}",
+      "action.secondary.bg": "#4A4B4E",
+      "action.secondary.edge": "#303133",
       "action.danger.bg": "{red.600}",
       "action.danger.edge": "{red.700}",
       "status.success": "{green.300}",
@@ -51,7 +56,20 @@
       "status.warning.border": "{amber.500}",
       "status.danger": "{red.600}",
       "accent.highlight": "{gold.400}",
-      "focus.ring": "#FFFFFF"
+      "focus.ring": "#FFFFFF",
+      "border.divider": "{surface.app}",
+      "text.link": "{green.300}",
+      "text.link.hover": "#A6EB87",
+      "status.warning.bg": "#2E2A20",
+      "trend.up": "{green.300}",
+      "trend.down": "#F07A7A",
+      "trend.flat": "{gray.500}",
+      "progress.fill": "{green.500}",
+      "action.primary.hover": "#469A2E",
+      "action.secondary.hover": "#56585B",
+      "text.danger": "#F07A7A",
+      "text.danger.hover": "#FF9C9C",
+      "overlay.bg": "rgba(0, 0, 0, 0.6)"
     },
     "component": {
       "radius.control": "0px",
@@ -59,14 +77,21 @@
       "border.width": "2px",
       "button.edgeBottom": "4px",
       "button.height": "40px",
-      "panel.padding": "20px",
+      "panel.padding": "24px",
       "panel.shadow": "none",
       "nav.active.bg": "{action.primary.bg}",
       "nav.active.edgeBottom": "3px",
       "nav.active.edge": "{action.primary.edge}",
       "nav.hover.bg": "#2E2F31",
       "space.unit": "4px",
-      "font.family": "\"Noto Sans\", \"Noto Sans SC\", \"Microsoft YaHei UI\", sans-serif"
+      "font.family": "\"Noto Sans\", \"Noto Sans SC\", \"Microsoft YaHei UI\", sans-serif",
+      "panel.borderColor": "{gray.900}",
+      "tag.borderColor": "{gray.600}",
+      "menu.shadow": "0 4px 0 {gray.900}",
+      "tab.indicator": "{green.500}",
+      "switch.knob": "#FFFFFF",
+      "dialog.width": "420px",
+      "panel.hoverBg": "#383A3C"
     }
   },
   "variants": {
@@ -82,7 +107,20 @@
       "text.primary": "#1B1C1D",
       "text.muted": "#55575A",
       "action.secondary.bg": "#D0D1D4",
-      "action.secondary.edge": "#A9AAAD"
+      "action.secondary.edge": "#A9AAAD",
+      "text.link": "{green.600}",
+      "text.link.hover": "{green.700}",
+      "status.warning.bg": "#FFF4D6",
+      "trend.up": "{green.600}",
+      "trend.down": "{red.600}",
+      "panel.borderColor": "#C4C5C8",
+      "tag.borderColor": "#A9AAAD",
+      "action.secondary.hover": "#C4C5C8",
+      "menu.shadow": "0 4px 0 #C4C5C8",
+      "text.danger": "{red.600}",
+      "text.danger.hover": "{red.700}",
+      "overlay.bg": "rgba(0, 0, 0, 0.35)",
+      "panel.hoverBg": "#EAEAEC"
     }
   }
 }

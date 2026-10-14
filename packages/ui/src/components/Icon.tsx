@@ -3,8 +3,8 @@ import { type IconName, pixelIcons } from "../icons/pixel-icons";
 export interface IconProps {
   name: IconName;
   /** Rendered size in px; defaults to the icon's grid size */
-  size?: number;
-  className?: string;
+  size?: number | undefined;
+  className?: string | undefined;
 }
 
 const pathCache = new Map<IconName, string>();

@@ -1,0 +1,44 @@
+.greeting {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.text {
+  flex: 1 1 320px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.level {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.levelName {
+  font-weight: 700;
+}
+
+.lv {
+  color: var(--g-accent-highlight);
+}
+
+.progress {
+  flex: 0 1 240px;
+}
+
+.exp {
+  font-size: 13px;
+  color: var(--g-text-muted);
+}

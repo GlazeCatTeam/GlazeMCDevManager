@@ -3,9 +3,14 @@
   "name": "Fluent 深色",
   "version": "0.0.0",
   "description": "第二套主题，用于验证 token 分层是否足够：圆角、柔和阴影、无按钮厚底边",
-  "engines": { "glaze": "^0.1.0" },
+  "engines": {
+    "glaze": "^0.1.0"
+  },
   "defaultVariant": "dark",
-  "icons": { "set": "icons", "style": "line" },
+  "icons": {
+    "set": "icons",
+    "style": "line"
+  },
   "fonts": [],
   "tokens": {
     "base": {
@@ -43,7 +48,20 @@
       "status.warning.border": "{amber.300}",
       "status.danger": "{red.600}",
       "accent.highlight": "{blue.600}",
-      "focus.ring": "{blue.600}"
+      "focus.ring": "{blue.600}",
+      "border.divider": "{gray.700}",
+      "text.link": "#4AA3F0",
+      "text.link.hover": "#7BBDF5",
+      "status.warning.bg": "#2B2618",
+      "trend.up": "{green.300}",
+      "trend.down": "#F1707A",
+      "trend.flat": "{gray.300}",
+      "progress.fill": "{blue.600}",
+      "action.primary.hover": "#3A97EA",
+      "action.secondary.hover": "#414754",
+      "text.danger": "#F1707A",
+      "text.danger.hover": "#F59AA1",
+      "overlay.bg": "rgba(0, 0, 0, 0.5)"
     },
     "component": {
       "radius.control": "6px",
@@ -58,7 +76,14 @@
       "nav.active.edge": "{gray.700}",
       "nav.hover.bg": "{gray.800}",
       "space.unit": "4px",
-      "font.family": "\"Noto Sans\", \"Noto Sans SC\", \"Microsoft YaHei UI\", sans-serif"
+      "font.family": "\"Noto Sans\", \"Noto Sans SC\", \"Microsoft YaHei UI\", sans-serif",
+      "panel.borderColor": "{gray.700}",
+      "tag.borderColor": "{gray.600}",
+      "menu.shadow": "0 8px 24px rgba(0, 0, 0, 0.28)",
+      "tab.indicator": "{blue.600}",
+      "switch.knob": "#FFFFFF",
+      "dialog.width": "420px",
+      "panel.hoverBg": "{gray.700}"
     }
   },
   "variants": {

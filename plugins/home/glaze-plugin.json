@@ -3,14 +3,69 @@
   "name": "首页",
   "version": "0.0.0",
   "publisher": "glaze",
-  "description": "账号概览、收益速算、近期动态",
-  "engines": { "glaze": "^0.1.0" },
-  "entries": { "ui": "src/index.ts" },
+  "description": "问候与等级、数据概览、收益速算、排行榜",
+  "engines": {
+    "glaze": "^0.1.0"
+  },
+  "entries": {
+    "ui": "src/index.ts"
+  },
   "activationEvents": ["onPage:home"],
   "contributes": {
-    "pages": [{ "id": "home", "title": "首页" }],
-    "navItems": [{ "page": "home", "icon": "nav.home", "group": "top", "order": 10 }],
-    "widgets": []
+    "pages": [
+      {
+        "id": "home",
+        "title": "首页"
+      }
+    ],
+    "navItems": [
+      {
+        "page": "home",
+        "icon": "nav.home",
+        "group": "top",
+        "order": 10
+      }
+    ],
+    "widgets": [
+      {
+        "id": "home.greeting",
+        "title": "问候与等级",
+        "minW": 6,
+        "minH": 2
+      },
+      {
+        "id": "home.overview",
+        "title": "数据概览",
+        "minW": 6,
+        "minH": 2
+      },
+      {
+        "id": "home.profit",
+        "title": "收益速算",
+        "minW": 4,
+        "minH": 4
+      },
+      {
+        "id": "home.ranking",
+        "title": "排行榜",
+        "minW": 4,
+        "minH": 6
+      }
+    ],
+    "settings": [
+      {
+        "id": "showLastMonthProfit",
+        "title": "首页显示上月收益速算",
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "id": "showNextMonthProfit",
+        "title": "首页显示下月收益速算",
+        "type": "boolean",
+        "default": false
+      }
+    ]
   },
-  "permissions": ["netease:account.read", "netease:income.read", "netease:analytics.read"]
+  "permissions": ["netease:account.read", "netease:income.read", "netease:analytics.read", "netease:rank.read"]
 }
