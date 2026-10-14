@@ -1,0 +1,19 @@
+.page {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 36px 40px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.hint {
+  margin: 0;
+  color: var(--g-text-muted);
+}

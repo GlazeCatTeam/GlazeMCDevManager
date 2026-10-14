@@ -34,6 +34,7 @@
       "surface.sidebar": "{gray.850}",
       "surface.panel": "{gray.750}",
       "surface.sunken": "{gray.900}",
+      "surface.titlebar": "{gray.900}",
       "border.strong": "{gray.950}",
       "border.subtle": "{gray.700}",
       "text.primary": "#FFFFFF",
@@ -61,12 +62,18 @@
       "panel.padding": "20px",
       "panel.shadow": "none",
       "nav.active.bg": "{action.primary.bg}",
-      "space.unit": "4px"
+      "nav.active.edgeBottom": "3px",
+      "nav.active.edge": "{action.primary.edge}",
+      "nav.hover.bg": "#2E2F31",
+      "space.unit": "4px",
+      "font.family": "\"Noto Sans\", \"Noto Sans SC\", \"Microsoft YaHei UI\", sans-serif"
     }
   },
   "variants": {
     "dark": {},
     "light": {
+      "nav.hover.bg": "#CBCBCE",
+      "surface.titlebar": "#CFCFD2",
       "surface.app": "#E6E6E8",
       "surface.sidebar": "#D8D8DB",
       "surface.panel": "#F4F4F5",

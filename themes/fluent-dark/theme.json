@@ -26,6 +26,7 @@
       "surface.sidebar": "{gray.950}",
       "surface.panel": "{gray.800}",
       "surface.sunken": "{gray.950}",
+      "surface.titlebar": "{gray.950}",
       "border.strong": "{gray.700}",
       "border.subtle": "{gray.700}",
       "text.primary": "#FFFFFF",
@@ -53,7 +54,11 @@
       "panel.padding": "20px",
       "panel.shadow": "0 8px 24px rgba(0, 0, 0, 0.28)",
       "nav.active.bg": "{gray.700}",
-      "space.unit": "4px"
+      "nav.active.edgeBottom": "0px",
+      "nav.active.edge": "{gray.700}",
+      "nav.hover.bg": "{gray.800}",
+      "space.unit": "4px",
+      "font.family": "\"Noto Sans\", \"Noto Sans SC\", \"Microsoft YaHei UI\", sans-serif"
     }
   },
   "variants": {

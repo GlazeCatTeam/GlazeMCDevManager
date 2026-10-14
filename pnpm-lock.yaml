@@ -178,6 +178,18 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@glaze/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@glaze/theme':
+        specifier: workspace:*
+        version: link:../../packages/theme
+      '@glaze/theme-ore-ui':
+        specifier: workspace:*
+        version: link:../../themes/ore-ui
+      '@glaze/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       react:
         specifier: ^19.3.0
         version: 19.3.0
@@ -223,7 +235,14 @@ importers:
 
   packages/theme: {}
 
-  packages/ui: {}
+  packages/ui:
+    devDependencies:
+      '@types/react':
+        specifier: ^19.3.0
+        version: 19.3.0
+      react:
+        specifier: ^19.3.0
+        version: 19.3.0
 
   plugins/account: {}
 

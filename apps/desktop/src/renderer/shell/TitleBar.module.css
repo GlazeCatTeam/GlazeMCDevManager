@@ -1,0 +1,45 @@
+.bar {
+  height: 40px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 14px;
+  background: var(--g-surface-titlebar);
+  -webkit-app-region: drag;
+}
+
+.title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--g-text-muted);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.controls {
+  display: flex;
+  height: 100%;
+  -webkit-app-region: no-drag;
+}
+
+.control {
+  width: 48px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--g-text-muted);
+}
+
+.control:hover {
+  background: var(--g-nav-hover-bg);
+  color: var(--g-text-primary);
+}
+
+.close:hover {
+  background: var(--g-action-danger-bg);
+  color: var(--g-text-primary);
+}

@@ -12,6 +12,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@glaze/contracts": "workspace:*",
+    "@glaze/theme": "workspace:*",
+    "@glaze/theme-ore-ui": "workspace:*",
+    "@glaze/ui": "workspace:*",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
