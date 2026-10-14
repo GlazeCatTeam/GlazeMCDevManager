@@ -1,0 +1,16 @@
+{
+  "id": "glaze.messages",
+  "name": "消息中心",
+  "version": "0.0.0",
+  "publisher": "glaze",
+  "description": "站内消息、未读数、全部已读",
+  "engines": { "glaze": "^0.1.0" },
+  "entries": { "ui": "src/index.ts" },
+  "activationEvents": ["onPage:messages"],
+  "contributes": {
+    "pages": [{ "id": "messages", "title": "消息中心" }],
+    "navItems": [{ "page": "messages", "icon": "nav.messages", "group": "top", "order": 60 }],
+    "widgets": []
+  },
+  "permissions": ["netease:messages.read", "netease:messages.write"]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "glaze.home",
+  "name": "首页",
+  "version": "0.0.0",
+  "publisher": "glaze",
+  "description": "账号概览、收益速算、近期动态",
+  "engines": { "glaze": "^0.1.0" },
+  "entries": { "ui": "src/index.ts" },
+  "activationEvents": ["onPage:home"],
+  "contributes": {
+    "pages": [{ "id": "home", "title": "首页" }],
+    "navItems": [{ "page": "home", "icon": "nav.home", "group": "top", "order": 10 }],
+    "widgets": []
+  },
+  "permissions": ["netease:account.read", "netease:income.read", "netease:analytics.read"]
+}

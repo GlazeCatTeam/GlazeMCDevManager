@@ -1,0 +1,13 @@
+{
+  "name": "@glaze/plugin-works",
+  "version": "0.0.0",
+  "private": true,
+  "description": "内置插件：works",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

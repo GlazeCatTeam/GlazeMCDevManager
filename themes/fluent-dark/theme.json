@@ -1,0 +1,62 @@
+{
+  "id": "glaze.theme.fluent-dark",
+  "name": "Fluent 深色",
+  "version": "0.0.0",
+  "description": "第二套主题，用于验证 token 分层是否足够：圆角、柔和阴影、无按钮厚底边",
+  "engines": { "glaze": "^0.1.0" },
+  "defaultVariant": "dark",
+  "icons": { "set": "icons", "style": "line" },
+  "fonts": [],
+  "tokens": {
+    "base": {
+      "gray.950": "#0F1115",
+      "gray.900": "#16181D",
+      "gray.800": "#1C1F26",
+      "gray.700": "#262A33",
+      "gray.600": "#353A45",
+      "gray.300": "#A9B0BC",
+      "blue.600": "#1E88E5",
+      "blue.700": "#1565C0",
+      "red.600": "#D13438",
+      "green.300": "#6CCB5F",
+      "amber.300": "#F2C14E"
+    },
+    "semantic": {
+      "surface.app": "{gray.900}",
+      "surface.sidebar": "{gray.950}",
+      "surface.panel": "{gray.800}",
+      "surface.sunken": "{gray.950}",
+      "border.strong": "{gray.700}",
+      "border.subtle": "{gray.700}",
+      "text.primary": "#FFFFFF",
+      "text.muted": "{gray.300}",
+      "action.primary.bg": "{blue.600}",
+      "action.primary.edge": "{blue.700}",
+      "action.primary.text": "#FFFFFF",
+      "action.secondary.bg": "{gray.600}",
+      "action.secondary.edge": "{gray.600}",
+      "action.danger.bg": "{red.600}",
+      "action.danger.edge": "{red.600}",
+      "status.success": "{green.300}",
+      "status.warning": "{amber.300}",
+      "status.warning.border": "{amber.300}",
+      "status.danger": "{red.600}",
+      "accent.highlight": "{blue.600}",
+      "focus.ring": "{blue.600}"
+    },
+    "component": {
+      "radius.control": "6px",
+      "radius.panel": "10px",
+      "border.width": "1px",
+      "button.edgeBottom": "0px",
+      "button.height": "36px",
+      "panel.padding": "20px",
+      "panel.shadow": "0 8px 24px rgba(0, 0, 0, 0.28)",
+      "nav.active.bg": "{gray.700}",
+      "space.unit": "4px"
+    }
+  },
+  "variants": {
+    "dark": {}
+  }
+}

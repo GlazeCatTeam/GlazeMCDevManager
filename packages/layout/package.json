@@ -1,0 +1,13 @@
+{
+  "name": "@glaze/layout",
+  "version": "0.0.0",
+  "private": true,
+  "description": "布局引擎：页面布局文档、组件注册、网格编辑与用户覆盖",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

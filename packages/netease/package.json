@@ -1,0 +1,13 @@
+{
+  "name": "@glaze/netease",
+  "version": "0.0.0",
+  "private": true,
+  "description": "网易平台适配：登录协议、端点目录、请求管线、会话管理",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

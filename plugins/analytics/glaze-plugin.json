@@ -1,0 +1,16 @@
+{
+  "id": "glaze.analytics",
+  "name": "数据分析",
+  "version": "0.0.0",
+  "publisher": "glaze",
+  "description": "日追踪、月汇总、单模组分析",
+  "engines": { "glaze": "^0.1.0" },
+  "entries": { "ui": "src/index.ts" },
+  "activationEvents": ["onPage:analytics"],
+  "contributes": {
+    "pages": [{ "id": "analytics", "title": "数据分析" }],
+    "navItems": [{ "page": "analytics", "icon": "nav.analytics", "group": "top", "order": 30 }],
+    "widgets": []
+  },
+  "permissions": ["netease:analytics.read", "storage"]
+}

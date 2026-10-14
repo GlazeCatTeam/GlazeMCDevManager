@@ -1,0 +1,16 @@
+{
+  "id": "glaze.settings",
+  "name": "设置",
+  "version": "0.0.0",
+  "publisher": "glaze",
+  "description": "主题、布局、插件管理、更新与关于",
+  "engines": { "glaze": "^0.1.0" },
+  "entries": { "ui": "src/index.ts" },
+  "activationEvents": ["onPage:settings"],
+  "contributes": {
+    "pages": [{ "id": "settings", "title": "设置" }],
+    "navItems": [{ "page": "settings", "icon": "nav.settings", "group": "bottom", "order": 20 }],
+    "widgets": []
+  },
+  "permissions": ["storage"]
+}

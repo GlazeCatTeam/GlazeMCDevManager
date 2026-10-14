@@ -1,0 +1,13 @@
+{
+  "name": "@glaze/storage",
+  "version": "0.0.0",
+  "private": true,
+  "description": "本地存储：SQLite、迁移、凭据加密",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

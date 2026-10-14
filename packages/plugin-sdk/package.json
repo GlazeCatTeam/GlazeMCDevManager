@@ -1,0 +1,13 @@
+{
+  "name": "@glaze/plugin-sdk",
+  "version": "0.0.0",
+  "private": true,
+  "description": "对外发布的插件 SDK：类型、上下文 API、React hooks",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

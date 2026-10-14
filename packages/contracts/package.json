@@ -1,0 +1,13 @@
+{
+  "name": "@glaze/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "description": "IPC 与插件 API 的契约定义（Zod schema + 类型）",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

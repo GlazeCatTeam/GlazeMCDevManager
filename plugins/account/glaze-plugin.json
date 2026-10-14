@@ -1,0 +1,36 @@
+{
+  "id": "glaze.account",
+  "name": "账号",
+  "version": "0.0.0",
+  "publisher": "glaze",
+  "description": "登录、账号管理、会话状态与开发者等级",
+  "engines": { "glaze": "^0.1.0" },
+  "entries": { "ui": "src/index.ts" },
+  "activationEvents": ["onStartup"],
+  "contributes": {
+    "pages": [
+      { "id": "account", "title": "账号管理", "defaultLayout": "layouts/account.json" },
+      { "id": "login", "title": "登录", "chrome": "none" },
+      { "id": "login-expired", "title": "重新登录", "chrome": "none" }
+    ],
+    "navItems": [
+      { "page": "account", "icon": "nav.account", "group": "bottom", "order": 10 }
+    ],
+    "widgets": [
+      { "id": "account.current", "title": "当前账号", "minW": 4, "minH": 3 },
+      { "id": "account.level", "title": "开发者等级", "minW": 4, "minH": 4 },
+      { "id": "account.saved", "title": "已保存账号", "minW": 4, "minH": 4 },
+      { "id": "account.security", "title": "会话与安全", "minW": 4, "minH": 3 }
+    ],
+    "commands": [
+      { "id": "account.add", "title": "添加账号" },
+      { "id": "account.switch", "title": "切换账号" },
+      { "id": "account.logout", "title": "退出登录" }
+    ],
+    "settings": [
+      { "id": "autoLogin", "title": "启动时自动登录", "type": "boolean", "default": true },
+      { "id": "notifyOnExpire", "title": "会话过期时提醒", "type": "boolean", "default": true }
+    ]
+  },
+  "permissions": ["netease:account.read", "netease:account.manage", "storage", "notifications"]
+}

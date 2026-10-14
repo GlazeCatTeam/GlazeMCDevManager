@@ -1,0 +1,7 @@
+{
+  "name": "@glaze/theme-fluent-dark",
+  "version": "0.0.0",
+  "private": true,
+  "description": "内置主题包",
+  "files": ["theme.json", "icons", "fonts"]
+}

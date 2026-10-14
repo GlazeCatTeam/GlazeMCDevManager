@@ -1,0 +1,24 @@
+{
+  "name": "glaze-mc-dev-manager",
+  "version": "0.0.0",
+  "private": true,
+  "description": "GlazeMCDevManager：网易我的世界开发者管理工具（Windows 桌面端）",
+  "type": "module",
+  "packageManager": "pnpm@12.11.2",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "turbo run dev --filter=@glaze/desktop",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "biome check .",
+    "format": "biome format --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.15",
+    "turbo": "^2.11.8",
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@glaze/theme",
+  "version": "0.0.0",
+  "private": true,
+  "description": "主题引擎：主题包解析与校验、token 转 CSS 变量、图标注册",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

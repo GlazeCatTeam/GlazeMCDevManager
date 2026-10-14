@@ -1,0 +1,16 @@
+{
+  "id": "glaze.works",
+  "name": "作品管理",
+  "version": "0.0.0",
+  "publisher": "glaze",
+  "description": "作品列表、编辑、上传、提审与上架",
+  "engines": { "glaze": "^0.1.0" },
+  "entries": { "ui": "src/index.ts" },
+  "activationEvents": ["onPage:works"],
+  "contributes": {
+    "pages": [{ "id": "works", "title": "作品管理" }],
+    "navItems": [{ "page": "works", "icon": "nav.works", "group": "top", "order": 20 }],
+    "widgets": []
+  },
+  "permissions": ["netease:works.read", "netease:works.write", "netease:upload"]
+}

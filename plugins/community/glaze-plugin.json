@@ -1,0 +1,16 @@
+{
+  "id": "glaze.community",
+  "name": "反馈与评论",
+  "version": "0.0.0",
+  "publisher": "glaze",
+  "description": "玩家反馈、组件评论、回复",
+  "engines": { "glaze": "^0.1.0" },
+  "entries": { "ui": "src/index.ts" },
+  "activationEvents": ["onPage:community"],
+  "contributes": {
+    "pages": [{ "id": "community", "title": "反馈与评论" }],
+    "navItems": [{ "page": "community", "icon": "nav.community", "group": "top", "order": 50 }],
+    "widgets": []
+  },
+  "permissions": ["netease:community.read", "netease:community.write"]
+}

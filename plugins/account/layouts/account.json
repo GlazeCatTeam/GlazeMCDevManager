@@ -1,0 +1,11 @@
+{
+  "page": "glaze.account/account",
+  "version": 1,
+  "columns": 12,
+  "items": [
+    { "id": "current", "widget": "account.current", "x": 0, "y": 0, "w": 6, "h": 4 },
+    { "id": "level", "widget": "account.level", "x": 0, "y": 4, "w": 6, "h": 5 },
+    { "id": "saved", "widget": "account.saved", "x": 6, "y": 0, "w": 6, "h": 5 },
+    { "id": "security", "widget": "account.security", "x": 6, "y": 5, "w": 6, "h": 4 }
+  ]
+}

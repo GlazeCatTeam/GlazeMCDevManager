@@ -1,0 +1,81 @@
+{
+  "id": "glaze.theme.ore-ui",
+  "name": "Ore UI",
+  "version": "0.0.0",
+  "description": "基岩版 Ore UI 的方块语言 + 简约：直角、厚底边按钮、单一绿色强调，减少装饰和层级",
+  "engines": { "glaze": "^0.1.0" },
+  "defaultVariant": "dark",
+  "icons": { "set": "icons", "style": "pixel" },
+  "fonts": [],
+  "tokens": {
+    "base": {
+      "gray.950": "#111213",
+      "gray.900": "#1B1C1D",
+      "gray.850": "#232426",
+      "gray.800": "#2B2C2E",
+      "gray.750": "#313234",
+      "gray.700": "#3A3B3D",
+      "gray.600": "#55575A",
+      "gray.500": "#77797C",
+      "gray.300": "#B9BABC",
+      "gray.100": "#F2F2F2",
+      "green.700": "#1D4D13",
+      "green.600": "#3C8527",
+      "green.500": "#5DC137",
+      "green.300": "#7FD65C",
+      "red.700": "#7E1E1E",
+      "red.600": "#C33636",
+      "amber.500": "#D99A1E",
+      "amber.300": "#FFC44D",
+      "gold.400": "#FFD43B"
+    },
+    "semantic": {
+      "surface.app": "{gray.800}",
+      "surface.sidebar": "{gray.850}",
+      "surface.panel": "{gray.750}",
+      "surface.sunken": "{gray.900}",
+      "border.strong": "{gray.950}",
+      "border.subtle": "{gray.700}",
+      "text.primary": "#FFFFFF",
+      "text.muted": "{gray.300}",
+      "action.primary.bg": "{green.600}",
+      "action.primary.edge": "{green.700}",
+      "action.primary.text": "#FFFFFF",
+      "action.secondary.bg": "{gray.600}",
+      "action.secondary.edge": "{gray.700}",
+      "action.danger.bg": "{red.600}",
+      "action.danger.edge": "{red.700}",
+      "status.success": "{green.300}",
+      "status.warning": "{amber.300}",
+      "status.warning.border": "{amber.500}",
+      "status.danger": "{red.600}",
+      "accent.highlight": "{gold.400}",
+      "focus.ring": "#FFFFFF"
+    },
+    "component": {
+      "radius.control": "0px",
+      "radius.panel": "0px",
+      "border.width": "2px",
+      "button.edgeBottom": "4px",
+      "button.height": "40px",
+      "panel.padding": "20px",
+      "panel.shadow": "none",
+      "nav.active.bg": "{action.primary.bg}",
+      "space.unit": "4px"
+    }
+  },
+  "variants": {
+    "dark": {},
+    "light": {
+      "surface.app": "#E6E6E8",
+      "surface.sidebar": "#D8D8DB",
+      "surface.panel": "#F4F4F5",
+      "surface.sunken": "#FFFFFF",
+      "border.subtle": "#C4C5C8",
+      "text.primary": "#1B1C1D",
+      "text.muted": "#55575A",
+      "action.secondary.bg": "#D0D1D4",
+      "action.secondary.edge": "#A9AAAD"
+    }
+  }
+}
