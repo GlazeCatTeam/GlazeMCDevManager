@@ -9,5 +9,15 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@glaze/plugin-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "react": "^19.3.0"
+  },
+  "peerDependencies": {
+    "react": "^19.3.0"
   }
 }

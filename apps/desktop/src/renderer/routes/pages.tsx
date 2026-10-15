@@ -1,3 +1,4 @@
+import { AccountPage } from "@glaze/plugin-account";
 import { HomePage } from "@glaze/plugin-home";
 import type { ComponentType } from "react";
 import { PagePlaceholder } from "./PagePlaceholder";
@@ -5,6 +6,7 @@ import { PagePlaceholder } from "./PagePlaceholder";
 // Temporary static page table until the plugin registry loads built-in plugins (M1)
 const pages: Record<string, ComponentType> = {
   "glaze.home/home": HomePage,
+  "glaze.account/account": AccountPage,
 };
 
 /** Render the page registered for a route, or a placeholder when it is not built yet */

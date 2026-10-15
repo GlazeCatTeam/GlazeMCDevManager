@@ -64,3 +64,11 @@
 .textWarning:hover {
   color: var(--g-status-warning);
 }
+
+.textDanger {
+  color: var(--g-text-danger);
+}
+
+.textDanger:hover {
+  color: var(--g-text-danger-hover);
+}

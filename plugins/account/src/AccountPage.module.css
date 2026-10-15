@@ -1,0 +1,65 @@
+.page {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 36px 40px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.subtitle {
+  color: var(--g-text-muted);
+}
+
+.columns {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 20px;
+}
+
+.column {
+  flex: 1 1 440px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Fixed card heights: content changes never resize a card, and both columns end level (232 + 338 = 270 + 300) */
+.current {
+  height: 232px;
+}
+
+.level {
+  height: 338px;
+}
+
+/* Sized for two accounts, which covers most developers; more accounts scroll inside */
+.saved {
+  height: 270px;
+}
+
+.security {
+  height: 300px;
+}
