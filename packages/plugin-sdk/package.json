@@ -12,5 +12,12 @@
   },
   "dependencies": {
     "@glaze/ui": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "react": "^19.3.0"
+  },
+  "peerDependencies": {
+    "react": "^19.3.0"
   }
 }

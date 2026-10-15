@@ -69,7 +69,10 @@
       "action.secondary.hover": "#56585B",
       "text.danger": "#F07A7A",
       "text.danger.hover": "#FF9C9C",
-      "overlay.bg": "rgba(0, 0, 0, 0.6)"
+      "overlay.bg": "rgba(0, 0, 0, 0.6)",
+      "text.placeholder": "#8A8C90",
+      "decor.grass": "#5DA130",
+      "decor.dirt": "#6B4426"
     },
     "component": {
       "radius.control": "0px",
@@ -91,7 +94,9 @@
       "tab.indicator": "{green.500}",
       "switch.knob": "#FFFFFF",
       "dialog.width": "420px",
-      "panel.hoverBg": "#383A3C"
+      "panel.hoverBg": "#383A3C",
+      "field.borderColor": "{action.secondary.bg}",
+      "button.heightLarge": "48px"
     }
   },
   "variants": {
@@ -120,7 +125,8 @@
       "text.danger": "{red.600}",
       "text.danger.hover": "{red.700}",
       "overlay.bg": "rgba(0, 0, 0, 0.35)",
-      "panel.hoverBg": "#EAEAEC"
+      "panel.hoverBg": "#EAEAEC",
+      "text.placeholder": "#77797C"
     }
   }
 }

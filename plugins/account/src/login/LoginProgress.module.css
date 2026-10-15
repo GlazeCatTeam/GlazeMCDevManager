@@ -1,0 +1,44 @@
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.segments {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.done,
+.current,
+.todo {
+  height: 8px;
+}
+
+.done {
+  background: var(--g-progress-fill);
+}
+
+.current {
+  background: var(--g-text-primary);
+}
+
+.todo {
+  background: var(--g-border-subtle);
+}
+
+.caption {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+}
+
+.label {
+  font-weight: 700;
+}
+
+.count {
+  color: var(--g-text-muted);
+}

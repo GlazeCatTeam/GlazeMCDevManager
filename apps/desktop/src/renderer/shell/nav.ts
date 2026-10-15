@@ -5,7 +5,7 @@ import { type IconName, pixelIcons } from "@glaze/ui";
 interface PluginManifest {
   id: string;
   contributes: {
-    pages: { id: string; title: string }[];
+    pages: { id: string; title: string; chrome?: "none" }[];
     navItems?: { page: string; icon: string; group: "top" | "bottom"; order: number }[];
   };
 }
@@ -17,6 +17,12 @@ export interface NavEntry {
   icon: IconName | undefined;
   group: "top" | "bottom";
   order: number;
+}
+
+export interface PageInfo {
+  title: string;
+  /** "none": full-window page without the side navigation, e.g. login */
+  chrome: "workbench" | "none";
 }
 
 const manifests = import.meta.glob<PluginManifest>("../../../../../plugins/*/glaze-plugin.json", {
@@ -48,4 +54,15 @@ export function loadNavEntries(): NavEntry[] {
     }
   }
   return entries.sort((a, b) => a.order - b.order);
+}
+
+/** Collect every page contributed by built-in plugins, keyed by route */
+export function loadPages(): Map<string, PageInfo> {
+  const pages = new Map<string, PageInfo>();
+  for (const manifest of Object.values(manifests)) {
+    for (const page of manifest.contributes.pages) {
+      pages.set(`${manifest.id}/${page.id}`, { title: page.title, chrome: page.chrome ?? "workbench" });
+    }
+  }
+  return pages;
 }

@@ -1,4 +1,4 @@
-import { AccountPage } from "@glaze/plugin-account";
+import { AccountPage, LoginExpiredPage, LoginPage } from "@glaze/plugin-account";
 import { HomePage } from "@glaze/plugin-home";
 import type { ComponentType } from "react";
 import { PagePlaceholder } from "./PagePlaceholder";
@@ -7,6 +7,8 @@ import { PagePlaceholder } from "./PagePlaceholder";
 const pages: Record<string, ComponentType> = {
   "glaze.home/home": HomePage,
   "glaze.account/account": AccountPage,
+  "glaze.account/login": LoginPage,
+  "glaze.account/login-expired": LoginExpiredPage,
 };
 
 /** Render the page registered for a route, or a placeholder when it is not built yet */

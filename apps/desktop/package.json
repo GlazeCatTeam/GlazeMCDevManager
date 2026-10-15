@@ -15,6 +15,7 @@
     "@glaze/contracts": "workspace:*",
     "@glaze/plugin-account": "workspace:*",
     "@glaze/plugin-home": "workspace:*",
+    "@glaze/plugin-sdk": "workspace:*",
     "@glaze/theme": "workspace:*",
     "@glaze/theme-ore-ui": "workspace:*",
     "@glaze/ui": "workspace:*",

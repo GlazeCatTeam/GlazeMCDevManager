@@ -1,4 +1,4 @@
-import { Button, Dialog, Icon } from "@glaze/plugin-sdk";
+import { Button, Dialog, Icon, useNavigation } from "@glaze/plugin-sdk";
 import { useCallback, useState } from "react";
 import styles from "./AccountPage.module.css";
 import {
@@ -9,6 +9,7 @@ import {
   accounts as mockAccounts,
   type SavedAccount,
 } from "./mock";
+import { routes } from "./routes";
 import { CurrentAccountCard } from "./widgets/CurrentAccountCard";
 import { LevelCard } from "./widgets/LevelCard";
 import { SavedAccountsCard } from "./widgets/SavedAccountsCard";
@@ -24,6 +25,7 @@ function nowHHMM(): string {
 
 /** Account management page; a fixed arrangement for now, moved onto the layout grid in M1 */
 export function AccountPage() {
+  const { navigate } = useNavigation();
   const [accounts, setAccounts] = useState<SavedAccount[]>(mockAccounts);
   const [currentUid, setCurrentUid] = useState(initialCurrentUid);
   const [verifiedAt, setVerifiedAt] = useState(initialVerifiedAt);
@@ -53,7 +55,7 @@ export function AccountPage() {
           <h1 className={styles.title}>账号管理</h1>
           <span className={styles.subtitle}>切换账号后，所有模块都会使用该账号的会话</span>
         </div>
-        <Button variant="primary" onClick={noop}>
+        <Button variant="primary" onClick={() => navigate(routes.login)}>
           <Icon name="action.add" size={14} />
           添加账号
         </Button>
@@ -68,7 +70,7 @@ export function AccountPage() {
               verifiedAt={verifiedAt}
               onVerify={() => setVerifiedAt(nowHHMM())}
               onOpenConsole={noop}
-              onLogout={noop}
+              onLogout={() => navigate(routes.login)}
             />
           )}
           <LevelCard className={styles.level} info={levelInfo} />
@@ -79,9 +81,9 @@ export function AccountPage() {
             accounts={accounts}
             currentUid={currentUid}
             onSwitch={switchTo}
-            onRelogin={noop}
+            onRelogin={(uid) => navigate(routes.loginExpired, { uid })}
             onDelete={setPendingDelete}
-            onAdd={noop}
+            onAdd={() => navigate(routes.login)}
           />
           <SessionSecurityCard className={styles.security} settings={settings} onChange={setSettings} />
         </div>

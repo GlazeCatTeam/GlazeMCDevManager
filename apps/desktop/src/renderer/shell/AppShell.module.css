@@ -15,3 +15,10 @@
   min-width: 0;
   overflow: auto;
 }
+
+.bare {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--g-surface-sidebar);
+}

@@ -61,7 +61,10 @@
       "action.secondary.hover": "#414754",
       "text.danger": "#F1707A",
       "text.danger.hover": "#F59AA1",
-      "overlay.bg": "rgba(0, 0, 0, 0.5)"
+      "overlay.bg": "rgba(0, 0, 0, 0.5)",
+      "text.placeholder": "#8A8F99",
+      "decor.grass": "{blue.600}",
+      "decor.dirt": "{gray.700}"
     },
     "component": {
       "radius.control": "6px",
@@ -83,7 +86,9 @@
       "tab.indicator": "{blue.600}",
       "switch.knob": "#FFFFFF",
       "dialog.width": "420px",
-      "panel.hoverBg": "{gray.700}"
+      "panel.hoverBg": "{gray.700}",
+      "field.borderColor": "{gray.600}",
+      "button.heightLarge": "44px"
     }
   },
   "variants": {

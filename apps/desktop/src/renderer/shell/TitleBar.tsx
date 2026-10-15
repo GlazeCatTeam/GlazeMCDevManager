@@ -1,6 +1,5 @@
-import { Icon } from "@glaze/ui";
+import { AppLogo, Icon } from "@glaze/ui";
 import { useEffect, useState } from "react";
-import { Logo } from "./Logo";
 import styles from "./TitleBar.module.css";
 
 /** Frameless window title bar with drag area and window controls */
@@ -18,7 +17,7 @@ export function TitleBar() {
 
   return (
     <header className={styles.bar}>
-      <Logo size={18} />
+      <AppLogo size={18} />
       <span className={styles.title}>Glaze MC Dev Manager</span>
       <div className={styles.spacer} />
       <div className={styles.controls}>

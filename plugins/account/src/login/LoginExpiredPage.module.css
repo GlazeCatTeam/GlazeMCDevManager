@@ -1,0 +1,80 @@
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.avatar {
+  position: relative;
+  width: 56px;
+  height: 56px;
+}
+
+/* Warning corner on the avatar: this account's session expired */
+.badge {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 18px;
+  height: 18px;
+  background: var(--g-status-warning-border);
+  border: 3px solid var(--g-surface-sidebar);
+}
+
+.alternatives {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+}
+
+.others {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 20px;
+  border-top: var(--g-border-width) solid var(--g-surface-panel);
+}
+
+.othersTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--g-text-muted);
+}
+
+.other {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 -10px;
+  padding: 10px;
+  text-align: left;
+}
+
+.other:hover {
+  background: var(--g-nav-hover-bg);
+}
+
+.otherText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.otherName {
+  font-weight: 700;
+}
+
+.valid {
+  font-size: 13px;
+  color: var(--g-status-success);
+}
+
+.use {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--g-text-muted);
+}
