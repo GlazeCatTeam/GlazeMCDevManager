@@ -62,6 +62,7 @@ import { closeLoginWindow, loginWithOfficialWindow } from "../windows/login-wind
 import { appWindows } from "../windows/main-window";
 import { CapabilityError, fromNeteaseError } from "./errors";
 import { pickAndUploadWorkFile } from "./work-files";
+import { createWorkOperationHandlers } from "./work-operations";
 
 type Handler<M extends RpcMethod> = (
   params: RpcMethods[M]["params"],
@@ -143,6 +144,7 @@ function createHandlers(
     return account;
   };
   return {
+    ...createWorkOperationHandlers(sessions),
     "general.get": () => general.get(),
     "general.set": (params) => {
       const saved = general.set(params);

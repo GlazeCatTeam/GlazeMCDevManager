@@ -90,6 +90,9 @@
 }
 
 .dates {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   font-size: 12px;
   color: var(--g-text-muted);
 }
@@ -109,4 +112,22 @@
 img.cover {
   object-fit: cover;
   background: var(--g-surface-sunken);
+}
+
+/* Leave room for two action rows without changing the fixed-height tile grid */
+@media (max-width: 1200px) {
+  .tile {
+    padding: 12px;
+    gap: 4px;
+  }
+
+  .actions {
+    gap: 4px;
+  }
+
+  .dates > span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }

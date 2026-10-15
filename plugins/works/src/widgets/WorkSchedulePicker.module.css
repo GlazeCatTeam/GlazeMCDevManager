@@ -1,0 +1,157 @@
+.picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 172px;
+  grid-template-rows: auto auto 1fr;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: var(--g-text-primary);
+}
+
+.picker legend {
+  margin-bottom: 10px;
+  padding: 0;
+  font-weight: 700;
+}
+
+.muted {
+  color: var(--g-text-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.shortcuts {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.calendar {
+  grid-row: 2 / 4;
+  padding: 10px;
+  border: var(--g-border-width) solid var(--g-panel-borderColor);
+  border-radius: var(--g-radius-control);
+  background: var(--g-surface-sunken);
+}
+
+.navigation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.navigation strong {
+  flex: 1;
+  text-align: center;
+  font-size: 14px;
+}
+
+.days {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.weekday {
+  text-align: center;
+  color: var(--g-text-muted);
+  font-size: 12px;
+}
+
+.day {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding-inline: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.day[aria-current="date"] {
+  border-color: var(--g-text-link);
+}
+
+.outside:not([aria-pressed="true"]) {
+  color: var(--g-text-muted);
+  background: var(--g-surface-panel);
+  box-shadow: none;
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dateField,
+.timeField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.timeInputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.input {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  padding: 6px 8px;
+  border: var(--g-border-width) solid var(--g-field-borderColor);
+  border-radius: var(--g-radius-control);
+  background: var(--g-surface-sunken);
+  color: var(--g-text-primary);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+}
+
+.timeInputs input {
+  text-align: center;
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--g-status-warning);
+}
+
+.picker:disabled {
+  opacity: 0.65;
+}
+
+.summary {
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+  background: var(--g-surface-sunken);
+  border-left: 3px solid var(--g-action-primary-bg);
+  font-size: 14px;
+}
+
+.invalid {
+  border-color: var(--g-status-warning);
+}
+
+@media (max-width: 600px) {
+  .picker {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .fields {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}

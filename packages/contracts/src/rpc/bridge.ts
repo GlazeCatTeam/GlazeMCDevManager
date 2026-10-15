@@ -25,6 +25,7 @@ import type {
   WorkUpload,
   WorkUploadParams,
 } from "./work-editor";
+import type { WorkOperationParams, WorkOperationResult } from "./work-operations";
 import type { WorkDetail, WorkPage, WorkPageParams, WorkParams, WorkReviewFeedback, WorkSummary } from "./works";
 
 export const RPC_CHANNEL = "glaze:rpc";
@@ -82,6 +83,14 @@ export interface RpcMethods {
   "works.list": { params: (AccountParams & { platform?: IncomePlatform }) | undefined; result: WorkSummary[] };
   "works.page": { params: WorkPageParams; result: WorkPage };
   "works.create": { params: WorkCreateParams; result: undefined };
+  "works.cancelReview": { params: WorkOperationParams; result: WorkOperationResult };
+  "works.publish": { params: WorkOperationParams; result: WorkOperationResult };
+  "works.appointOnline": { params: WorkOperationParams; result: WorkOperationResult };
+  "works.cancelAppointOnline": { params: WorkOperationParams; result: WorkOperationResult };
+  "works.submitSelfTest": { params: WorkOperationParams; result: WorkOperationResult };
+  "works.cancelTest": { params: WorkOperationParams; result: WorkOperationResult };
+  "works.delete": { params: WorkOperationParams; result: WorkOperationResult };
+  "works.changePrice": { params: WorkOperationParams; result: WorkOperationResult };
   "works.get": { params: WorkParams; result: WorkDetail };
   "works.reviewFeedback": { params: WorkParams; result: WorkReviewFeedback | null };
   "works.editor": { params: WorkParams; result: WorkEditorDocument };

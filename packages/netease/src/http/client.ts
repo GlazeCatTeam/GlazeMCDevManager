@@ -85,7 +85,7 @@ export async function getMcDev<T>(
   endpoint: string,
   path: string,
   session: NeteaseSession,
-  request?: { method: "POST" | "PUT"; body: string; allowEmpty?: boolean },
+  request?: { method: "POST" | "PUT" | "DELETE"; body?: string | undefined; allowEmpty?: boolean },
   timeoutMs = TIMEOUT_MS,
 ): Promise<Result<McDevResponse<T>>> {
   let response: Response;
@@ -99,7 +99,7 @@ export async function getMcDev<T>(
         "Content-Type": "application/json",
         Cookie: `${SESSION_COOKIE}=${session.sessionCookie}`,
       },
-      ...(request ? { body: request.body } : {}),
+      ...(request?.body === undefined ? {} : { body: request.body }),
       redirect: "manual",
       signal,
     };
@@ -154,7 +154,12 @@ export async function getMcDev<T>(
     return fail({ kind: "session_expired" });
   }
   if (!response.ok || !SUCCESS_STATUSES.has(status)) {
-    return fail({ kind: "business", code: status, message: typeof body.msg === "string" ? body.msg : "" });
+    return fail({
+      kind: "business",
+      code: status,
+      message: typeof body.msg === "string" ? body.msg : "",
+      httpStatus: response.status,
+    });
   }
   if ((body.data === undefined || body.data === null) && !request?.allowEmpty) {
     return fail({ kind: "parse", endpoint, detail: `接口 ${endpoint} 缺少 data 载荷` });
@@ -182,8 +187,8 @@ export async function writeMcDevData(
   endpoint: string,
   path: string,
   session: NeteaseSession,
-  method: "POST" | "PUT",
-  body: string,
+  method: "POST" | "PUT" | "DELETE",
+  body?: string,
 ): Promise<Result<unknown>> {
   const result = await getMcDev<unknown>(endpoint, path, session, { method, body, allowEmpty: true });
   return result.ok ? ok(result.value.data) : result;

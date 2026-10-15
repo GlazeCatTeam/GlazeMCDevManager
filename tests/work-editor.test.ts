@@ -1,9 +1,17 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
+import { createWorkOperationHandlers } from "../apps/desktop/src/main/ipc/work-operations";
 import { validateWorkVideo } from "../apps/desktop/src/main/ipc/work-video";
 import { capabilities } from "../packages/contracts/src/rpc/capabilities";
 import { emptyWorkCreateFields, isWorkCreateParams } from "../packages/contracts/src/rpc/work-create";
 import { isWorkSaveParams } from "../packages/contracts/src/rpc/work-editor";
+import {
+  isWorkOperationParams,
+  type WorkOperationMethod,
+  type WorkOperationParams,
+  workOperationMethods,
+  workScheduleTime,
+} from "../packages/contracts/src/rpc/work-operations";
 import { buildWorkCreate, createWork } from "../packages/netease/src/endpoints/work-create";
 import {
   buildWorkUpdate,
@@ -14,16 +22,291 @@ import {
   validateWorkPatch,
   workEditorFields,
 } from "../packages/netease/src/endpoints/work-editor";
+import { performWorkOperation } from "../packages/netease/src/endpoints/work-operations";
 import {
   parseWorkUploadReply,
   resolveWorkUploadUrl,
   uploadWorkFile,
 } from "../packages/netease/src/endpoints/work-upload";
-import { getWorksPage } from "../packages/netease/src/endpoints/works";
+import { getWorksPage, listWorks, readWorkStatus } from "../packages/netease/src/endpoints/works";
 import { getMcDevData, parsePlatformJson, writeMcDevData } from "../packages/netease/src/http/client";
 import { WorkQueryCache } from "../plugins/works/src/query-cache";
+import { actionsFor, statusLabels, statusTones } from "../plugins/works/src/status";
 
 const originalFetch = globalThis.fetch;
+test("list operation contracts reject unknown fields, invalid states, dates and prices", () => {
+  const base = { account: "a", itemId: "4686664860310207622", expectedStatus: "accept" };
+  assert.equal(isWorkOperationParams("works.publish", base), true);
+  for (const patch of [{ itemId: "../1" }, { account: " " }, { expectedStatus: "online" }, { op_platform: "pe" }])
+    assert.equal(isWorkOperationParams("works.publish", { ...base, ...patch }), false);
+  assert.equal(isWorkOperationParams("works.submitSelfTest", { ...base, expectedStatus: "init" }), false);
+  assert.equal(
+    isWorkOperationParams("works.submitSelfTest", { ...base, expectedStatus: "init", passCheck: false }),
+    true,
+  );
+  assert.equal(workScheduleTime("2028-02-29 12:30:00"), Date.parse("2028-02-29T04:30:00Z"));
+  for (const date of [
+    "2027-02-29 12:30:00",
+    "2028-02-30 12:00:00",
+    "2028-01-01 24:00:00",
+    "2028-01-01T12:00:00",
+    "2028-01-01 12:00:00Z",
+  ])
+    assert.equal(workScheduleTime(date), null);
+  for (const price of [0, -1, 601, 1.5, Number.NaN, 600])
+    assert.equal(
+      isWorkOperationParams("works.changePrice", {
+        ...base,
+        expectedStatus: "online",
+        expectedPrice: 600,
+        expectedPriceType: "diamond",
+        price,
+      }),
+      false,
+    );
+  for (const method of workOperationMethods) {
+    assert.equal(capabilities[method].caller, "shell");
+    assert.equal(capabilities[method].mcp, undefined);
+  }
+  assert.equal(capabilities["works.delete"].risk, "dangerous");
+});
+
+test("list operations use exact verbs, paths and minimal wire bodies", async () => {
+  const cases: [WorkOperationMethod, Partial<WorkOperationParams>, string, string, unknown][] = [
+    ["works.cancelReview", { expectedStatus: "reviewing" }, "PUT", "/cancel_review", undefined],
+    ["works.publish", { expectedStatus: "accept" }, "PUT", "/online", { op_platform: "all" }],
+    [
+      "works.cancelAppointOnline",
+      { expectedStatus: "appoint_online" },
+      "PUT",
+      "/appoint_online",
+      { appoint_online_time: null },
+    ],
+    [
+      "works.appointOnline",
+      { expectedStatus: "accept", appointOnlineTime: "2099-01-01 10:30:00" },
+      "PUT",
+      "/appoint_online",
+      { appoint_online_time: "2099-01-01 10:30:00", op_platform: "all" },
+    ],
+    [
+      "works.submitSelfTest",
+      { expectedStatus: "init", passCheck: false },
+      "PUT",
+      "/self-test-apply",
+      { pass_check: false },
+    ],
+    ["works.cancelTest", { expectedStatus: "self_test" }, "PUT", "/cancel_self_test", undefined],
+    ["works.delete", { expectedStatus: "init" }, "DELETE", "", undefined],
+    [
+      "works.changePrice",
+      { expectedStatus: "online", expectedPrice: 600, expectedPriceType: "diamond", price: 1000 },
+      "POST",
+      "/change_price",
+      { price: 1000, price_type: "diamond", price_rank: 2 },
+    ],
+  ];
+  for (const [method, input, verb, suffix, body] of cases) {
+    const params = { account: "a", itemId, ...input } as WorkOperationParams;
+    const calls = mockFetch((url, init) => {
+      if (init.method !== "GET") return response();
+      if (url.endsWith("/items/mc_consts/")) return response(createConstants);
+      if (url.endsWith("/item-tag/")) return response({ tag_list: [] });
+      return response({ ...fixture, status: params.expectedStatus, price_type: "diamond", price: 600, price_rank: 1 });
+    });
+    assert.deepEqual(await performWorkOperation(session, method, params), {
+      ok: true,
+      value: { outcome: "completed" },
+    });
+    const writes = calls.filter((c) => c.init.method !== "GET");
+    assert.equal(writes.length, 1, method);
+    assert.equal(writes[0].init.method, verb);
+    assert.ok(writes[0].url.endsWith(`/items/categories/pe/${itemId}${suffix}`));
+    assert.deepEqual(writes[0].init.body === undefined ? undefined : JSON.parse(String(writes[0].init.body)), body);
+    assert.equal(writes[0].init.redirect, "manual");
+  }
+});
+
+test("schedule cancellation rejects changed state, retains rejection and never retries an uncertain write", async () => {
+  const params = { account: "a", itemId, expectedStatus: "appoint_online" } as const;
+  assert.equal(isWorkOperationParams("works.cancelAppointOnline", { ...params, expectedStatus: "accept" }), false);
+  assert.equal(isWorkOperationParams("works.cancelAppointOnline", { ...params, appointOnlineTime: null }), false);
+  for (const scenario of ["already-online", "rejected", "network"]) {
+    const calls = mockFetch((_url, init) => {
+      if (init.method === "GET")
+        return response({ ...fixture, status: scenario === "already-online" ? "online" : "appoint_online" });
+      if (scenario === "network") throw new Error("connection lost");
+      return response({}, "not_allowed");
+    });
+    const result = await performWorkOperation(session, "works.cancelAppointOnline", params);
+    assert.equal(result.ok, scenario === "network");
+    if (result.ok) assert.equal(result.value.outcome, "uncertain");
+    assert.equal(calls.filter((call) => call.init.method !== "GET").length, scenario === "already-online" ? 0 : 1);
+  }
+});
+
+test("precondition failures never write or retry", async () => {
+  for (const method of workOperationMethods.filter((m) => m !== "works.changePrice")) {
+    const states = {
+      "works.cancelReview": "reviewing",
+      "works.publish": "accept",
+      "works.appointOnline": "accept",
+      "works.cancelAppointOnline": "appoint_online",
+      "works.submitSelfTest": "init",
+      "works.cancelTest": "self_test",
+      "works.delete": "init",
+    };
+    const params = {
+      account: "a",
+      itemId,
+      expectedStatus: states[method as keyof typeof states],
+      ...(method === "works.appointOnline" ? { appointOnlineTime: "2099-01-01 12:00:00" } : {}),
+      ...(method === "works.submitSelfTest" ? { passCheck: true } : {}),
+    } as WorkOperationParams;
+    const calls = mockFetch(() => response({ ...fixture, status: "unknown" }));
+    assert.equal((await performWorkOperation(session, method, params)).ok, false);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].init.method, "GET");
+  }
+  const calls = mockFetch(() => response({ ...fixture, status: "accept" }));
+  assert.equal(
+    (
+      await performWorkOperation(session, "works.appointOnline", {
+        account: "a",
+        itemId,
+        expectedStatus: "accept",
+        appointOnlineTime: "2000-01-01 00:00:00",
+      })
+    ).ok,
+    false,
+  );
+  assert.equal(calls.length, 1);
+  calls.length = 0;
+  assert.equal(
+    (await performWorkOperation(session, "works.delete", { account: "a", itemId: "../bad", expectedStatus: "init" }))
+      .ok,
+    false,
+  );
+  assert.equal(calls.length, 0);
+});
+
+test("price changes preserve emerald rank and enforce live rules and the old price", async () => {
+  const params: WorkOperationParams = {
+    account: "a",
+    itemId,
+    expectedStatus: "online",
+    expectedPrice: 100,
+    expectedPriceType: "point",
+    price: 200,
+  };
+  for (const scenario of [
+    "success",
+    "changed-price",
+    "changed-currency",
+    "prerequisite",
+    "missing-rule",
+    "range",
+    "step",
+  ]) {
+    const calls = mockFetch((url, init) => {
+      if (init.method !== "GET") return response();
+      if (url.endsWith("/item-tag/")) return response({ tag_list: [] });
+      if (url.endsWith("/items/mc_consts/"))
+        return response({
+          ...createConstants,
+          price_type:
+            scenario === "missing-rule"
+              ? []
+              : [{ id: "point", min: 0, max: scenario === "range" ? 150 : 1000, step: scenario === "step" ? 30 : 100 }],
+        });
+      return response({
+        ...fixture,
+        pri_type: scenario === "prerequisite" ? 9 : 2,
+        price: scenario === "changed-price" ? 300 : 100,
+        price_type: scenario === "changed-currency" ? "free" : "point",
+        price_rank: -5,
+      });
+    });
+    const result = await performWorkOperation(session, "works.changePrice", params);
+    assert.equal(result.ok, scenario === "success", scenario);
+    const writes = calls.filter((c) => c.init.method !== "GET");
+    assert.equal(writes.length, scenario === "success" ? 1 : 0);
+    if (writes.length)
+      assert.deepEqual(JSON.parse(String(writes[0].init.body)), { price: 200, price_type: "point", price_rank: -5 });
+  }
+});
+
+test("ambiguous write replies return unknown outcome and never replay writes", async () => {
+  for (const scenario of ["timeout", "network", "parse", "http500"]) {
+    const calls = mockFetch((_url, init) => {
+      if (init.method === "GET") return response({ ...fixture, status: "init" });
+      if (scenario === "timeout") throw new DOMException("test", "TimeoutError");
+      if (scenario === "network") throw new Error("connection lost");
+      if (scenario === "http500") return new Response('{"status":"error","msg":"unknown"}', { status: 500 });
+      return new Response("invalid json");
+    });
+    assert.deepEqual(
+      await performWorkOperation(session, "works.delete", { account: "a", itemId, expectedStatus: "init" }),
+      { ok: true, value: { outcome: "uncertain" } },
+    );
+    assert.equal(calls.length, 2);
+  }
+});
+
+test("business rejection, expiry and redirects remain failures without replay", async () => {
+  for (const scenario of ["rejection", "expired", "redirect"]) {
+    const calls = mockFetch((_url, init) => {
+      if (init.method === "GET") return response({ ...fixture, status: "reviewing" });
+      if (scenario === "redirect") return new Response(null, { status: 308, headers: { location: "/other" } });
+      return response({}, scenario === "expired" ? "no_login" : "not_allowed");
+    });
+    assert.equal(
+      (await performWorkOperation(session, "works.cancelReview", { account: "a", itemId, expectedStatus: "reviewing" }))
+        .ok,
+      false,
+    );
+    assert.equal(calls.length, 2);
+  }
+});
+
+test("host rejects concurrent writes and an account switch during preflight", async () => {
+  let currentAccount = "a";
+  let release: () => void = () => {};
+  let started: () => void = () => {};
+  const began = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const waiting = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const calls = mockFetch(async () => {
+    started();
+    await waiting;
+    return response({ ...fixture, status: "init" });
+  });
+  const sessions = {
+    current: () => ({ id: currentAccount }),
+    request: async (_account: string, call: (s: typeof session) => Promise<{ ok: boolean; value?: unknown }>) => {
+      const result = await call(session);
+      if (!result.ok) throw new Error("fixture platform failure");
+      return result.value;
+    },
+  } as Parameters<typeof createWorkOperationHandlers>[0];
+  const handlers = createWorkOperationHandlers(sessions);
+  const params: WorkOperationParams = { account: "a", itemId, expectedStatus: "init" };
+  const first = handlers["works.delete"](params);
+  await began;
+  await assert.rejects(handlers["works.delete"](params), /正在操作/);
+  currentAccount = "b";
+  release();
+  await assert.rejects(first, /账号已切换/);
+  assert.equal(calls.length, 1);
+  await assert.rejects(handlers["works.delete"](params), /账号已切换/);
+  assert.equal(calls.length, 1);
+  currentAccount = "a";
+  mockFetch((_url, init) => (init.method === "GET" ? response({ ...fixture, status: "init" }) : response()));
+  assert.deepEqual(await handlers["works.delete"](params), { outcome: "completed" });
+});
 const session = { sessionCookie: "unit-test-session" };
 const itemId = "4686664860310207622";
 const fixture = {
@@ -83,6 +366,21 @@ function response(data?: unknown, status = "ok") {
 }
 afterEach(() => {
   globalThis.fetch = originalFetch;
+});
+
+test("scheduled works keep their platform status across list, page and editor reads", async () => {
+  const row = { ...fixture, status: "appoint_online", create_time: "2026-10-01" };
+  mockFetch((url) => response(url.includes("/items/categories/pe/?") ? { count: 1, item: [row] } : row));
+  const page = await getWorksPage(session, 0, 9);
+  const list = await listWorks(session);
+  const editor = await readWorkEditor(session, itemId);
+  assert.equal(page.ok && page.value.items[0]?.status, "appoint_online");
+  assert.equal(list.ok && list.value[0]?.status, "appoint_online");
+  assert.equal(editor.ok && editor.value.status, "appoint_online");
+  assert.equal(statusLabels.appoint_online, "定时上架中");
+  assert.equal(statusTones.appoint_online, "progress");
+  assert.deepEqual(actionsFor("appoint_online"), ["viewFeedback", "cancelAppointOnline"]);
+  assert.equal(readWorkStatus("new_unrecognized_status"), "unknown");
 });
 
 test("workbench requests only nine rows and uses the platform count for pagination", async () => {

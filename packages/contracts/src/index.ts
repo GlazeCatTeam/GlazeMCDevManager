@@ -13,4 +13,5 @@ export * from "./rpc/messages";
 export * from "./rpc/rank";
 export * from "./rpc/work-create";
 export * from "./rpc/work-editor";
+export * from "./rpc/work-operations";
 export * from "./rpc/works";

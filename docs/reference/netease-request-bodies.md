@@ -14,7 +14,7 @@
 
 新建独有字段包括 `available_scope`, `brief`, `game_host`, `include_map`, `tags`; 编辑独有字段包括 `corp_proof_image`, `discount`, `play_plan_expire_time`, `pre_review_video`, `relate_item_id`, `relate_item_weak_offline`, `sync_item_info`。`collection_id` 在新建是 Int, 编辑是 String; `mc_version` 类型也不同。详见下面逐字段表和 JSON 的 `payloadSerializationAudit`。
 
-`AppointOnlineDTO.appoint_online_time` 的源码注释称 null 可取消定时, 但全局 `explicitNulls=false` 会省略 null; 取消场景的服务器处理需单独确认, 不能仅按注释构造请求。
+`AppointOnlineDTO.appoint_online_time` 的源码注释称 null 可取消定时, 但全局 `explicitNulls=false` 会省略 null。2026-10-16 核对[网易官方网页脚本](https://mcdev.webapp.163.com/static/js/14.605f7cf8d838f3a5ce7e.js)确认取消预约使用 PUT `/items/categories/pe/{id}/appoint_online`, 请求体为 `{"appoint_online_time":null}`, 不附加 `op_platform`; 本项目按此协议实现, 未用真实作品执行取消验收。
 
 ## 登录参数与文件回执
 

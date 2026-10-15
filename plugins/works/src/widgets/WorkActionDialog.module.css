@@ -1,0 +1,57 @@
+.scheduleDialog {
+  width: 600px;
+  gap: 14px;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.scheduleDialog .content {
+  gap: 8px;
+}
+.content p {
+  margin: 0;
+  line-height: 1.7;
+}
+.name {
+  overflow-wrap: anywhere;
+  color: var(--g-text-primary);
+}
+.muted {
+  color: var(--g-text-muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-weight: 700;
+}
+.input {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 9px 12px;
+  color: var(--g-text-primary);
+  background: var(--g-surface-sunken);
+  border: var(--g-border-width) solid var(--g-field-borderColor);
+  border-radius: var(--g-radius-control);
+  font: inherit;
+  user-select: text;
+}
+.input:focus {
+  outline: none;
+  border-color: var(--g-focus-ring);
+}
+.input:disabled {
+  opacity: 0.65;
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

@@ -44,6 +44,9 @@ export type {
   WorkEditorDocument,
   WorkEditorOptions,
   WorkImageSlot,
+  WorkOperationMethod,
+  WorkOperationParams,
+  WorkOperationResult,
   WorkOption,
   WorkPage,
   WorkPriceType,
@@ -69,6 +72,8 @@ export {
   MAX_FEEDBACK_REPLY_LENGTH,
   messageTypes,
   remoteImageUrl,
+  workDiamondPrices,
+  workScheduleTime,
   workSections,
 } from "@glaze/contracts";
 export * from "@glaze/ui";

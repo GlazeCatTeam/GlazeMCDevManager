@@ -7,10 +7,11 @@ export interface DialogProps {
   /** Buttons on the bottom right; put the safe action first */
   actions: ReactNode;
   onClose: () => void;
+  className?: string | undefined;
 }
 
 /** Modal confirmation dialog; Escape or clicking the backdrop closes it */
-export function Dialog({ title, children, actions, onClose }: DialogProps) {
+export function Dialog({ title, children, actions, onClose, className }: DialogProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -27,7 +28,13 @@ export function Dialog({ title, children, actions, onClose }: DialogProps) {
 
   return (
     <div className={styles.backdrop} onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
-      <div ref={panelRef} role="dialog" aria-modal="true" aria-label={title} className={styles.dialog}>
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className={[styles.dialog, className].filter(Boolean).join(" ")}
+      >
         <span className={styles.title}>{title}</span>
         {children && <div className={styles.body}>{children}</div>}
         <div className={styles.actions}>{actions}</div>

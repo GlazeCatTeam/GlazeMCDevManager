@@ -6,9 +6,12 @@ import type {
   GlazeBridge,
   WorkEditorDocument,
   WorkEditorOptions,
+  WorkOperationMethod,
+  WorkOperationParams,
   WorkRecord,
   WorkSummary,
 } from "../../packages/contracts/src";
+import { workOperationMethods, workOperationStates } from "../../packages/contracts/src";
 import { applyTheme } from "../../packages/theme/src";
 import oreUi from "../../themes/ore-ui/theme.json";
 import "../../apps/desktop/src/renderer/global.css";
@@ -110,10 +113,14 @@ const options: WorkEditorOptions = {
   prices: [
     { id: "free", title: "免费", min: 0, max: 0, step: 0 },
     { id: "diamond", title: "钻石", min: 300, max: 20000, step: 100 },
+    { id: "point", title: "绿宝石", min: 100, max: 10000, step: 100 },
   ],
 };
 const requests: { method: string; params: unknown }[] = [];
 const performancePreview = new URLSearchParams(location.search).has("performance");
+const actionsPreview = new URLSearchParams(location.search).has("actions");
+const scheduledPreview = new URLSearchParams(location.search).has("scheduled");
+let actionFailure = new URLSearchParams(location.search).get("actionFailure");
 const workList = performancePreview
   ? Array.from({ length: 90 }, (_, i) => ({ ...work, itemId: String(1000 + i), name: `性能测试作品 ${i + 1}` }))
   : [work];
@@ -126,8 +133,28 @@ if (new URLSearchParams(location.search).has("currency")) {
     { ...work, itemId: "2003", name: "免费作品" },
   );
 }
+if (actionsPreview) {
+  workList.splice(
+    0,
+    workList.length,
+    ...(
+      [
+        { itemId: "3001", name: "审核中的测试作品", status: "reviewing" },
+        { itemId: "3002", name: "待上架的测试作品", status: "accept" },
+        { itemId: "3003", name: "待自测的测试作品", status: "init" },
+        { itemId: "3004", name: "自测中的测试作品", status: "self_test" },
+        { itemId: "3005", name: "待删除的测试作品", status: "init" },
+        { itemId: "3006", name: "钻石定价测试作品", status: "online", price: 600, priceType: "diamond" },
+        { itemId: "3007", name: "绿宝石定价测试作品", status: "online", price: 100, priceType: "point" },
+        { itemId: "3008", name: "免费已上架作品", status: "online" },
+        { itemId: "3009", name: "待定时上架的测试作品", status: scheduledPreview ? "appoint_online" : "accept" },
+        { itemId: "3010", name: "末页待删除作品", status: "init" },
+      ] as Partial<WorkSummary>[]
+    ).map((entry) => ({ ...work, ...entry })),
+  );
+}
 const documents = new Map(
-  performancePreview || new URLSearchParams(location.search).has("currency")
+  performancePreview || actionsPreview || new URLSearchParams(location.search).has("currency")
     ? workList.map(
         (entry) =>
           [
@@ -135,6 +162,7 @@ const documents = new Map(
             {
               ...document,
               itemId: entry.itemId,
+              status: entry.status,
               fields: {
                 ...document.fields,
                 item_name: entry.name,
@@ -158,6 +186,39 @@ if (performancePreview) {
 /** Model the preload contract locally; this fixture has no network implementation */
 const rpc = async (method: string, params?: unknown) => {
   requests.push({ method, params: structuredClone(params) });
+  if (workOperationMethods.includes(method as WorkOperationMethod)) {
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    const input = params as WorkOperationParams;
+    const target = workList.find((entry) => entry.itemId === input.itemId);
+    const doc = documents.get(input.itemId);
+    if (actionFailure === "expired")
+      return { ok: false, error: { kind: "session_expired", message: "模拟登录已过期" } };
+    if (actionFailure === "reject")
+      return { ok: false, error: { kind: "business", message: "模拟平台拒绝：当前作品不能执行此操作" } };
+    if (actionFailure === "conflict" && target) target.status = "online";
+    if (
+      !target ||
+      !doc ||
+      target.status !== input.expectedStatus ||
+      !workOperationStates[method as WorkOperationMethod].includes(target.status)
+    )
+      return { ok: false, error: { kind: "business", message: "作品状态已变化，请刷新列表后重新操作" } };
+    if (method === "works.delete") workList.splice(workList.indexOf(target), 1);
+    if (method === "works.cancelReview" || method === "works.cancelTest") target.status = "init";
+    if (method === "works.submitSelfTest") target.status = input.passCheck ? "self_test" : "self_test_prepare";
+    if (method === "works.publish") target.status = "online";
+    if (method === "works.appointOnline") schedules.set(input.itemId, input.appointOnlineTime ?? null);
+    if (method === "works.cancelAppointOnline") {
+      schedules.delete(input.itemId);
+      target.status = "accept";
+    }
+    if (method === "works.changePrice") {
+      target.price = input.price ?? target.price;
+      doc.fields.price = target.price;
+    }
+    doc.status = target.status;
+    return { ok: true, value: { outcome: actionFailure === "uncertain" ? "uncertain" : "completed" } };
+  }
   if (performancePreview)
     metrics.textContent = `分页 ${requests.filter((r) => r.method === "works.page").length} · 全量 ${requests.filter((r) => r.method === "works.list").length} · 封面 ${requests.filter((r) => r.method === "works.get").length}`;
   if (method === "works.page") {
@@ -182,11 +243,11 @@ const rpc = async (method: string, params?: unknown) => {
       bannerUrl: null,
       onlineTime: null,
       firstOnlineTime: null,
-      appointOnlineTime: null,
+      appointOnlineTime: schedules.get((params as { itemId?: string } | undefined)?.itemId ?? "") ?? null,
     },
     "works.editor": documents.get((params as { itemId?: string } | undefined)?.itemId ?? work.itemId),
     "works.options": options,
-    "works.reviewFeedback": null,
+    "works.reviewFeedback": scheduledPreview ? { text: "审核通过，等待预约上架", time: null } : null,
   };
   if (method === "works.create") {
     await new Promise((resolve) => setTimeout(resolve, 250));
@@ -213,12 +274,17 @@ const rpc = async (method: string, params?: unknown) => {
     return { ok: true, value: undefined };
   }
   if (method === "works.save") {
-    Object.assign(document.fields, (params as { patch: WorkRecord }).patch);
-    work.name = String(document.fields.item_name);
+    const input = params as { itemId: string; patch: WorkRecord };
+    const target = documents.get(input.itemId);
+    if (!target) return { ok: false, error: { kind: "fixture", message: "作品不存在" } };
+    Object.assign(target.fields, input.patch);
+    const summary = workList.find((entry) => entry.itemId === input.itemId);
+    if (summary) summary.name = String(target.fields.item_name);
     return { ok: true, value: undefined };
   }
   if (method === "works.submitReview") {
-    document.status = "reviewing";
+    const target = documents.get((params as { itemId: string }).itemId);
+    if (target) target.status = "reviewing";
     return { ok: true, value: { needCheckApply: false, queueLength: 2 } };
   }
   if (method === "works.upload" && (params as { kind: string }).kind === "resource")
@@ -253,6 +319,18 @@ const rpc = async (method: string, params?: unknown) => {
     : { ok: false, error: { kind: "fixture", message: `未模拟接口 ${method}` } };
 };
 Object.assign(globalThis, { glaze: { rpc, on: () => () => {} } as GlazeBridge });
+const schedules = new Map<string, string | null>();
+if (scheduledPreview) schedules.set("3009", "2099-01-01T10:30:00+08:00");
+if (actionsPreview)
+  Object.assign(globalThis, {
+    workActionFixture: {
+      requests,
+      workList,
+      fail: (value: string | null) => {
+        actionFailure = value;
+      },
+    },
+  });
 applyTheme(oreUi);
 // Browser-only checks exercise the sanitizer with real DOMParser behavior.
 const cleaned = sanitizeWorkHtml(

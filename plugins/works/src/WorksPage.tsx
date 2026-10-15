@@ -16,6 +16,7 @@ import type { WorkAction } from "./status";
 import { invalidateWorks, useWorksPage } from "./useWorkQuery";
 import styles from "./WorksPage.module.css";
 import { ReviewFeedbackDialog } from "./widgets/ReviewFeedbackDialog";
+import { type ListWriteAction, WorkActionDialog } from "./widgets/WorkActionDialog";
 import { WorkTile } from "./widgets/WorkTile";
 
 const PER_PAGE = 9;
@@ -42,6 +43,9 @@ function WorksForAccount({ account }: { account: AccountSummary }) {
   const [knownTotal, setKnownTotal] = useState(0);
   const [coverRevision, setCoverRevision] = useState(0);
   const [feedbackFor, setFeedbackFor] = useState<WorkSummary | null>(null);
+  const [actionFor, setActionFor] = useState<{ work: WorkSummary; action: ListWriteAction } | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const closeAction = useCallback(() => setActionFor(null), []);
   const [viewing, setViewing] = useState<{ work: WorkSummary; account: string } | null>(null);
   const [creatingFor, setCreatingFor] = useState<string | null>(null);
   const [createdFor, setCreatedFor] = useState<string | null>(null);
@@ -66,12 +70,16 @@ function WorksForAccount({ account }: { account: AccountSummary }) {
     works.reload();
   };
 
-  /** Editing and review actions open the detail page; other writes remain disabled */
+  /** Route editor actions separately and confirm each list mutation */
   const onAction = (work: WorkSummary, action: WorkAction) => {
     if (action === "viewFeedback") {
       setFeedbackFor(work);
     }
     if ((action === "update" || action === "submitReview") && account) setViewing({ work, account: account.id });
+    if (action !== "update" && action !== "submitReview" && action !== "viewFeedback" && account.status === "active") {
+      setActionMessage(null);
+      setActionFor({ work, action });
+    }
   };
 
   if (creatingFor && creatingFor === account?.id)
@@ -128,6 +136,12 @@ function WorksForAccount({ account }: { account: AccountSummary }) {
         <Notice>作品已创建，尚未提交审核。请在刷新后的列表中打开作品继续编辑或提审。</Notice>
       )}
 
+      {actionMessage && (
+        <div role="status">
+          <Notice>{actionMessage}</Notice>
+        </div>
+      )}
+
       {works.error && (
         <Notice
           action={
@@ -147,6 +161,7 @@ function WorksForAccount({ account }: { account: AccountSummary }) {
               key={`${work.itemId}:${coverRevision}`}
               account={account.id}
               work={work}
+              canWrite={account.status === "active"}
               onAction={onAction}
               onOpenDetail={(work) => account && setViewing({ work, account: account.id })}
             />
@@ -171,6 +186,21 @@ function WorksForAccount({ account }: { account: AccountSummary }) {
       <Pagination page={page} pageCount={pageCount} onChange={setPage} note={`每页 ${PER_PAGE} 个`} />
 
       {feedbackFor && <ReviewFeedbackDialog work={feedbackFor} onClose={closeFeedback} />}
+      {actionFor && (
+        <WorkActionDialog
+          key={`${account.id}:${actionFor.work.itemId}:${actionFor.action}`}
+          work={actionFor.work}
+          account={account.id}
+          action={actionFor.action}
+          onClose={closeAction}
+          onRefresh={refresh}
+          onCompleted={(message) => {
+            setActionMessage(message);
+            setActionFor(null);
+            refresh();
+          }}
+        />
+      )}
     </div>
   );
 }

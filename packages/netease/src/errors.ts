@@ -4,7 +4,7 @@ export type NeteaseError =
   | { kind: "session_expired" }
   | { kind: "network"; cause: string }
   | { kind: "timeout" }
-  | { kind: "business"; code: string; message: string }
+  | { kind: "business"; code: string; message: string; httpStatus?: number }
   | { kind: "parse"; endpoint: string; detail?: string };
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: NeteaseError };

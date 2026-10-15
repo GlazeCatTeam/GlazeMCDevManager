@@ -1,6 +1,6 @@
 import { avatarColorsFor, Button, remoteImageUrl, Tag, TextButton, type WorkSummary } from "@glaze/plugin-sdk";
 import { useState } from "react";
-import { formatDate } from "../format";
+import { formatDate, formatDateTime } from "../format";
 import { actionLabels, actionsFor, readActions, statusLabels, statusTones, type WorkAction } from "../status";
 import { useWorkCover } from "../useWorkQuery";
 import { WorkPrice } from "./WorkPrice";
@@ -9,13 +9,11 @@ import styles from "./WorkTile.module.css";
 export interface WorkTileProps {
   work: WorkSummary;
   account: string;
-  /** Read actions and the editor/review entry point; unsupported writes stay disabled */
+  /** Read actions, editor entry points and confirmed list operations */
   onAction: (work: WorkSummary, action: WorkAction) => void;
   onOpenDetail: (work: WorkSummary) => void;
+  canWrite: boolean;
 }
-
-/** Shown on write actions until they are connected to the platform */
-const WRITE_PENDING = "暂未接入，请在开发者平台操作";
 
 const toneClass = {
   online: styles.online,
@@ -41,10 +39,12 @@ function Cover({ iconUrl, seed }: { iconUrl: string | null; seed: string }) {
 }
 
 /** Fixed-size tile for one work: status, price, dates and the actions its status allows */
-export function WorkTile({ work, account, onAction, onOpenDetail }: WorkTileProps) {
+export function WorkTile({ work, account, onAction, onOpenDetail, canWrite }: WorkTileProps) {
   const detail = useWorkCover(account, work.itemId);
   const actions = actionsFor(work.status);
   const onlineTime = detail.data?.onlineTime ?? null;
+  const appointOnlineTime = detail.data?.appointOnlineTime;
+  const scheduled = work.status === "appoint_online" || work.status === "accept";
   const dates =
     onlineTime && onlineTime !== "UNKNOWN"
       ? `创建 ${formatDate(work.createTime)}  ·  上线 ${formatDate(onlineTime)}`
@@ -72,18 +72,25 @@ export function WorkTile({ work, account, onAction, onOpenDetail }: WorkTileProp
         {work.weakOffline && <Tag tone="warning">弱下架</Tag>}
       </div>
 
-      <span className={styles.dates}>{dates}</span>
+      <div className={styles.dates}>
+        <span title={dates}>{dates}</span>
+        {scheduled && appointOnlineTime && appointOnlineTime !== "UNKNOWN" && (
+          <span>定时上架 {formatDateTime(appointOnlineTime)}</span>
+        )}
+      </div>
 
       <div className={styles.actions}>
         {actions.map((action) => {
-          const pending = !readActions.has(action) && action !== "update" && action !== "submitReview";
+          const priceUnavailable = action === "changePrice" && (work.isPrerequisite || work.priceType === "free");
+          const pending = (!readActions.has(action) && !canWrite) || priceUnavailable;
+          const reason = priceUnavailable ? "免费作品和前置模组不支持独立调价" : "请先恢复账号会话";
           return action === "delete" ? (
             <TextButton
               key={action}
               tone="danger"
               className={styles.delete}
               disabled={pending}
-              title={pending ? WRITE_PENDING : undefined}
+              title={pending ? reason : undefined}
               onClick={() => onAction(work, action)}
             >
               {actionLabels[action]}
@@ -93,7 +100,7 @@ export function WorkTile({ work, account, onAction, onOpenDetail }: WorkTileProp
               key={action}
               size="xs"
               disabled={pending}
-              title={pending ? WRITE_PENDING : undefined}
+              title={pending ? reason : undefined}
               onClick={() => onAction(work, action)}
             >
               {actionLabels[action]}

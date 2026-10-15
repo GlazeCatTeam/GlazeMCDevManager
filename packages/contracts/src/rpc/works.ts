@@ -12,6 +12,7 @@ export type WorkStatus =
   | "self_test_prepare"
   | "reject"
   | "accept"
+  | "appoint_online"
   | "online_preparing"
   | "offline"
   | "system_offline"

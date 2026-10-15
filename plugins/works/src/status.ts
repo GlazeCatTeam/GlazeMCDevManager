@@ -8,9 +8,11 @@ export type WorkAction =
   | "cancelReview"
   | "publish"
   | "update"
+  | "changePrice"
   | "cancelTest"
   | "viewFeedback"
   | "appointOnline"
+  | "cancelAppointOnline"
   | "delete";
 
 /** Color group of a status; colors carry meaning only */
@@ -25,6 +27,7 @@ export const statusLabels: Record<WorkStatus, string> = {
   self_test_prepare: "自测准备中",
   reject: "审核未通过",
   accept: "待上架",
+  appoint_online: "定时上架中",
   online_preparing: "系统准备中",
   offline: "已下架",
   system_offline: "系统下架",
@@ -40,6 +43,7 @@ export const statusTones: Record<WorkStatus, StatusTone> = {
   self_test_prepare: "neutral",
   reject: "rejected",
   accept: "progress",
+  appoint_online: "progress",
   online_preparing: "neutral",
   offline: "offline",
   system_offline: "offline",
@@ -52,9 +56,11 @@ export const actionLabels: Record<WorkAction, string> = {
   cancelReview: "取消审核",
   publish: "上架",
   update: "更新",
+  changePrice: "调整定价",
   cancelTest: "取消自测",
   viewFeedback: "查看反馈",
   appointOnline: "定时上架",
+  cancelAppointOnline: "取消定时上架",
   delete: "删除",
 };
 
@@ -65,6 +71,7 @@ export const readActions: ReadonlySet<WorkAction> = new Set<WorkAction>(["viewFe
 export function actionsFor(status: WorkStatus): WorkAction[] {
   switch (status) {
     case "online":
+      return ["update", "changePrice", "viewFeedback"];
     case "reject":
     case "offline":
     case "system_offline":
@@ -76,6 +83,8 @@ export function actionsFor(status: WorkStatus): WorkAction[] {
       return ["cancelReview"];
     case "accept":
       return ["publish", "appointOnline"];
+    case "appoint_online":
+      return ["viewFeedback", "cancelAppointOnline"];
     case "self_test":
     case "self_test_prepare":
       return ["cancelTest"];

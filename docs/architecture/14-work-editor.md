@@ -39,7 +39,7 @@ PC 同步与关联模组在创建完成后配置; 当前不开放新建前置模
 - `guide_list` 在参考项目中只是保留字段, 未找到可靠的攻略上传/编辑协议。因此现有攻略只读展示, 保存其他分区不会删除它们。上传按钮明确禁用。
 - 平台返回额外审核确认时, 需要在官方平台处理。没有伪造冲突确认或绩效审核字段。
 - 基于协议与模拟响应接入, 未进行真实账号保存、文件上传或提审验收。平台后续改变字段、上传域名或审核策略时会明确报错。
-- 本次不接入列表的删除、自测、取消审核、立即上架或定时上架操作。
+- 列表的删除、自测、取消审核、立即上架、定时上架和取消预约已接入, 见下文八项操作说明; 尚未进行真实作品写入验收。
 
 ## 验证与复现
 
@@ -71,3 +71,34 @@ pnpm preview:works
 新增作品操作记录: 添加创建契约、创建 DTO 默认值和适配器 → 接通主进程 RPC 并允许新建上传省略 ID → 开放列表入口与复用编辑表单 → 扩展测试及预览场景 → 检查类型、构建、改动文件格式和本地界面。无新增依赖, 未执行真实业务写入。
 
 列表性能操作记录: 增加有界分页接口 → 列表与卡片详情增加独立内存缓存及请求合并 → 调整关联作品按需加载 → 增加 5 项测试和 90 作品预览场景 → 检查分页、返回、刷新请求数及类型/构建。保留工作区中其他业务改动。
+
+## 作品列表八项操作（2026-10-16）
+
+沿用三列固定高度卡片、Ore UI 按钮和确认弹窗。已上架作品增加独立「调整定价」入口; 免费和前置模组的独立调价入口禁用。窄窗口收紧卡片内边距和间距, 给两行操作按钮保留空间。
+
+定时上架中提供「查看反馈」和「取消定时上架」, 取消前显示当前预约并确认, 成功后重新读取状态。日期合并为一组, 为预约时间与操作按钮保留空间。取消接口按网易官方网页协议发送显式 `appoint_online_time: null`, 不附加 `op_platform`。
+
+| 能力 | 平台请求 | 允许的状态 |
+|---|---|---|
+| `works.cancelReview` | PUT `/items/categories/pe/{id}/cancel_review` | preparing / reviewing |
+| `works.publish` | PUT `/items/categories/pe/{id}/online` | accept |
+| `works.appointOnline` | PUT `/items/categories/pe/{id}/appoint_online` | accept |
+| `works.cancelAppointOnline` | PUT `/items/categories/pe/{id}/appoint_online` | appoint_online |
+| `works.submitSelfTest` | PUT `/items/categories/pe/{id}/self-test-apply` | init |
+| `works.cancelTest` | PUT `/items/categories/pe/{id}/cancel_self_test` | self_test / self_test_prepare |
+| `works.delete` | DELETE `/items/categories/pe/{id}` | init |
+| `works.changePrice` | POST `/items/categories/pe/{id}/change_price` | online, 非免费/非前置 |
+
+上架和预约提交 `op_platform: all`。定时上架要求未来的北京时间, 发送 `YYYY-MM-DD HH:mm:ss`, 不使用电脑本地时区解释。自测默认 `pass_check: false`, 可显式选择免机审。调价保留币种; 钻石按参考协议档位生成 `price_rank`, 绿宝石保留服务端档位, 同时检查当前平台 min/max/step。撤审、取消自测和删除不发送请求体。
+
+每项写操作都先确认作品名称和 ID; 主进程检查参数白名单、数字 ID、固定账号、主窗口、预期状态与最新状态。同一账号/作品的八项操作互斥; 异步读取完成后、真正写入前再次核对当前账号。调价还比较旧价格和币种, 不覆盖其他客户端的新价格。平台没有原子版本校验, 仍存在读取与写入之间的短暂竞态。
+
+成功后失效当前账号的作品列表与封面缓存, 刷新服务器数据; 不在 UI 猜测最终状态。删除末页最后一条后回退有效页。明确拒绝保留弹窗和输入; 写入阶段发生超时、断网、响应解析失败或 HTTP 5xx 时返回 `outcome: uncertain`, 不显示成功、不自动重发。当前渲染进程按账号/作品保留结果未知标记, 关闭重开弹窗仍需核对结果; 标记不持久化, 不承诺应用重启后的幂等性。
+
+验证入口:
+
+- `pnpm test:works`: 八项请求的路径/方法/请求体、未知参数与日期、状态冲突、免费/前置/币种变化、钻石档位与绿宝石步长、重复调用拦截、执行前账号切换、明确拒绝与结果未知、写请求不重放。
+- `pnpm preview:works` 后打开 `http://127.0.0.1:5187/tests/fixtures/work-editor.html?actions=1`: 十条虚构作品覆盖所有状态, `actionFailure=reject|expired|conflict|uncertain` 模拟异常。
+- `node tools/test-work-actions-ui.mjs <playwright入口> msedge`: 本地自动界面验证, 强制拦截所有非本地请求; 覆盖取消不写入、八项成功、重复点击/处理中 Escape、价格与北京时间、预约回显、删除分页回退、错误保留、结果未知重开拦截和窄窗按钮可见。
+
+本次仅使用协议桩与虚构作品验证, 未操作真实作品。暂存内容独立副本的 34 项作品测试、类型检查和隔离 UI 回归通过; UI 测试确认外部请求为零, 成功和失败操作均未访问网易。操作记录: 新增能力契约及权限 → 接入八项平台适配与主进程校验/互斥 → 开放卡片按钮与确认表单 → 补充协议测试、预览和 UI 脚本 → 验证并同步文档。保留工作区并行进行的定时上架日历改动。

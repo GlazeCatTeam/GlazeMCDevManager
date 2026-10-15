@@ -26,6 +26,7 @@ const knownStatuses = new Set<WorkStatus>([
   "self_test_prepare",
   "reject",
   "accept",
+  "appoint_online",
   "online_preparing",
   "offline",
   "system_offline",
