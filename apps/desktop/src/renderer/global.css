@@ -29,22 +29,38 @@ button {
   cursor: pointer;
 }
 
+/* Ore block scrollbar: sunken track, raised thumb, green while dragging */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
+::-webkit-scrollbar-button {
+  display: none;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: var(--g-surface-sunken);
 }
 
 ::-webkit-scrollbar-thumb {
   background: var(--g-action-secondary-bg);
-  border: 2px solid var(--g-surface-app);
+  border: 2px solid var(--g-surface-sunken);
+  box-shadow:
+    inset 0 2px 0 var(--g-action-secondary-hover),
+    inset 0 -3px 0 var(--g-action-secondary-edge);
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--g-action-secondary-hover);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: var(--g-action-primary-bg);
+  box-shadow:
+    inset 0 2px 0 var(--g-action-primary-hover),
+    inset 0 -3px 0 var(--g-action-primary-edge);
 }
 
 :focus-visible {
