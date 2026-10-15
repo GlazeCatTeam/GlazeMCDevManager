@@ -23,6 +23,9 @@ export interface Capability {
 const shellOnly = (permission: string | null, risk: Risk): Capability => ({ caller: "shell", permission, risk });
 
 export const capabilities: Record<RpcMethod, Capability> = {
+  "feedback.list": shellOnly("netease:community.read", "read"),
+  "feedback.reply": shellOnly("netease:community.write", "write"),
+  "feedback.log": shellOnly("netease:community.read", "read"),
   "comments.list": shellOnly("netease:community.read", "read"),
   "comments.reply": shellOnly("netease:community.write", "write"),
   "messages.list": shellOnly("netease:messages.read", "read"),

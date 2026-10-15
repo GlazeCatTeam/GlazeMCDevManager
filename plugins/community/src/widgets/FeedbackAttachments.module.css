@@ -38,9 +38,34 @@
   border-color: var(--g-text-link);
 }
 
-.thumbnail svg {
+.thumbnail img {
   width: 100%;
   height: 100%;
+  object-fit: cover;
+}
+
+.imageFrame {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+}
+
+.imageFrame > img,
+.imageStatus {
+  grid-area: 1 / 1;
+}
+
+.pendingImage {
+  visibility: hidden;
+}
+
+.imageStatus {
+  display: grid;
+  place-items: center;
+  min-height: 76px;
+  padding: 8px;
+  color: var(--g-text-muted);
+  font-size: 12px;
 }
 
 .logFile {
@@ -73,8 +98,10 @@
   font-size: 12px;
 }
 
-.imagePreview svg {
+.imagePreview img {
   width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
   border: var(--g-border-width) solid var(--g-panel-borderColor);
 }
 

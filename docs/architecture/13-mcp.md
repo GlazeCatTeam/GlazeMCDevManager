@@ -129,7 +129,7 @@ type CallerIdentity =
 | 作品 | `works_list`、`works_get`、`works_review_feedback`（能力已定义并接入界面，MCP 服务待接入）；`works_update_info` 及提审、上架、改价、删除等写操作待做 | read / write |
 | 数据分析 | `analytics_query` | read |
 | 收益 | `income_summary`、`income_monthly`（`income_estimate` 见首页）；`income_settle` | read；dangerous |
-| 反馈与评论 | 已接入 `comments.list`、`comments.reply`，仅供应用主界面调用；MCP 的 `community_list`、`community_reply` 暂未暴露，详见 [玩家评论数据接入](player-comments-data.md) | read / write |
+| 反馈与评论 | 已接入 `feedback.list`、`feedback.reply`、`feedback.log`、`comments.list`、`comments.reply`，仅供应用主界面调用；MCP 的 `community_list`、`community_reply` 暂未暴露，详见 [玩家反馈数据接入](player-feedback-data.md) 与 [玩家评论数据接入](player-comments-data.md) | read / write |
 | 消息 | `messages_list`、`messages_mark_read` | read / write |
 
 ## 待定事项

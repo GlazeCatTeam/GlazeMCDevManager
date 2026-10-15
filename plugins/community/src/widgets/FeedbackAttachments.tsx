@@ -1,27 +1,61 @@
-import { Button, Dialog, Tag, TextButton } from "@glaze/plugin-sdk";
-import { useCallback, useState } from "react";
-import type { FeedbackImage, FeedbackLog, PlayerFeedback } from "../mock";
+import { Button, Dialog, type PlayerFeedback, remoteImageUrl, Tag, TextButton, useHostQuery } from "@glaze/plugin-sdk";
+import { type SyntheticEvent, useCallback, useState } from "react";
 import styles from "./FeedbackAttachments.module.css";
 
+type FeedbackImage = PlayerFeedback["images"][number];
+type FeedbackLog = NonNullable<PlayerFeedback["log"]>;
 type Preview = { kind: "image"; image: FeedbackImage } | { kind: "log"; log: FeedbackLog };
 
-/** Placeholder artwork for a demo screenshot attachment */
-function AttachmentArtwork({ image }: { image: FeedbackImage }) {
+/** Decode off the rendering path and reveal the screenshot only when its pixels are ready */
+function AttachmentImage({ image }: { image: FeedbackImage }) {
+  const [state, setState] = useState<"loading" | "ready" | "failed">("loading");
+
+  /** Keep decoded pixels out of the first paint and ignore completion after the image unmounts */
+  const showDecoded = async (event: SyntheticEvent<HTMLImageElement>) => {
+    const element = event.currentTarget;
+    try {
+      await element.decode();
+      if (element.isConnected) setState("ready");
+    } catch {
+      if (element.isConnected) setState("failed");
+    }
+  };
+
   return (
-    <svg viewBox="0 0 160 100" role="img" aria-label={`${image.name}，模拟附件`}>
-      <title>{image.name}</title>
-      <rect width="160" height="100" fill="var(--g-surface-app)" />
-      <path d="M0 0h130L30 100H0z" fill={image.color} />
-    </svg>
+    <span className={styles.imageFrame} aria-busy={state === "loading"}>
+      <img
+        src={remoteImageUrl(image.url) ?? undefined}
+        alt={image.name}
+        decoding="async"
+        className={state === "ready" ? undefined : styles.pendingImage}
+        onLoad={showDecoded}
+        onError={() => setState("failed")}
+      />
+      {state !== "ready" && (
+        <span className={styles.imageStatus}>{state === "failed" ? "图片加载失败" : "图片加载中…"}</span>
+      )}
+    </span>
   );
 }
 
-/** Screenshots, log file and conflicting mods of one feedback, each openable in a preview dialog */
+/** Load text logs only when the user opens the attachment */
+function LogPreview({ log }: { log: FeedbackLog }) {
+  const query = useHostQuery("feedback.log", { url: log.url });
+  if (query.loading) return <p role="status">正在加载日志…</p>;
+  if (query.error)
+    return (
+      <div role="alert">
+        {query.error.message} <TextButton onClick={query.reload}>重试</TextButton>
+      </div>
+    );
+  return <pre className={styles.logPreview}>{query.data || "日志为空"}</pre>;
+}
+
+/** Show platform screenshots, text logs and structured conflict details */
 export function FeedbackAttachments({ feedback }: { feedback: PlayerFeedback }) {
   const [preview, setPreview] = useState<Preview | null>(null);
   const closePreview = useCallback(() => setPreview(null), []);
   const { images, log, conflicts } = feedback;
-
   return (
     <>
       {images.length > 0 && (
@@ -32,13 +66,13 @@ export function FeedbackAttachments({ feedback }: { feedback: PlayerFeedback }) 
           <div className={styles.images}>
             {images.map((image) => (
               <button
-                key={image.name}
+                key={`${image.name}:${image.url}`}
                 type="button"
                 className={styles.thumbnail}
                 aria-label={`查看${image.name}`}
                 onClick={() => setPreview({ kind: "image", image })}
               >
-                <AttachmentArtwork image={image} />
+                <AttachmentImage image={image} />
               </button>
             ))}
           </div>
@@ -71,11 +105,10 @@ export function FeedbackAttachments({ feedback }: { feedback: PlayerFeedback }) 
         >
           {preview.kind === "image" ? (
             <div className={styles.imagePreview}>
-              <AttachmentArtwork image={preview.image} />
-              <span>模拟附件预览</span>
+              <AttachmentImage key={preview.image.url} image={preview.image} />
             </div>
           ) : (
-            <pre className={styles.logPreview}>{preview.log.content}</pre>
+            <LogPreview key={preview.log.url} log={preview.log} />
           )}
         </Dialog>
       )}

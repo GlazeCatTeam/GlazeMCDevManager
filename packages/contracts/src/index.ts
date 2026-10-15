@@ -3,6 +3,7 @@ export * from "./rpc/bridge";
 export * from "./rpc/capabilities";
 export * from "./rpc/comments";
 export * from "./rpc/developer";
+export * from "./rpc/feedback";
 export * from "./rpc/images";
 export * from "./rpc/income";
 export * from "./rpc/messages";

@@ -2,6 +2,7 @@
 import type { AccountChanged, AccountSummary, InitialRoute, LoginStep } from "./account";
 import type { CommentListParams, CommentPage, CommentReplyParams } from "./comments";
 import type { AccountParams, AnalyticsOverview, DeveloperLevel } from "./developer";
+import type { FeedbackListParams, FeedbackPageData, FeedbackReplyParams } from "./feedback";
 import type { IncomeEstimate, IncomeEstimateParams } from "./income";
 import type { MessageContent, MessageDeleteParams, MessageListParams, MessagePage, MessageParams } from "./messages";
 import type { RankEntry, RankListParams } from "./rank";
@@ -27,6 +28,9 @@ export interface WindowState {
 }
 
 export interface RpcMethods {
+  "feedback.list": { params: FeedbackListParams; result: FeedbackPageData };
+  "feedback.reply": { params: FeedbackReplyParams; result: undefined };
+  "feedback.log": { params: { url: string }; result: string };
   "comments.list": { params: CommentListParams; result: CommentPage };
   "comments.reply": { params: CommentReplyParams; result: undefined };
   "messages.list": { params: MessageListParams; result: MessagePage };

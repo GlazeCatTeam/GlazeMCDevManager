@@ -67,6 +67,8 @@ flowchart TD
 
 项目目标、已敲定的决定和当前进度见 [docs/PROJECT.md](../PROJECT.md)。架构决策记录（ADR）见 [docs/adr](../adr/README.md)。设计参考图见 [docs/design/references](../design/references/)。
 
+玩家反馈接入细节与验证记录见 [玩家反馈数据接入](player-feedback-data.md)。
+
 ## 维护约定
 
 - 架构文档描述"应该是什么样"。实现与文档不一致时，要么改实现，要么先改文档并补一条 ADR。

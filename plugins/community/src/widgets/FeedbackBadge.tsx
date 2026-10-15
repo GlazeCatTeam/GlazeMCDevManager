@@ -1,4 +1,4 @@
-import type { FeedbackType } from "../mock";
+import type { FeedbackType } from "@glaze/plugin-sdk";
 import styles from "./FeedbackBadge.module.css";
 
 const toneClass: Record<FeedbackType, string | undefined> = {
@@ -9,6 +9,7 @@ const toneClass: Record<FeedbackType, string | undefined> = {
   我的山头: styles.success,
   性能反馈: styles.muted,
   其他: styles.muted,
+  未知类型: styles.muted,
 };
 
 /** Small outlined badge whose color reflects the feedback category */

@@ -3,6 +3,7 @@
 export { passportFromCookie, sessionCookieFromInput } from "./auth/cookie";
 export { listComments, replyComment } from "./endpoints/comments";
 export { getAnalyticsOverview, getDeveloperLevel } from "./endpoints/developer";
+export { listFeedback, readFeedbackLog, replyFeedback } from "./endpoints/feedback";
 export {
   deleteMessages,
   getMessage,

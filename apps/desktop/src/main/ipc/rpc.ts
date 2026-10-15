@@ -5,6 +5,8 @@ import {
   type EventPayloads,
   isCommentListParams,
   isCommentReplyParams,
+  isFeedbackListParams,
+  isFeedbackReplyParams,
   isMessageId,
   isMessageIds,
   isMessageListParams,
@@ -31,13 +33,16 @@ import {
   getWorkEditorOptions,
   getWorksPage,
   listComments,
+  listFeedback,
   listMessages,
   listWorks,
   markAllMessagesRead,
   monthOf,
   parseMonth,
+  readFeedbackLog,
   readWorkEditor,
   replyComment,
+  replyFeedback,
   saveWorkEditor,
   submitWorkReview,
 } from "@glaze/netease";
@@ -45,7 +50,7 @@ import { BrowserWindow, type IpcMainInvokeEvent, ipcMain } from "electron";
 import type { SessionManager } from "../session/session-manager";
 import { closeLoginWindow, loginWithOfficialWindow } from "../windows/login-window";
 import { appWindows } from "../windows/main-window";
-import { CapabilityError } from "./errors";
+import { CapabilityError, fromNeteaseError } from "./errors";
 import { pickAndUploadWorkFile } from "./work-files";
 
 type Handler<M extends RpcMethod> = (
@@ -148,6 +153,21 @@ function createHandlers(sessions: SessionManager): HandlerTable {
       if (sessions.current()?.id !== params.account)
         throw new CapabilityError("account_changed", "账号已切换，请重新选择评论");
       return sessions.request(params.account, (session) => replyComment(session, params));
+    },
+    "feedback.list": (params) => {
+      if (!isFeedbackListParams(params)) throw new CapabilityError("validation", "反馈查询参数无效");
+      return sessions.request(params.account, (session) => listFeedback(session, params));
+    },
+    "feedback.reply": (params) => {
+      if (!isFeedbackReplyParams(params)) throw new CapabilityError("validation", "反馈回复参数无效");
+      if (sessions.current()?.id !== params.account)
+        throw new CapabilityError("account_changed", "账号已切换，请重新选择反馈");
+      return sessions.request(params.account, (session) => replyFeedback(session, params));
+    },
+    "feedback.log": async (params) => {
+      const result = await readFeedbackLog(requireString(params, "url"));
+      if (!result.ok) throw fromNeteaseError(result.error);
+      return result.value;
     },
     "works.create": (params) => {
       if (!isWorkCreateParams(params)) throw new CapabilityError("validation", "新建作品参数无效");
@@ -287,7 +307,10 @@ export function registerRpc(sessions: SessionManager): void {
     }
     try {
       if (
-        (method.startsWith("works.") || method.startsWith("messages.") || method.startsWith("comments.")) &&
+        (method.startsWith("works.") ||
+          method.startsWith("messages.") ||
+          method.startsWith("feedback.") ||
+          method.startsWith("comments.")) &&
         (!appWindows().some((window) => window.webContents === event.sender) ||
           event.senderFrame !== event.sender.mainFrame)
       ) {
