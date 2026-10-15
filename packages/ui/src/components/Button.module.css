@@ -15,7 +15,7 @@
   white-space: nowrap;
 }
 
-.button:active {
+.button:active:not(:disabled) {
   padding-bottom: 0;
   box-shadow: none;
 }
@@ -95,4 +95,27 @@
 
 .textSubtle:hover {
   color: var(--g-text-primary);
+}
+
+/* Disabled: dimmed, no hover or press feedback; the title tooltip still explains why */
+.button:disabled,
+.text:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.primary:disabled:hover {
+  background: var(--g-action-primary-bg);
+}
+
+.secondary:disabled:hover {
+  background: var(--g-action-secondary-bg);
+}
+
+.text:disabled:hover {
+  color: var(--g-text-link);
+}
+
+.textDanger:disabled:hover {
+  color: var(--g-text-danger);
 }

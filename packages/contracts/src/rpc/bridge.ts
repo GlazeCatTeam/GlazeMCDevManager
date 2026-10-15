@@ -3,6 +3,7 @@ import type { AccountChanged, AccountSummary, InitialRoute, LoginStep } from "./
 import type { AccountParams, AnalyticsOverview, DeveloperLevel } from "./developer";
 import type { IncomeEstimate, IncomeEstimateParams } from "./income";
 import type { RankEntry, RankListParams } from "./rank";
+import type { WorkDetail, WorkParams, WorkReviewFeedback, WorkSummary } from "./works";
 
 export const RPC_CHANNEL = "glaze:rpc";
 export const EVENT_CHANNEL = "glaze:event";
@@ -33,6 +34,9 @@ export interface RpcMethods {
   "analytics.overview": { params: AccountParams | undefined; result: AnalyticsOverview };
   "income.estimate": { params: IncomeEstimateParams | undefined; result: IncomeEstimate };
   "rank.list": { params: RankListParams; result: RankEntry[] };
+  "works.list": { params: AccountParams | undefined; result: WorkSummary[] };
+  "works.get": { params: WorkParams; result: WorkDetail };
+  "works.reviewFeedback": { params: WorkParams; result: WorkReviewFeedback | null };
 }
 
 export interface EventPayloads {

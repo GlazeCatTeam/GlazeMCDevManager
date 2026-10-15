@@ -1,4 +1,5 @@
 import type { IncomeEstimate } from "@glaze/contracts";
+import { listWorks } from "../endpoints/works";
 import { fail, ok, type Result } from "../errors";
 import { getMcDevData, type NeteaseSession, withQuery } from "../http/client";
 import { readArray, readNumber, readRecord, readString } from "../http/parse";
@@ -6,8 +7,6 @@ import { estimateProfit } from "./rules";
 
 /** Works per day-detail request; a failed batch marks only its own works as failed */
 const BATCH_SIZE = 20;
-/** Prerequisite (前置) mods are free and never sell */
-const PREREQUISITE_PRI_TYPE = 9;
 const ALL = 2_147_483_647;
 
 interface Work {
@@ -62,24 +61,13 @@ function chunk<T>(items: T[], size: number): T[][] {
   return batches;
 }
 
-/** All mobile works that can sell, from GET /items/categories/pe/ */
+/** Works that can sell: every mobile work except free prerequisite mods */
 async function listSellableWorks(session: NeteaseSession): Promise<Result<Work[]>> {
-  const result = await getMcDevData("items.pe", withQuery("/items/categories/pe/", { start: 0, span: ALL }), session);
-  if (!result.ok) {
-    return result;
+  const works = await listWorks(session);
+  if (!works.ok) {
+    return works;
   }
-  const rows = readArray(readRecord(result.value).item);
-  if (rows === null) {
-    return fail({ kind: "parse", endpoint: "items.pe" });
-  }
-  const works: Work[] = [];
-  for (const row of rows) {
-    const id = readString(row.item_id);
-    if (id !== null && readNumber(row.pri_type) !== PREREQUISITE_PRI_TYPE) {
-      works.push({ id, name: readString(row.item_name) ?? id });
-    }
-  }
-  return ok(works);
+  return ok(works.value.filter((work) => !work.isPrerequisite).map((work) => ({ id: work.itemId, name: work.name })));
 }
 
 /** Diamonds after refunds per work id for one batch of ordinary works */

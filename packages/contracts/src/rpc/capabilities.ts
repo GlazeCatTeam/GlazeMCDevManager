@@ -95,4 +95,34 @@ export const capabilities: Record<RpcMethod, Capability> = {
         "返回网易我的世界资源平台的榜单。board：pe_hot 手游热门飙升、hot_search 热搜（返回搜索词，不是作品）、pe_download 手游免费、pe_sell 手游畅销、pc_download 端游下载、pc_like 端游点赞。category：mod 模组、map 地图、texture 材质光影、lobby 联机大厅，默认 mod，热搜忽略此参数。limit 1–50，默认 10。",
     },
   },
+  "works.list": {
+    caller: "any",
+    permission: "netease:works.read",
+    risk: "read",
+    mcp: {
+      title: "列出作品",
+      description:
+        "列出账号在手机版（PE）的全部作品：作品 ID、名称、状态（online 已上架、init 待提交审核、reviewing 审核中、reject 未通过、accept 待上架、self_test 自测中、offline 已下架等）、价格与货币、是否原创、是否同步端游、是否前置模组、是否弱下架及原因、创建与提审时间。不含封面和上线时间，需要时用 works_get。参数 account 可选。",
+    },
+  },
+  "works.get": {
+    caller: "any",
+    permission: "netease:works.read",
+    risk: "read",
+    mcp: {
+      title: "作品详情",
+      description:
+        "按作品 ID 返回作品的正方形图标地址、横幅图地址、上线时间、首次上线时间和定时上架时间。只能查询本账号的作品。参数 account 可选。",
+    },
+  },
+  "works.reviewFeedback": {
+    caller: "any",
+    permission: "netease:works.read",
+    risk: "read",
+    mcp: {
+      title: "审核反馈",
+      description:
+        "返回作品最近一次审核的反馈文字和时间；没有反馈时返回 null。只能查询本账号的作品。参数 account 可选。",
+    },
+  },
 };

@@ -5,3 +5,4 @@ export * from "./rpc/developer";
 export * from "./rpc/images";
 export * from "./rpc/income";
 export * from "./rpc/rank";
+export * from "./rpc/works";

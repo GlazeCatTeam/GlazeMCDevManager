@@ -14,6 +14,11 @@ export type {
   RpcError,
   RpcResult,
   SessionStatus,
+  WorkDetail,
+  WorkPriceType,
+  WorkReviewFeedback,
+  WorkStatus,
+  WorkSummary,
 } from "@glaze/contracts";
 export { remoteImageUrl } from "@glaze/contracts";
 export * from "@glaze/ui";

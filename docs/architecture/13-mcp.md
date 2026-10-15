@@ -126,7 +126,7 @@ type CallerIdentity =
 |---|---|---|
 | 账号 | `account_list`、`account_current`（能力已在 `@glaze/contracts` 的 `capabilities` 定义，MCP 服务待接入）；登录、Cookie 导入、切换、退出、删除永不开放 | read |
 | 首页 | `developer_level`（等级、阶、经验、贡献）、`analytics_overview`（本月 / 上月、昨日 / 14 日均的钻石与下载）、`income_estimate`（收益速算，month 可选）、`rank_list`（6 个榜单 × 4 个分类）；能力已定义并接入界面，均可选 `account` 参数，MCP 服务待接入 | read |
-| 作品 | `works_list`、`works_get`、`works_update_info` | read / write |
+| 作品 | `works_list`、`works_get`、`works_review_feedback`（能力已定义并接入界面，MCP 服务待接入）；`works_update_info` 及提审、上架、改价、删除等写操作待做 | read / write |
 | 数据分析 | `analytics_query` | read |
 | 收益 | `income_summary`、`income_monthly`（`income_estimate` 见首页）；`income_settle` | read；dangerous |
 | 反馈与评论 | `community_list`、`community_reply` | read / write |

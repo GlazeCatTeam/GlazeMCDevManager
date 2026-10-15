@@ -105,3 +105,8 @@
   padding: 0 4px;
   font-size: 12.5px;
 }
+
+img.cover {
+  object-fit: cover;
+  background: var(--g-surface-sunken);
+}

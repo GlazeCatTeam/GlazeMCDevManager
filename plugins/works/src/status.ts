@@ -1,18 +1,6 @@
-// Work status and the actions each status allows, mirroring MCDevManager's 上架管理
+import type { WorkStatus } from "@glaze/plugin-sdk";
 
-export type WorkStatus =
-  | "online"
-  | "init"
-  | "preparing"
-  | "reviewing"
-  | "self_test"
-  | "self_test_prepare"
-  | "reject"
-  | "accept"
-  | "online_preparing"
-  | "offline"
-  | "system_offline"
-  | "unknown";
+// Labels for work statuses and the actions each status allows, mirroring MCDevManager's 上架管理
 
 export type WorkAction =
   | "submitReview"
@@ -72,7 +60,10 @@ export const actionLabels: Record<WorkAction, string> = {
   delete: "删除",
 };
 
-/** Write actions available for a work in this status; viewing details is always available separately */
+/** Actions that only read; every other action changes the work on the platform */
+export const readActions: ReadonlySet<WorkAction> = new Set<WorkAction>(["viewFeedback"]);
+
+/** Actions available for a work in this status; viewing details is always available separately */
 export function actionsFor(status: WorkStatus, isFree: boolean): WorkAction[] {
   switch (status) {
     case "online":

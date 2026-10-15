@@ -15,6 +15,9 @@ import {
   getAnalyticsOverview,
   getDeveloperLevel,
   getRankList,
+  getReviewFeedback,
+  getWork,
+  listWorks,
   monthOf,
   parseMonth,
 } from "@glaze/netease";
@@ -75,6 +78,15 @@ function optionalInteger(params: unknown, key: string, min: number, max: number)
     throw new CapabilityError("internal", `参数 ${key} 应为 ${min} 到 ${max} 的整数`);
   }
   return value;
+}
+
+/** A work id; the platform uses long decimal ids, and only digits may reach the request path */
+function requireItemId(params: unknown): string {
+  const itemId = requireString(params, "itemId");
+  if (!/^\d{1,32}$/.test(itemId)) {
+    throw new CapabilityError("internal", "参数 itemId 无效");
+  }
+  return itemId;
 }
 
 const rankBoards: readonly RankBoard[] = ["pe_hot", "hot_search", "pe_download", "pe_sell", "pc_download", "pc_like"];
@@ -140,6 +152,15 @@ function createHandlers(sessions: SessionManager): HandlerTable {
       return sessions.request(optionalString(params, "account"), (session) =>
         getRankList(session, board, category, limit),
       );
+    },
+    "works.list": (params) => sessions.request(optionalString(params, "account"), listWorks),
+    "works.get": (params) => {
+      const itemId = requireItemId(params);
+      return sessions.request(optionalString(params, "account"), (session) => getWork(session, itemId));
+    },
+    "works.reviewFeedback": (params) => {
+      const itemId = requireItemId(params);
+      return sessions.request(optionalString(params, "account"), (session) => getReviewFeedback(session, itemId));
     },
   };
 }

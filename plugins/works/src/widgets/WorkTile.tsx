@@ -1,16 +1,29 @@
-import { Button, Tag, TextButton } from "@glaze/plugin-sdk";
-import type { Work } from "../mock";
-import { actionLabels, actionsFor, statusLabels, statusTones, type WorkAction } from "../status";
+import {
+  avatarColorsFor,
+  Button,
+  remoteImageUrl,
+  Tag,
+  TextButton,
+  useHostQuery,
+  type WorkSummary,
+} from "@glaze/plugin-sdk";
+import { useState } from "react";
+import { formatDate } from "../format";
+import { actionLabels, actionsFor, readActions, statusLabels, statusTones, type WorkAction } from "../status";
 import styles from "./WorkTile.module.css";
 
 export interface WorkTileProps {
-  work: Work;
-  onAction: (work: Work, action: WorkAction) => void;
-  onOpenDetail: (work: Work) => void;
+  work: WorkSummary;
+  /** Called for read-only actions; write actions are not connected yet */
+  onAction: (work: WorkSummary, action: WorkAction) => void;
+  onOpenDetail: (work: WorkSummary) => void;
 }
 
+/** Shown on write actions until they are connected to the platform */
+const WRITE_PENDING = "暂未接入，请在开发者平台操作";
+
 /** Price as shown to players, e.g. "300 钻石" or "免费" */
-function priceText(work: Work): string {
+function priceText(work: WorkSummary): string {
   if (work.priceType === "free" || work.price <= 0) {
     return "免费";
   }
@@ -25,27 +38,40 @@ const toneClass = {
   neutral: styles.neutral,
 };
 
-/** Fixed-size tile for one published work: status, price, dates and the actions its status allows */
+/** Square icon from the work's detail; a generated block until it loads or when there is none */
+function Cover({ iconUrl, seed }: { iconUrl: string | null; seed: string }) {
+  const [failed, setFailed] = useState(false);
+  const src = remoteImageUrl(iconUrl);
+  if (src && !failed) {
+    return <img className={styles.cover} src={src} alt="" draggable={false} onError={() => setFailed(true)} />;
+  }
+  const colors = avatarColorsFor(seed);
+  return (
+    <span className={styles.cover} style={{ background: colors.face }} aria-hidden="true">
+      <span className={styles.coverTop} style={{ background: colors.hair }} />
+    </span>
+  );
+}
+
+/** Fixed-size tile for one work: status, price, dates and the actions its status allows */
 export function WorkTile({ work, onAction, onOpenDetail }: WorkTileProps) {
+  const detail = useHostQuery("works.get", { itemId: work.itemId });
   const isFree = work.priceType === "free" || work.price <= 0;
   const actions = actionsFor(work.status, isFree);
-  const dates = work.onlineTime ? `创建 ${work.createTime}  ·  上线 ${work.onlineTime}` : `创建 ${work.createTime}`;
+  const onlineTime = detail.data?.onlineTime ?? null;
+  const dates = onlineTime
+    ? `创建 ${formatDate(work.createTime)}  ·  上线 ${formatDate(onlineTime)}`
+    : `创建 ${formatDate(work.createTime)}`;
 
   return (
     <li className={styles.tile}>
       <div className={styles.head}>
-        <span className={styles.cover} style={{ background: work.cover.face }} aria-hidden="true">
-          <span className={styles.coverTop} style={{ background: work.cover.hair }} />
-        </span>
+        <Cover key={detail.data?.iconUrl ?? "none"} iconUrl={detail.data?.iconUrl ?? null} seed={work.itemId} />
         <span className={styles.titles}>
-          <span className={styles.name}>{work.itemName}</span>
+          <span className={styles.name}>{work.name}</span>
           <span className={`${styles.status} ${toneClass[statusTones[work.status]]}`}>{statusLabels[work.status]}</span>
         </span>
-        <TextButton
-          className={styles.detail}
-          aria-label={`查看 ${work.itemName} 详情`}
-          onClick={() => onOpenDetail(work)}
-        >
+        <TextButton className={styles.detail} aria-label={`查看 ${work.name} 详情`} onClick={() => onOpenDetail(work)}>
           详情 ›
         </TextButton>
       </div>
@@ -53,24 +79,38 @@ export function WorkTile({ work, onAction, onOpenDetail }: WorkTileProps) {
       <div className={styles.meta}>
         <span className={styles.price}>{priceText(work)}</span>
         {work.isOriginal && <Tag>原创</Tag>}
-        {work.syncPcFlag && <Tag>PE + PC</Tag>}
+        {work.syncPc && <Tag>PE + PC</Tag>}
         {work.weakOffline && <Tag tone="warning">弱下架</Tag>}
       </div>
 
       <span className={styles.dates}>{dates}</span>
 
       <div className={styles.actions}>
-        {actions.map((action) =>
-          action === "delete" ? (
-            <TextButton key={action} tone="danger" className={styles.delete} onClick={() => onAction(work, action)}>
+        {actions.map((action) => {
+          const pending = !readActions.has(action);
+          return action === "delete" ? (
+            <TextButton
+              key={action}
+              tone="danger"
+              className={styles.delete}
+              disabled={pending}
+              title={pending ? WRITE_PENDING : undefined}
+              onClick={() => onAction(work, action)}
+            >
               {actionLabels[action]}
             </TextButton>
           ) : (
-            <Button key={action} size="xs" onClick={() => onAction(work, action)}>
+            <Button
+              key={action}
+              size="xs"
+              disabled={pending}
+              title={pending ? WRITE_PENDING : undefined}
+              onClick={() => onAction(work, action)}
+            >
               {actionLabels[action]}
             </Button>
-          ),
-        )}
+          );
+        })}
       </div>
     </li>
   );

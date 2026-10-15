@@ -1,18 +1,27 @@
-import { Button, Icon, PageHeader, Pagination } from "@glaze/plugin-sdk";
-import { useState } from "react";
-import { type Work, works } from "./mock";
-import type { WorkAction, WorkStatus } from "./status";
+import {
+  Button,
+  Icon,
+  Notice,
+  PageHeader,
+  Pagination,
+  TextButton,
+  useHostQuery,
+  type WorkStatus,
+  type WorkSummary,
+} from "@glaze/plugin-sdk";
+import { useCallback, useState } from "react";
+import type { WorkAction } from "./status";
 import styles from "./WorksPage.module.css";
+import { ReviewFeedbackDialog } from "./widgets/ReviewFeedbackDialog";
 import { WorkTile } from "./widgets/WorkTile";
 
 const PER_PAGE = 9;
 
-// Actions are no-ops until the NetEase client and the detail page exist
+// The detail page does not exist yet
 const noop = () => {};
-const noopAction = (_work: Work, _action: WorkAction) => {};
 
 /** One-line summary under the title */
-function summary(list: Work[]): string {
+function summary(list: WorkSummary[]): string {
   if (list.length === 0) {
     return "还没有作品";
   }
@@ -20,22 +29,36 @@ function summary(list: Work[]): string {
   return `共 ${list.length} 个作品 · 已上架 ${count("online")} · 审核中 ${count("reviewing")} · 未通过 ${count("reject")}`;
 }
 
-/** Works management: published works as fixed-size tiles, nine per page, like MCDevManager's 上架管理 */
+/** Works management: the account's works as fixed-size tiles, nine per page, like MCDevManager's 上架管理 */
 export function WorksPage() {
+  const works = useHostQuery("works.list");
   const [page, setPage] = useState(0);
-  const pageCount = Math.max(1, Math.ceil(works.length / PER_PAGE));
+  const [feedbackFor, setFeedbackFor] = useState<WorkSummary | null>(null);
+  const closeFeedback = useCallback(() => setFeedbackFor(null), []);
+
+  const list = works.data ?? [];
+  const pageCount = Math.max(1, Math.ceil(list.length / PER_PAGE));
   const current = Math.min(page, pageCount - 1);
-  const visible = works.slice(current * PER_PAGE, (current + 1) * PER_PAGE);
+  const visible = list.slice(current * PER_PAGE, (current + 1) * PER_PAGE);
+
+  /** Only read actions are connected; write buttons are disabled in the tiles */
+  const onAction = (work: WorkSummary, action: WorkAction) => {
+    if (action === "viewFeedback") {
+      setFeedbackFor(work);
+    }
+  };
 
   return (
     <div className={styles.page}>
       <PageHeader
         title="作品管理"
-        subtitle={summary(works)}
+        subtitle={works.data ? summary(works.data) : "正在加载作品…"}
         actions={
           <>
-            <Button onClick={noop}>刷新</Button>
-            <Button variant="primary" onClick={noop}>
+            <Button onClick={works.reload} disabled={works.loading}>
+              {works.loading ? "刷新中…" : "刷新"}
+            </Button>
+            <Button variant="primary" disabled title="暂未接入，请在开发者平台操作">
               <Icon name="action.add" size={14} />
               新增作品
             </Button>
@@ -43,11 +66,23 @@ export function WorksPage() {
         }
       />
 
-      {works.length > 0 ? (
+      {works.error && (
+        <Notice
+          action={
+            <TextButton tone="warning" onClick={works.reload}>
+              重试
+            </TextButton>
+          }
+        >
+          作品加载失败：{works.error.message}
+        </Notice>
+      )}
+
+      {list.length > 0 ? (
         <>
-          <ul className={styles.grid} aria-label="已发布的作品">
+          <ul className={styles.grid} aria-label="作品" aria-busy={works.loading}>
             {visible.map((work) => (
-              <WorkTile key={work.itemId} work={work} onAction={noopAction} onOpenDetail={noop} />
+              <WorkTile key={work.itemId} work={work} onAction={onAction} onOpenDetail={noop} />
             ))}
           </ul>
           <Pagination page={current} pageCount={pageCount} onChange={setPage} note={`每页 ${PER_PAGE} 个`} />
@@ -55,10 +90,20 @@ export function WorksPage() {
       ) : (
         <div className={styles.empty}>
           <Icon name="nav.works" size={48} className={styles.emptyIcon} />
-          <span className={styles.emptyTitle}>暂无作品</span>
-          <span className={styles.emptyHint}>在开发者平台创建作品后，会显示在这里</span>
+          {works.loading ? (
+            <span className={styles.emptyTitle}>正在加载作品…</span>
+          ) : (
+            <>
+              <span className={styles.emptyTitle}>{works.error ? "作品加载失败" : "暂无作品"}</span>
+              <span className={styles.emptyHint}>
+                {works.error ? "检查网络后点「重试」" : "在开发者平台创建作品后，会显示在这里"}
+              </span>
+            </>
+          )}
         </div>
       )}
+
+      {feedbackFor && <ReviewFeedbackDialog work={feedbackFor} onClose={closeFeedback} />}
     </div>
   );
 }
