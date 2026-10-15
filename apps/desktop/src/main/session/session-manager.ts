@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AccountChanged, AccountSummary, InitialRoute, LoginMethod, LoginStep } from "@glaze/contracts";
-import { getUserInfo, sessionCookieFromInput, type UserInfo } from "@glaze/netease";
+import { getUserInfo, type NeteaseSession, type Result, sessionCookieFromInput, type UserInfo } from "@glaze/netease";
 import type { AccountRecord, AccountStore, Vault } from "@glaze/storage";
 import { CapabilityError, fromNeteaseError } from "../ipc/errors";
 
@@ -131,6 +131,35 @@ export class SessionManager {
     this.sessions.delete(id);
     this.accounts.remove(id);
     this.emit();
+  }
+
+  /**
+   * Run a platform request with an account's session (default: the current account) without
+   * switching accounts. Rotated cookies are stored; expiry and network failures update the status
+   */
+  async request<T>(accountId: string | undefined, call: (session: NeteaseSession) => Promise<Result<T>>): Promise<T> {
+    const id = accountId ?? this.current()?.id;
+    const record = id ? this.accounts.get(id) : undefined;
+    if (!id || !record) {
+      throw new CapabilityError("not_found", accountId ? "账号不存在" : "当前没有登录的账号");
+    }
+    const sessionCookie = this.sessionOf(id);
+    if (!sessionCookie) {
+      this.markStatus(record, "expired");
+      throw new CapabilityError("session_expired", "登录已过期，请重新登录");
+    }
+    const result = await call({ sessionCookie, onRenewed: (renewed) => this.storeSession(id, renewed) });
+    const latest = this.accounts.get(id);
+    if (!result.ok) {
+      if (latest && result.error.kind !== "business" && result.error.kind !== "parse") {
+        this.markStatus(latest, result.error.kind === "session_expired" ? "expired" : "offline");
+      }
+      throw fromNeteaseError(result.error);
+    }
+    if (latest?.status === "offline") {
+      this.markStatus(latest, "active");
+    }
+    return result.value;
   }
 
   /** Session cookie of an account from memory, falling back to the vault */

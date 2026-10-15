@@ -1,6 +1,17 @@
-import { Button, Icon, Panel, TextButton } from "@glaze/plugin-sdk";
+import {
+  avatarColorsFor,
+  Button,
+  EmptyState,
+  Icon,
+  Notice,
+  Panel,
+  type RankChange,
+  type RankEntry,
+  TextButton,
+  useHostQuery,
+} from "@glaze/plugin-sdk";
 import { useEffect, useRef, useState } from "react";
-import { mockRanking, type RankChange, type RankItem, rankCategories, rankSubCategories } from "../mock";
+import { RANK_LIMIT, rankBoards, rankCategories } from "../boards";
 import styles from "./RankingCard.module.css";
 
 export interface RankingCardProps {
@@ -22,12 +33,13 @@ function describeChange(change: RankChange): { text: string; className: string |
   }
 }
 
-/** Work cover placeholder until real cover images are loaded */
-function Cover({ item }: { item: RankItem }) {
+/** Generated cover block; platform cover images are not loaded yet */
+function Cover({ item }: { item: RankEntry }) {
+  const colors = avatarColorsFor(item.itemId ?? item.title);
   return (
-    <span className={styles.cover} style={{ background: item.cover.face }} aria-hidden="true">
-      <span className={styles.coverTop} style={{ background: item.cover.hair }} />
-      <span className={styles.coverMark} style={{ background: item.cover.eyes }} />
+    <span className={styles.cover} style={{ background: colors.face }} aria-hidden="true">
+      <span className={styles.coverTop} style={{ background: colors.hair }} />
+      <span className={styles.coverMark} style={{ background: colors.eyes }} />
     </span>
   );
 }
@@ -64,12 +76,19 @@ export function RankingCard({ className, onOpenAll }: RankingCardProps) {
   const [category, setCategory] = useState(0);
   const [subCategory, setSubCategory] = useState(0);
   // TODO: persist with usePluginStorage once the plugin SDK has storage
-  const [shown, setShown] = useState<boolean[]>(() => rankCategories.map((_, i) => i < 3));
+  const [shown, setShown] = useState<boolean[]>(() => rankBoards.map((_, i) => i < 3));
   const [popover, setPopover] = useState<"none" | "more" | "layout">("none");
   const toolbarRef = useDismiss(popover !== "none", () => setPopover("none"));
 
-  const items = mockRanking(category, subCategory);
-  const tabs = rankCategories.map((label, index) => ({ label, index }));
+  const board = rankBoards[category]?.board ?? "pe_hot";
+  const hasCategories = board !== "hot_search";
+  const ranking = useHostQuery("rank.list", {
+    board,
+    category: rankCategories[subCategory]?.category ?? "mod",
+    limit: RANK_LIMIT,
+  });
+  const items = ranking.data ?? [];
+  const tabs = rankBoards.map(({ label }, index) => ({ label, index }));
   const visibleTabs = tabs.filter((tab) => shown[tab.index]);
   const hiddenTabs = tabs.filter((tab) => !shown[tab.index]);
   const activeHidden = !shown[category];
@@ -94,7 +113,11 @@ export function RankingCard({ className, onOpenAll }: RankingCardProps) {
       aria-label="排行榜"
       className={className ? `${styles.card} ${className}` : styles.card}
       title="排行榜"
-      actions={<TextButton aria-label="刷新排行榜">刷新</TextButton>}
+      actions={
+        <TextButton aria-label="刷新排行榜" onClick={ranking.reload} disabled={ranking.loading}>
+          刷新
+        </TextButton>
+      }
     >
       <div className={styles.toolbar} ref={toolbarRef}>
         <div role="tablist" aria-label="榜单" className={styles.tabs}>
@@ -118,7 +141,7 @@ export function RankingCard({ className, onOpenAll }: RankingCardProps) {
               className={activeHidden ? `${styles.tab} ${styles.tabActive}` : styles.tab}
               onClick={() => setPopover(popover === "more" ? "none" : "more")}
             >
-              {activeHidden ? `更多：${rankCategories[category]} ▾` : "更多 ▾"}
+              {activeHidden ? `更多：${rankBoards[category]?.label ?? ""} ▾` : "更多 ▾"}
             </button>
           )}
         </div>
@@ -184,27 +207,45 @@ export function RankingCard({ className, onOpenAll }: RankingCardProps) {
         )}
       </div>
 
-      <div className={styles.chips}>
-        {rankSubCategories.map((label, index) => (
-          <button
-            key={label}
-            type="button"
-            aria-pressed={index === subCategory}
-            className={index === subCategory ? `${styles.chip} ${styles.chipActive}` : styles.chip}
-            onClick={() => setSubCategory(index)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {hasCategories && (
+        <div className={styles.chips}>
+          {rankCategories.map(({ label }, index) => (
+            <button
+              key={label}
+              type="button"
+              aria-pressed={index === subCategory}
+              className={index === subCategory ? `${styles.chip} ${styles.chipActive}` : styles.chip}
+              onClick={() => setSubCategory(index)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
-      <ol className={styles.list} aria-label={`${rankCategories[category]} · ${rankSubCategories[subCategory]}`}>
+      {ranking.error && (
+        <Notice
+          action={
+            <TextButton tone="warning" onClick={ranking.reload}>
+              重试
+            </TextButton>
+          }
+        >
+          榜单加载失败：{ranking.error.message}
+        </Notice>
+      )}
+      {!ranking.loading && !ranking.error && items.length === 0 && <EmptyState title="这个榜单暂时没有作品" />}
+      <ol
+        className={styles.list}
+        aria-label={`${rankBoards[category]?.label ?? ""}${hasCategories ? ` · ${rankCategories[subCategory]?.label ?? ""}` : ""}`}
+        aria-busy={ranking.loading}
+      >
         {items.map((item) => {
           const change = describeChange(item.change);
           return (
-            <li key={item.rank} className={styles.item}>
+            <li key={`${item.rank}-${item.title}`} className={styles.item}>
               <span className={item.rank <= 3 ? `${styles.rank} ${styles.rankTop}` : styles.rank}>{item.rank}</span>
-              <Cover item={item} />
+              {item.itemId !== null && <Cover item={item} />}
               <span className={styles.itemTitle}>{item.title}</span>
               <span className={`${styles.change} ${change.className ?? ""}`}>{change.text}</span>
             </li>

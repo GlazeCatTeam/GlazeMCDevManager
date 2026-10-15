@@ -1,33 +1,45 @@
-import { Button, PixelAvatar, ProgressBar } from "@glaze/plugin-sdk";
-import { formatCount } from "../format";
-import type { HomeAccount } from "../mock";
+import { type AvatarColors, Button, type DeveloperLevel, PixelAvatar, ProgressBar } from "@glaze/plugin-sdk";
+import { formatCompact, MISSING } from "../format";
 import styles from "./Greeting.module.css";
 
 export interface GreetingProps {
-  account: HomeAccount;
+  nickname: string;
+  avatar: AvatarColors;
+  /** null until the level has loaded */
+  level: DeveloperLevel | null;
+  refreshing: boolean;
   onRefresh: () => void;
 }
 
-/** Page header: greeting, developer level and experience progress */
-export function Greeting({ account, onRefresh }: GreetingProps) {
-  const { floor, ceiling, total } = account.exp;
-  const progress = ceiling > floor ? (total - floor) / (ceiling - floor) : 0;
-  const expText = `经验 ${formatCount(total)} / ${formatCount(ceiling)}`;
+/** Page header: greeting, developer class and level, experience progress within the level */
+export function Greeting({ nickname, avatar, level, refreshing, onRefresh }: GreetingProps) {
+  const gained = level ? level.totalExp - level.expFloor : 0;
+  const needed = level ? level.expCeiling - level.expFloor : 0;
+  const progress = needed > 0 ? gained / needed : 0;
+  const expText = level ? `经验 ${formatCompact(gained)} / ${formatCompact(needed)}` : `经验 ${MISSING}`;
 
   return (
     <section className={styles.greeting} aria-label="问候与等级">
-      <PixelAvatar colors={account.avatar} size={64} />
+      <PixelAvatar colors={avatar} size={64} />
       <div className={styles.text}>
-        <h1 className={styles.title}>Hi，{account.nickname}！</h1>
+        <h1 className={styles.title}>Hi，{nickname}！</h1>
         <div className={styles.level}>
           <span className={styles.levelName}>
-            <span className={styles.lv}>Lv.{account.level}</span> · {account.levelName}
+            {level ? (
+              <>
+                {level.levelClass} 阶 · <span className={styles.lv}>Lv.{level.level}</span>
+              </>
+            ) : (
+              <span className={styles.lv}>Lv.{MISSING}</span>
+            )}
           </span>
           <ProgressBar className={styles.progress} value={progress} label={expText} />
           <span className={styles.exp}>{expText}</span>
         </div>
       </div>
-      <Button onClick={onRefresh}>刷新</Button>
+      <Button onClick={onRefresh} disabled={refreshing}>
+        {refreshing ? "刷新中…" : "刷新"}
+      </Button>
     </section>
   );
 }

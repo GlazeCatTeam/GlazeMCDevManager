@@ -1,11 +1,11 @@
-import { Icon, Tag } from "@glaze/plugin-sdk";
-import { formatYuan } from "../format";
-import type { ProfitEstimate } from "../mock";
+import { Icon, type IncomeEstimate, Tag } from "@glaze/plugin-sdk";
+import { formatYuan, MISSING } from "../format";
 import styles from "./ProfitMonthStrip.module.css";
 
 export interface ProfitMonthStripProps {
   title: string;
-  data: ProfitEstimate;
+  /** null until the estimate has loaded or when it failed */
+  data: IncomeEstimate | null;
   onSelect: () => void;
 }
 
@@ -17,8 +17,8 @@ export function ProfitMonthStrip({ title, data, onSelect }: ProfitMonthStripProp
       <span className={styles.title}>{title}</span>
       <Tag>估算</Tag>
       <span className={styles.amounts}>
-        <span className={styles.total}>{formatYuan(data.totalYuan)}</span>
-        <span className={styles.afterTax}>扣税后约 {formatYuan(data.afterTaxYuan)}</span>
+        <span className={styles.total}>{data ? formatYuan(data.totalYuan) : MISSING}</span>
+        <span className={styles.afterTax}>扣税后约 {data ? formatYuan(data.afterTaxYuan) : MISSING}</span>
       </span>
       <Icon name="action.chevronRight" size={12} className={styles.icon} />
     </button>

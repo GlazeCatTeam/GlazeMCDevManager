@@ -1,13 +1,16 @@
-import { Icon, type IconName, Notice, Panel, Tag, TextButton } from "@glaze/plugin-sdk";
+import { Icon, type IconName, type IncomeEstimate, Notice, Panel, Tag, TextButton } from "@glaze/plugin-sdk";
 import type { ReactNode } from "react";
-import { formatYuan } from "../format";
-import type { ProfitEstimate } from "../mock";
+import { formatDay, formatYuan, MISSING } from "../format";
 import styles from "./ProfitEstimateCard.module.css";
 
 export interface ProfitEstimateCardProps {
   /** e.g. "本月收益速算" */
   title: string;
-  data: ProfitEstimate;
+  /** null until the estimate has loaded */
+  data: IncomeEstimate | null;
+  /** Message of the latest failed load */
+  error: string | null;
+  loading: boolean;
   className?: string | undefined;
   onRetry: () => void;
   onOpenDetail: () => void;
@@ -23,8 +26,28 @@ function RowLabel({ icon, children }: { icon: IconName; children: ReactNode }) {
   );
 }
 
-/** A month's estimated income with its diamond income and developer share */
-export function ProfitEstimateCard({ title, data, className, onRetry, onOpenDetail }: ProfitEstimateCardProps) {
+/** A yuan amount, or the placeholder until it has loaded */
+function yuan(value: number | undefined): string {
+  return value === undefined ? MISSING : formatYuan(value);
+}
+
+/** A month's estimated income with its diamond income and developer share; the total includes subsidies */
+export function ProfitEstimateCard({
+  title,
+  data,
+  error,
+  loading,
+  className,
+  onRetry,
+  onOpenDetail,
+}: ProfitEstimateCardProps) {
+  const failed = data?.failedWorks.length ?? 0;
+  const retry = (
+    <TextButton tone="warning" onClick={onRetry}>
+      重试
+    </TextButton>
+  );
+
   return (
     <Panel
       aria-label={title}
@@ -34,36 +57,31 @@ export function ProfitEstimateCard({ title, data, className, onRetry, onOpenDeta
       badge={<Tag>估算</Tag>}
       actions={<TextButton onClick={onOpenDetail}>查看详情</TextButton>}
     >
-      {data.failedWorks > 0 && (
-        <Notice
-          action={
-            <TextButton tone="warning" onClick={onRetry}>
-              重试
-            </TextButton>
-          }
-        >
-          {data.failedWorks} 个作品的收益查询失败，结果不完整
-        </Notice>
-      )}
+      {error && <Notice action={retry}>收益速算失败：{error}</Notice>}
+      {!error && failed > 0 && <Notice action={retry}>{failed} 个作品的收益查询失败，结果不完整</Notice>}
 
       <div className={styles.total}>
         <span className={styles.muted}>预计收益（元）</span>
-        <span className={styles.amount}>{formatYuan(data.totalYuan)}</span>
-        <span className={styles.small}>扣税后约 {formatYuan(data.afterTaxYuan)}</span>
+        <span className={styles.amount}>{yuan(data?.totalYuan)}</span>
+        <span className={styles.small}>扣税后约 {yuan(data?.afterTaxYuan)}</span>
       </div>
 
       <div className={styles.rows}>
         <div className={styles.row}>
           <RowLabel icon="income.flow">钻石收益（元）</RowLabel>
-          <span className={styles.rowValue}>{formatYuan(data.diamondIncomeYuan)}</span>
+          <span className={styles.rowValue}>{yuan(data?.diamondIncomeYuan)}</span>
         </div>
         <div className={styles.row}>
           <RowLabel icon="income.share">开发者分成（元）</RowLabel>
-          <span className={styles.rowValue}>{formatYuan(data.developerShareYuan)}</span>
+          <span className={styles.rowValue}>{yuan(data?.developerShareYuan)}</span>
         </div>
       </div>
 
-      <span className={styles.note}>按当前分成与激励规则估算，以平台结算记录为准</span>
+      <span className={styles.note}>
+        {loading && !data ? "正在统计各作品的销售，可能需要几秒…" : ""}
+        {data ? `统计 ${formatDay(data.startDate)}–${formatDay(data.endDate)}的销售，` : ""}
+        {loading && !data ? "" : "按当前分成与激励规则估算，以平台结算记录为准"}
+      </span>
     </Panel>
   );
 }

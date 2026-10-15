@@ -260,7 +260,11 @@ importers:
 
   packages/mcp: {}
 
-  packages/netease: {}
+  packages/netease:
+    dependencies:
+      '@glaze/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/plugin-sdk:
     dependencies:

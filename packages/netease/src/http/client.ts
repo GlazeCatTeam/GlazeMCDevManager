@@ -8,6 +8,8 @@ const EXPIRED_STATUSES = new Set(["401", "no_login"]);
 /** The session a request runs with; only the session cookie value is sent */
 export interface NeteaseSession {
   sessionCookie: string;
+  /** Called when a response rotates the session cookie, so the owner can store the new one */
+  onRenewed?: ((sessionCookie: string) => void) | undefined;
 }
 
 /** Envelope of every developer API response */
@@ -21,6 +23,21 @@ export interface McDevResponse<T> {
   data: T;
   /** A refreshed session cookie from Set-Cookie, when the platform rotated it */
   renewedSessionCookie: string | null;
+}
+
+/** Append query parameters to a path, skipping undefined values */
+export function withQuery(path: string, params: Record<string, string | number | boolean | undefined>): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) {
+      query.set(key, String(value));
+    }
+  }
+  const text = query.toString();
+  if (text.length === 0) {
+    return path;
+  }
+  return `${path}${path.includes("?") ? "&" : "?"}${text}`;
 }
 
 /** Read the session cookie from Set-Cookie headers, if the response rotated it */
@@ -79,5 +96,15 @@ export async function getMcDev<T>(
   if (body.data === undefined || body.data === null) {
     return fail({ kind: "parse", endpoint });
   }
-  return ok({ data: body.data as T, renewedSessionCookie: renewedSessionCookie(response.headers) });
+  const renewed = renewedSessionCookie(response.headers);
+  if (renewed && renewed !== session.sessionCookie) {
+    session.onRenewed?.(renewed);
+  }
+  return ok({ data: body.data as T, renewedSessionCookie: renewed });
+}
+
+/** GET a developer API path and keep only the payload; session rotation goes through session.onRenewed */
+export async function getMcDevData(endpoint: string, path: string, session: NeteaseSession): Promise<Result<unknown>> {
+  const result = await getMcDev<unknown>(endpoint, path, session);
+  return result.ok ? ok(result.value.data) : fail(result.error);
 }

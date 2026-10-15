@@ -3,11 +3,21 @@ import {
   type EventMessage,
   type EventName,
   type EventPayloads,
+  type RankBoard,
+  type RankCategory,
   RPC_CHANNEL,
   type RpcMethod,
   type RpcMethods,
   type RpcResult,
 } from "@glaze/contracts";
+import {
+  estimateIncome,
+  getAnalyticsOverview,
+  getDeveloperLevel,
+  getRankList,
+  monthOf,
+  parseMonth,
+} from "@glaze/netease";
 import { BrowserWindow, type IpcMainInvokeEvent, ipcMain } from "electron";
 import type { SessionManager } from "../session/session-manager";
 import { closeLoginWindow, loginWithOfficialWindow } from "../windows/login-window";
@@ -33,6 +43,42 @@ function requireString(params: unknown, key: string): string {
   }
   return value;
 }
+
+/** An optional string parameter; absent and undefined are both allowed */
+function optionalString(params: unknown, key: string): string | undefined {
+  const value = (params as Record<string, unknown> | null | undefined)?.[key];
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "string" || value.length === 0) {
+    throw new CapabilityError("internal", `参数 ${key} 无效`);
+  }
+  return value;
+}
+
+/** An optional string parameter restricted to known values */
+function optionalOneOf<T extends string>(params: unknown, key: string, allowed: readonly T[]): T | undefined {
+  const value = optionalString(params, key);
+  if (value !== undefined && !(allowed as readonly string[]).includes(value)) {
+    throw new CapabilityError("internal", `参数 ${key} 无效`);
+  }
+  return value as T | undefined;
+}
+
+/** An optional integer parameter within [min, max] */
+function optionalInteger(params: unknown, key: string, min: number, max: number): number | undefined {
+  const value = (params as Record<string, unknown> | null | undefined)?.[key];
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "number" || !Number.isInteger(value) || value < min || value > max) {
+    throw new CapabilityError("internal", `参数 ${key} 应为 ${min} 到 ${max} 的整数`);
+  }
+  return value;
+}
+
+const rankBoards: readonly RankBoard[] = ["pe_hot", "hot_search", "pe_download", "pe_sell", "pc_download", "pc_like"];
+const rankCategories: readonly RankCategory[] = ["mod", "map", "texture", "lobby"];
 
 /** Handlers for every RPC method, backed by the session manager */
 function createHandlers(sessions: SessionManager): HandlerTable {
@@ -74,6 +120,26 @@ function createHandlers(sessions: SessionManager): HandlerTable {
     "account.remove": (params) => {
       sessions.remove(requireString(params, "id"));
       return undefined;
+    },
+    "developer.level": (params) => sessions.request(optionalString(params, "account"), getDeveloperLevel),
+    "analytics.overview": (params) => sessions.request(optionalString(params, "account"), getAnalyticsOverview),
+    "income.estimate": (params) => {
+      const month = optionalString(params, "month") ?? monthOf(new Date());
+      if (!parseMonth(month)) {
+        throw new CapabilityError("internal", "参数 month 应为 YYYY-MM");
+      }
+      return sessions.request(optionalString(params, "account"), (session) => estimateIncome(session, month));
+    },
+    "rank.list": (params) => {
+      const board = optionalOneOf(params, "board", rankBoards);
+      if (!board) {
+        throw new CapabilityError("internal", "参数 board 无效");
+      }
+      const category = optionalOneOf(params, "category", rankCategories) ?? "mod";
+      const limit = optionalInteger(params, "limit", 1, 50) ?? 10;
+      return sessions.request(optionalString(params, "account"), (session) =>
+        getRankList(session, board, category, limit),
+      );
     },
   };
 }

@@ -1,5 +1,8 @@
 // Temporary hand-written contracts; replaced by Zod schemas in M1
 import type { AccountChanged, AccountSummary, InitialRoute, LoginStep } from "./account";
+import type { AccountParams, AnalyticsOverview, DeveloperLevel } from "./developer";
+import type { IncomeEstimate, IncomeEstimateParams } from "./income";
+import type { RankEntry, RankListParams } from "./rank";
 
 export const RPC_CHANNEL = "glaze:rpc";
 export const EVENT_CHANNEL = "glaze:event";
@@ -26,6 +29,10 @@ export interface RpcMethods {
   "account.switch": { params: { id: string }; result: AccountSummary };
   "account.logout": { params: undefined; result: undefined };
   "account.remove": { params: { id: string }; result: undefined };
+  "developer.level": { params: AccountParams | undefined; result: DeveloperLevel };
+  "analytics.overview": { params: AccountParams | undefined; result: AnalyticsOverview };
+  "income.estimate": { params: IncomeEstimateParams | undefined; result: IncomeEstimate };
+  "rank.list": { params: RankListParams; result: RankEntry[] };
 }
 
 export interface EventPayloads {
