@@ -1,8 +1,9 @@
 import { avatarColorsFor, Button, remoteImageUrl, Tag, TextButton, type WorkSummary } from "@glaze/plugin-sdk";
 import { useState } from "react";
-import { formatDate, priceText } from "../format";
+import { formatDate } from "../format";
 import { actionLabels, actionsFor, readActions, statusLabels, statusTones, type WorkAction } from "../status";
 import { useWorkCover } from "../useWorkQuery";
+import { WorkPrice } from "./WorkPrice";
 import styles from "./WorkTile.module.css";
 
 export interface WorkTileProps {
@@ -63,7 +64,9 @@ export function WorkTile({ work, account, onAction, onOpenDetail }: WorkTileProp
       </div>
 
       <div className={styles.meta}>
-        <span className={styles.price}>{priceText(work)}</span>
+        <span className={styles.price}>
+          <WorkPrice price={work.price} priceType={work.priceType} />
+        </span>
         {work.isOriginal && <Tag>原创</Tag>}
         {work.syncPc && <Tag>PE + PC</Tag>}
         {work.weakOffline && <Tag tone="warning">弱下架</Tag>}

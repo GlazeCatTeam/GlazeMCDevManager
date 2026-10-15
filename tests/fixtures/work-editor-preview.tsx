@@ -117,13 +117,32 @@ const performancePreview = new URLSearchParams(location.search).has("performance
 const workList = performancePreview
   ? Array.from({ length: 90 }, (_, i) => ({ ...work, itemId: String(1000 + i), name: `性能测试作品 ${i + 1}` }))
   : [work];
+if (new URLSearchParams(location.search).has("currency")) {
+  workList.splice(
+    0,
+    workList.length,
+    { ...work, itemId: "2001", name: "钻石定价作品", price: 600, priceType: "diamond" },
+    { ...work, itemId: "2002", name: "绿宝石定价作品", price: 1000, priceType: "point" },
+    { ...work, itemId: "2003", name: "免费作品" },
+  );
+}
 const documents = new Map(
-  performancePreview
+  performancePreview || new URLSearchParams(location.search).has("currency")
     ? workList.map(
         (entry) =>
           [
             entry.itemId,
-            { ...document, itemId: entry.itemId, fields: { ...document.fields, item_name: entry.name } },
+            {
+              ...document,
+              itemId: entry.itemId,
+              fields: {
+                ...document.fields,
+                item_name: entry.name,
+                price: entry.price,
+                price_type: entry.priceType,
+                price_rank: entry.priceType === "diamond" ? 1 : entry.priceType === "point" ? -5 : -4,
+              },
+            },
           ] as const,
       )
     : [[work.itemId, document]],

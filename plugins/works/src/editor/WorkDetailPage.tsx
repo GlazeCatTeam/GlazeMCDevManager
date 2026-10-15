@@ -20,6 +20,7 @@ import {
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { priceText } from "../format";
 import { statusLabels } from "../status";
+import { CurrencyIcon, WorkPrice } from "../widgets/WorkPrice";
 import { Field, Input, number, object, rows, Select, text, YesNo } from "./fields";
 import { ImageSlots, MediaSections, type UploadFile } from "./MediaSections";
 import { RichEditor } from "./RichEditor";
@@ -674,7 +675,11 @@ function Editor({
                     </select>
                   ) : (
                     <Tag>
-                      {value.price_type === "diamond" ? "钻石" : value.price_type === "point" ? "绿宝石" : "免费"}
+                      {value.price_type === "diamond" || value.price_type === "point" ? (
+                        <CurrencyIcon type={value.price_type} />
+                      ) : (
+                        "免费"
+                      )}
                     </Tag>
                   )}
                 </Field>
@@ -1062,12 +1067,12 @@ function Editor({
               <div>
                 <dt>价格</dt>
                 <dd>
-                  {priceText({
-                    ...props.work,
-                    price: number(value.price),
-                    priceType:
-                      value.price_type === "diamond" ? "diamond" : value.price_type === "point" ? "point" : "free",
-                  })}
+                  <WorkPrice
+                    price={number(value.price)}
+                    priceType={
+                      value.price_type === "diamond" ? "diamond" : value.price_type === "point" ? "point" : "free"
+                    }
+                  />
                 </dd>
               </div>
               <div>
