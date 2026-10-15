@@ -6,6 +6,7 @@
 - **插件声明，宿主执行**。插件在清单里声明它要贡献什么、需要什么权限；宿主负责加载、渲染、鉴权。
 - **凭据不出主进程**。插件只能请求"调用某个网易端点"，永远看不到 Cookie 和密码。
 - **按风险分级开放**。先开放没有代码的主题插件，再逐步开放有代码的插件。
+- **功能先成为能力**。插件的业务操作要能被 MCP 调用，不能只存在于界面里。见 [13 能力层与 MCP 接入](13-mcp.md)。
 
 ## 插件类型与信任等级
 
@@ -66,6 +67,7 @@ my-plugin/
 | `widgets` | 可放进页面布局的组件 | 声明最小尺寸、可配置项 schema |
 | `commands` | 命令 | 出现在命令面板，可绑定快捷键 |
 | `settings` | 设置项 | 宿主统一渲染到设置页的插件分区 |
+| `tools` | MCP 工具 | 声明 `id`、`description`、`risk`；处理函数用 `ctx.tools.register` 注册；权限不超过插件自身 |
 | `themes` | 主题包 | 主题插件只有这一项 |
 | `locales` | 文案 | 可选 |
 
@@ -85,7 +87,7 @@ stateDiagram-v2
     已禁用 --> 已启用
 ```
 
-- **激活事件**：`onStartup`、`onPage:<页面 ID>`、`onCommand:<命令 ID>`、`onWidget:<组件 ID>`。只有需要时才加载插件代码。
+- **激活事件**：`onStartup`、`onPage:<页面 ID>`、`onCommand:<命令 ID>`、`onWidget:<组件 ID>`、`onTool:<工具 ID>`。只有需要时才加载插件代码。
 - **注册在激活前**：清单里的页面、导航、组件在插件激活前就已显示（标题、占位），点击后才加载代码。
 - **崩溃隔离**：第三方插件进程崩溃，宿主记录错误、停用该插件，相关组件显示"插件已停止"，其他功能不受影响。
 
@@ -101,6 +103,7 @@ stateDiagram-v2
 | 设置 | `ctx.settings.get(id)`、`onDidChange` | 无（只能读自己的） |
 | 通知 | `ctx.notify.info/warn/error` | `notifications` |
 | 命令 | `ctx.commands.register(id, handler)` | 无（只能注册自己声明的） |
+| MCP 工具 | `ctx.tools.register(id, handler)` | 无（只能注册自己声明的；调用时按插件权限和客户端授权取交集） |
 | 事件 | `ctx.events.on("account.switched")` 等 | 无 |
 | 日志 | `ctx.log.info/warn/error` | 无（自动脱敏、带插件 ID） |
 
@@ -115,6 +118,7 @@ stateDiagram-v2
 | `netease:works.read` / `netease:works.write` | 读取 / 修改作品 |
 | `netease:upload` | 上传文件到网易 |
 | `netease:analytics.read` | 读取数据分析 |
+| `netease:rank.read` | 读取平台排行榜（公开榜单数据） |
 | `netease:income.read` / `netease:income.settle` | 读取收益 / 申请结算（结算为高危） |
 | `netease:community.read` / `netease:community.write` | 读取 / 回复反馈与评论 |
 | `netease:messages.read` / `netease:messages.write` | 读取 / 处理站内消息 |

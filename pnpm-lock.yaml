@@ -234,6 +234,8 @@ importers:
 
   packages/layout: {}
 
+  packages/mcp: {}
+
   packages/netease: {}
 
   packages/plugin-sdk:

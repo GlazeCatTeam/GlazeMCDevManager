@@ -1,0 +1,13 @@
+{
+  "name": "@glaze/mcp",
+  "version": "0.0.0",
+  "private": true,
+  "description": "MCP 服务：把能力映射为 MCP 工具和资源，负责传输与客户端配对",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

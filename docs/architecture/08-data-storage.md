@@ -26,6 +26,7 @@
 | `layouts` | `page`、`version`、`layout_json`、`updated_at` | 用户布局覆盖，没有记录即使用默认布局 |
 | `plugins` | `id`、`version`、`trust`、`enabled`、`granted_permissions_json`、`installed_at` | 已安装插件和授权情况 |
 | `plugin_kv` | `plugin_id`、`key`、`value_json` | 插件私有存储，按插件隔离 |
+| `mcp_clients` | `id`、`name`、`granted_permissions_json`、`write_policy`、`paired_at`、`last_seen_at`、`revoked` | 已配对的 MCP 客户端和授权范围 |
 | `query_cache` | `account_uid`、`endpoint`、`params_hash`、`payload_json`、`fetched_at` | 可选的接口结果缓存，按账号隔离 |
 | `audit_log` | `at`、`caller`、`permission`、`target`、`result` | 权限判定和高危操作记录 |
 

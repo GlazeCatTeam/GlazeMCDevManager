@@ -14,6 +14,7 @@ GlazeMCDevManager（显示名 Glaze MC Dev Manager）是面向网易我的世界
 | 主题 | 三层设计令牌 + 主题包；首套主题为 Ore UI（方块语言 + 简约） |
 | 凭据安全 | Cookie、密码只存在主进程，加密落盘；插件和渲染进程永远拿不到 |
 | 网易接口 | 端点目录 + 请求管线，统一错误模型，失败不会被当作零值 |
+| AI 接入 | 每个功能先定义为能力；外部 AI 工具通过 MCP 在配对授权后调用，应用不内置 AI |
 
 ```mermaid
 flowchart TD
@@ -35,6 +36,8 @@ flowchart TD
     subgraph PluginHost["插件宿主进程（utilityProcess）"]
         PW["第三方插件逻辑"]
     end
+    AI["外部 AI 工具"] -->|MCP| MCPS["MCP 服务（主进程）"]
+    MCPS --> RPC
     SHELL --> RPC
     BUI --> RPC
     SANDBOX -->|postMessage 桥| RPC
@@ -60,10 +63,12 @@ flowchart TD
 | [10 安全](10-security.md) | Electron 安全基线、威胁模型、插件权限 |
 | [11 工程规范](11-engineering.md) | 工具链、测试策略、CI、发布、代码与提交规范 |
 | [12 路线图](12-roadmap.md) | 里程碑与验收标准 |
+| [13 能力层与 MCP 接入](13-mcp.md) | 能力优先原则、能力到 MCP 工具的映射、传输、配对授权、每个模块的工具清单 |
 
-架构决策记录（ADR）见 [docs/adr](../adr/README.md)。设计参考图见 [docs/design/references](../design/references/)。
+项目目标、已敲定的决定和当前进度见 [docs/PROJECT.md](../PROJECT.md)。架构决策记录（ADR）见 [docs/adr](../adr/README.md)。设计参考图见 [docs/design/references](../design/references/)。
 
 ## 维护约定
 
 - 架构文档描述"应该是什么样"。实现与文档不一致时，要么改实现，要么先改文档并补一条 ADR。
 - 新增包、插件贡献点、权限、IPC 通道，都要同步更新对应文档。
+- 新增业务功能时，同时在 [13 能力层与 MCP 接入](13-mcp.md) 的模块工具清单里登记它的能力和 MCP 暴露方式。

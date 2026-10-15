@@ -19,6 +19,7 @@ GlazeMCDevManager/
 │  ├─ theme/                   主题包校验、token 解析、CSS 变量、图标注册
 │  ├─ layout/                  布局文档、组件注册、网格编辑、用户覆盖
 │  ├─ ui/                      基础组件库（只读 token）
+│  ├─ mcp/                     MCP 服务：能力到工具的映射、传输、配对授权
 │  └─ plugin-sdk/              对外发布的插件 SDK
 ├─ plugins/                    内置插件
 │  ├─ home/  account/  works/  analytics/
@@ -46,6 +47,7 @@ GlazeMCDevManager/
 | `@glaze/theme` | 渲染进程（校验部分任意） | 主题包解析、继承、变体合并，输出 CSS 变量 | `ThemeEngine`、`validateTheme` |
 | `@glaze/layout` | 渲染进程 | 布局文档读写、组件注册、网格编辑 | `LayoutEngine`、`<PageGrid>` |
 | `@glaze/ui` | 渲染进程 | 按钮、面板、输入框、列表等基础组件 | React 组件 |
+| `@glaze/mcp` | 主进程 | 把标注 `mcp.expose` 的能力映射为 MCP 工具和资源；stdio 桥、命名管道、本机 HTTP；客户端配对 | `McpServer`、`--mcp` 桥入口 |
 | `@glaze/plugin-sdk` | 插件 | 插件作者唯一需要依赖的包 | `definePlugin`、上下文类型、hooks |
 
 ## 依赖规则
@@ -63,7 +65,9 @@ flowchart BT
     sdk["plugin-sdk"] --> contracts
     sdk --> ui
     plugins["plugins/*"] --> sdk
+    mcp["mcp"] --> contracts
     desktop["apps/desktop"] --> core
+    desktop --> mcp
     desktop --> netease
     desktop --> storage
     desktop --> layout
@@ -77,6 +81,7 @@ flowchart BT
 3. `shared` 和 `contracts` 不能依赖任何其他内部包。
 4. `netease` 和 `storage` 之间不直接依赖，由 `apps/desktop` 在组装时注入（会话持久化通过接口传入）。
 5. 禁止循环依赖。
+6. `mcp` 不直接依赖 `core`、`netease`、`storage`，只通过 RPC 路由调用能力，和界面、插件走同一条权限链路。由 `apps/desktop` 在组装时注入路由。
 
 这样做的原因：插件 API 是对外承诺，内置插件绕过它就无法发现 API 的缺口；主进程包混进渲染进程会破坏凭据隔离。
 
