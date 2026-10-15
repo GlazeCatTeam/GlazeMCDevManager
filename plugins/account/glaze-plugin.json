@@ -13,7 +13,6 @@
       { "id": "login", "title": "登录", "chrome": "none" },
       { "id": "login-expired", "title": "重新登录", "chrome": "none" }
     ],
-    "navItems": [{ "page": "account", "icon": "nav.account", "group": "bottom", "order": 10 }],
     "widgets": [
       { "id": "account.current", "title": "当前账号", "minW": 4, "minH": 3 },
       { "id": "account.level", "title": "开发者等级", "minW": 4, "minH": 4 },

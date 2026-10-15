@@ -1,0 +1,479 @@
+.page {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 36px 40px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.subtitle,
+.muted {
+  color: var(--g-text-muted);
+}
+
+.muted {
+  font-size: 12px;
+}
+
+.refresh {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.refreshNote {
+  color: var(--g-text-muted);
+  font-size: 12px;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: var(--g-border-width) solid var(--g-border-subtle);
+}
+
+.tab {
+  height: 40px;
+  padding: 0 14px;
+  margin-bottom: calc(-1 * var(--g-border-width));
+  border-bottom: var(--g-border-width) solid transparent;
+  color: var(--g-text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.tab:hover {
+  color: var(--g-text-primary);
+}
+
+.tabActive {
+  color: var(--g-text-primary);
+  border-bottom-color: var(--g-tab-indicator);
+}
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.workspace[hidden] {
+  display: none;
+}
+
+/* Every panel retains its dimensions as filters and the amount of data change */
+.filters {
+  height: 128px;
+  flex: none;
+  gap: 16px;
+  padding: 20px 24px;
+  overflow: auto;
+}
+
+.compactFilters {
+  height: 80px;
+  flex: none;
+  justify-content: center;
+  overflow: auto;
+}
+
+.filterRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 28px;
+}
+
+.filterLabel {
+  width: 34px;
+  flex: none;
+  color: var(--g-text-muted);
+  font-size: 12px;
+}
+
+.choiceGroup,
+.resourceChoices {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.resourceChoices {
+  flex-wrap: nowrap;
+}
+
+.resourceSelected {
+  outline: 1px solid var(--g-tag-borderColor);
+  outline-offset: 1px;
+}
+
+.dateRange {
+  color: var(--g-text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.queryButton {
+  margin-left: auto;
+  flex: none;
+}
+
+.trendPanel {
+  height: 394px;
+  flex: none;
+  gap: 10px;
+  overflow: auto;
+}
+
+.chartToolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  min-height: 28px;
+}
+
+.chart {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.chart svg {
+  display: block;
+  width: 100%;
+  flex: 1;
+  min-height: 150px;
+}
+
+.gridLine {
+  stroke: var(--g-border-subtle);
+  stroke-width: 1;
+}
+
+.axisLabel {
+  fill: var(--g-text-muted);
+  font-size: 11px;
+  font-family: var(--g-font-family);
+}
+
+.chartCaption {
+  height: 36px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: 4px;
+  color: var(--g-text-muted);
+  font-size: 11px;
+}
+
+.chartDate {
+  min-height: 26px;
+  font-size: 11px;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  min-height: 20px;
+  font-size: 12px;
+}
+
+.legendItem,
+.resourceName {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  flex: none;
+  background: currentColor;
+}
+
+.dashedSwatch {
+  display: inline-block;
+  width: 18px;
+  height: 0;
+  border-top: 2px dashed currentColor;
+}
+
+.chartEmpty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--g-text-muted);
+}
+
+.tablePanel {
+  height: 280px;
+  flex: none;
+  gap: 12px;
+}
+
+.tableScroll {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.table {
+  border-collapse: collapse;
+  width: 100%;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.table th,
+.table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--g-border-divider);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th:first-child,
+.table td:first-child {
+  padding-left: 0;
+  text-align: left;
+}
+
+.table th:last-child,
+.table td:last-child {
+  padding-right: 0;
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--g-surface-panel);
+  color: var(--g-text-muted);
+  font-weight: 400;
+}
+
+.table tbody th {
+  font-weight: 700;
+}
+
+.tableNote {
+  color: var(--g-text-muted);
+  font-size: 11px;
+}
+
+.table td.emptyCell {
+  height: 100px;
+  text-align: center;
+  color: var(--g-text-muted);
+}
+
+.stats {
+  display: flex;
+  height: 132px;
+  flex: none;
+  background: var(--g-surface-panel);
+  border: var(--g-border-width) solid var(--g-panel-borderColor);
+  border-radius: var(--g-radius-panel);
+  box-shadow: var(--g-panel-shadow);
+  overflow: auto;
+}
+
+.stat {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  padding: 18px 24px;
+  white-space: nowrap;
+}
+
+.stat + .stat {
+  border-left: var(--g-border-width) solid var(--g-border-divider);
+}
+
+.statValue {
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.statNote {
+  color: var(--g-text-muted);
+  font-size: 12px;
+}
+
+.resourcePanel {
+  height: 310px;
+  flex: none;
+}
+
+.inlineLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--g-text-muted);
+  font-size: 12px;
+}
+
+.select {
+  min-height: 32px;
+  padding: 4px 24px 4px 10px;
+  color: var(--g-text-primary);
+  background: var(--g-surface-sunken);
+  border: var(--g-border-width) solid var(--g-field-borderColor);
+  border-radius: var(--g-radius-control);
+  font: inherit;
+}
+
+.resourceGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 14px;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.resourceCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 16px;
+  border: var(--g-border-width) solid var(--g-border-subtle);
+  border-radius: var(--g-radius-panel);
+  background: var(--g-surface-app);
+  text-align: left;
+  font-size: 13px;
+  overflow: auto;
+}
+
+button.resourceCard:hover {
+  background: var(--g-panel-hoverBg);
+}
+
+.activeCard {
+  border-color: var(--g-tab-indicator);
+}
+
+.cardMetrics {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: auto 0 0;
+  font-size: 12px;
+}
+
+.cardMetrics div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cardMetrics dt {
+  color: var(--g-text-muted);
+}
+
+.cardMetrics dd {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.positive {
+  color: var(--g-trend-up);
+}
+
+.realtimeResourcePanel {
+  height: 252px;
+  flex: none;
+}
+
+.ordersPanel {
+  height: 400px;
+  flex: none;
+}
+
+.orderFilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.orderId {
+  color: var(--g-text-muted);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .page {
+    padding: 28px 24px 40px;
+  }
+
+  .filterRow {
+    gap: 10px;
+  }
+
+  .dateRange {
+    font-size: 11px;
+  }
+
+  .resourceGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: 208px;
+  }
+
+  .realtimeResourcePanel .resourceGrid {
+    grid-auto-rows: 166px;
+  }
+
+  .stat {
+    padding: 16px;
+  }
+
+  .statValue {
+    font-size: 22px;
+  }
+}

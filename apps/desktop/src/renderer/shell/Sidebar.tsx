@@ -3,6 +3,8 @@ import type { MockAccount } from "../mock/session";
 import type { NavEntry } from "./nav";
 import styles from "./Sidebar.module.css";
 
+const accountRoute = "glaze.account/account";
+
 export interface SidebarProps {
   entries: NavEntry[];
   activeRoute: string;
@@ -10,8 +12,10 @@ export interface SidebarProps {
   onNavigate: (route: string) => void;
 }
 
-/** Side navigation: top group, bottom group, and the current account card */
+/** Side navigation with the current account card as the account management entry */
 export function Sidebar({ entries, activeRoute, account, onNavigate }: SidebarProps) {
+  const accountActive = activeRoute === accountRoute;
+
   const renderItem = (entry: NavEntry) => {
     const active = entry.route === activeRoute;
     return (
@@ -33,7 +37,14 @@ export function Sidebar({ entries, activeRoute, account, onNavigate }: SidebarPr
       {entries.filter((e) => e.group === "top").map(renderItem)}
       <div className={styles.spacer} />
       {entries.filter((e) => e.group === "bottom").map(renderItem)}
-      <div className={styles.account}>
+      <button
+        type="button"
+        className={accountActive ? `${styles.account} ${styles.active}` : styles.account}
+        aria-label={`${account.nickname}，账号管理`}
+        aria-current={accountActive ? "page" : undefined}
+        title="账号管理"
+        onClick={() => onNavigate(accountRoute)}
+      >
         <PixelAvatar colors={account.avatar} size={28} />
         <span className={styles.accountText}>
           <span className={styles.nickname}>{account.nickname}</span>
@@ -41,7 +52,7 @@ export function Sidebar({ entries, activeRoute, account, onNavigate }: SidebarPr
             {account.sessionValid ? "会话有效" : "登录已过期"}
           </span>
         </span>
-      </div>
+      </button>
     </nav>
   );
 }

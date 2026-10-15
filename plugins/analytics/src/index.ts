@@ -1,1 +1,1 @@
-export {};
+export { AnalyticsPage } from "./AnalyticsPage";

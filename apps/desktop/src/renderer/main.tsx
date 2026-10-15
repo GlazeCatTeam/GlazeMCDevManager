@@ -3,6 +3,7 @@ import oreUi from "@glaze/theme-ore-ui/theme.json";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./global.css";
+import { AppearanceProvider } from "./shell/Appearance";
 import { AppShell } from "./shell/AppShell";
 
 applyTheme(oreUi);
@@ -14,6 +15,8 @@ if (!container) {
 
 createRoot(container).render(
   <StrictMode>
-    <AppShell />
+    <AppearanceProvider>
+      <AppShell />
+    </AppearanceProvider>
   </StrictMode>,
 );
