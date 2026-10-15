@@ -1,11 +1,13 @@
 // Temporary hand-written contracts; replaced by Zod schemas in M1
 import type { AccountChanged, AccountSummary, InitialRoute, LoginStep } from "./account";
+import type { AppearanceSettings } from "./appearance";
 import type { CommentListParams, CommentPage, CommentReplyParams } from "./comments";
 import type { AccountParams, AnalyticsOverview, DeveloperLevel } from "./developer";
 import type { FeedbackListParams, FeedbackPageData, FeedbackReplyParams } from "./feedback";
+import type { CacheClearResult, GeneralSettings, GeneralState } from "./general";
 import type { IncomeEstimate, IncomeEstimateParams } from "./income";
 import type { MessageContent, MessageDeleteParams, MessageListParams, MessagePage, MessageParams } from "./messages";
-import type { RankEntry, RankListParams } from "./rank";
+import type { RankBoard, RankEntry, RankListParams } from "./rank";
 import type { WorkCreateParams } from "./work-create";
 import type {
   WorkEditorDocument,
@@ -28,6 +30,15 @@ export interface WindowState {
 }
 
 export interface RpcMethods {
+  "general.get": { params: undefined; result: GeneralState };
+  "general.set": { params: GeneralSettings; result: GeneralState };
+  "general.clearCache": { params: undefined; result: CacheClearResult };
+  "app.rememberRoute": { params: { route: string }; result: undefined };
+  "appearance.get": { params: undefined; result: AppearanceSettings };
+  "appearance.set": { params: AppearanceSettings; result: AppearanceSettings };
+  "layout.getRanking": { params: undefined; result: RankBoard[] };
+  "layout.setRanking": { params: RankBoard[]; result: RankBoard[] };
+  "layout.reset": { params: undefined; result: RankBoard[] };
   "feedback.list": { params: FeedbackListParams; result: FeedbackPageData };
   "feedback.reply": { params: FeedbackReplyParams; result: undefined };
   "feedback.log": { params: { url: string }; result: string };
@@ -69,6 +80,10 @@ export interface RpcMethods {
 }
 
 export interface EventPayloads {
+  "general.changed": GeneralState;
+  "cache.cleared": undefined;
+  "appearance.changed": AppearanceSettings;
+  "layout.rankingChanged": RankBoard[];
   "window.stateChanged": WindowState;
   "account.changed": AccountChanged;
   "login.progress": { step: LoginStep };

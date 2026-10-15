@@ -1,3 +1,7 @@
+import { type AppearanceSettings, defaultAppearance, defaultGeneral, type GeneralSettings } from "@glaze/plugin-sdk";
+
+export type { AppearanceSettings, GeneralSettings } from "@glaze/plugin-sdk";
+
 export const categories = [
   { id: "appearance", label: "外观", description: "主题、颜色模式和界面大小" },
   { id: "general", label: "通用", description: "启动行为、账号与本地数据" },
@@ -10,21 +14,9 @@ export const categories = [
 
 export type SettingsCategory = (typeof categories)[number]["id"];
 
-export interface AppearanceSettings {
-  themeId: "ore-ui" | "fluent-dark";
-  colorMode: "dark" | "light" | "system";
-  scale: 90 | 100 | 110 | 125;
-}
+export const initialAppearance: AppearanceSettings = { ...defaultAppearance };
 
-export const initialAppearance: AppearanceSettings = { themeId: "ore-ui", colorMode: "dark", scale: 100 };
-
-export interface GeneralSettings {
-  launchAtLogin: boolean;
-  startPage: "home" | "works" | "last";
-  closeAction: "tray" | "quit";
-}
-
-export const initialGeneral: GeneralSettings = { launchAtLogin: false, startPage: "home", closeAction: "tray" };
+export const initialGeneral: GeneralSettings = { ...defaultGeneral };
 
 export interface NotificationSettings {
   messages: boolean;
@@ -166,13 +158,13 @@ export type PendingAction =
 export const confirmationCopy = {
   restore: {
     title: "恢复默认排版？",
-    body: "将恢复所有页面的默认组件位置和大小。当前为界面预览，布局存储服务尚未接入。",
+    body: "将清除保存的排版偏好，恢复首页排行榜的默认显示项。当前页面位置和大小固定；主题、颜色模式、缩放及账号数据不受影响。",
     action: "恢复默认",
   },
   cache: {
     title: "清除本地缓存？",
-    body: "缓存清理服务尚未接入。本次仅预览操作流程，不会删除本地文件或账号凭据。",
-    action: "确认预览",
+    body: "将清理页面资源、脚本、图片和查询缓存，后续访问时重新加载。账号、登录凭据、偏好设置与未保存的编辑内容会保留。",
+    action: "清除缓存",
   },
   clearLogs: {
     title: "清除模拟日志？",

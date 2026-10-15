@@ -47,6 +47,9 @@ import {
   submitWorkReview,
 } from "@glaze/netease";
 import { BrowserWindow, type IpcMainInvokeEvent, ipcMain } from "electron";
+import type { AppearanceService } from "../preferences/appearance";
+import type { CacheService } from "../preferences/cache";
+import type { GeneralService } from "../preferences/general";
 import type { SessionManager } from "../session/session-manager";
 import { closeLoginWindow, loginWithOfficialWindow } from "../windows/login-window";
 import { appWindows } from "../windows/main-window";
@@ -120,7 +123,12 @@ const rankBoards: readonly RankBoard[] = ["pe_hot", "hot_search", "pe_download",
 const rankCategories: readonly RankCategory[] = ["mod", "map", "texture", "lobby"];
 
 /** Handlers for every RPC method, backed by the session manager */
-function createHandlers(sessions: SessionManager): HandlerTable {
+function createHandlers(
+  sessions: SessionManager,
+  appearance: AppearanceService,
+  general: GeneralService,
+  cache: CacheService,
+): HandlerTable {
   /** Pin mailbox writes and detail reads to the account that initiated them */
   const messageAccount = (params: unknown): string => {
     const account = requireString(params, "account");
@@ -128,6 +136,35 @@ function createHandlers(sessions: SessionManager): HandlerTable {
     return account;
   };
   return {
+    "general.get": () => general.get(),
+    "general.set": (params) => {
+      const saved = general.set(params);
+      for (const win of appWindows()) sendEvent(win, "general.changed", saved);
+      return saved;
+    },
+    "general.clearCache": () => cache.clear(),
+    "app.rememberRoute": (params) => {
+      const current = sessions.current();
+      if (current && current.status !== "expired") general.rememberRoute(requireString(params, "route"));
+      return undefined;
+    },
+    "appearance.get": () => appearance.get(),
+    "appearance.set": (params) => {
+      const saved = appearance.set(params);
+      for (const win of appWindows()) sendEvent(win, "appearance.changed", saved);
+      return saved;
+    },
+    "layout.getRanking": () => appearance.getRanking(),
+    "layout.setRanking": (params) => {
+      const saved = appearance.setRanking(params);
+      for (const win of appWindows()) sendEvent(win, "layout.rankingChanged", saved);
+      return saved;
+    },
+    "layout.reset": () => {
+      const saved = appearance.resetLayouts();
+      for (const win of appWindows()) sendEvent(win, "layout.rankingChanged", saved);
+      return saved;
+    },
     "messages.list": (params) => {
       if (!isMessageListParams(params)) throw new CapabilityError("validation", "消息筛选参数无效");
       return sessions.request(optionalString(params, "account"), (session) => listMessages(session, params));
@@ -236,7 +273,7 @@ function createHandlers(sessions: SessionManager): HandlerTable {
       return undefined;
     },
     "window.getState": (_params, event) => ({ maximized: senderWindow(event)?.isMaximized() ?? false }),
-    "app.getInitialRoute": () => sessions.initialRoute(),
+    "app.getInitialRoute": () => general.initialRoute(sessions.initialRoute()),
     "account.list": () => sessions.list(),
     "account.current": () => sessions.current(),
     "account.loginWithWindow": (_params, event) =>
@@ -295,8 +332,13 @@ function createHandlers(sessions: SessionManager): HandlerTable {
 }
 
 /** Register the single glaze:rpc channel; every call returns a RpcResult instead of throwing */
-export function registerRpc(sessions: SessionManager): void {
-  const handlers = createHandlers(sessions);
+export function registerRpc(
+  sessions: SessionManager,
+  appearance: AppearanceService,
+  general: GeneralService,
+  cache: CacheService,
+): void {
+  const handlers = createHandlers(sessions, appearance, general, cache);
   const isRpcMethod = (method: unknown): method is RpcMethod =>
     typeof method === "string" && Object.hasOwn(handlers, method);
 
@@ -307,7 +349,11 @@ export function registerRpc(sessions: SessionManager): void {
     }
     try {
       if (
-        (method.startsWith("works.") ||
+        (method.startsWith("general.") ||
+          method === "app.rememberRoute" ||
+          method.startsWith("appearance.") ||
+          method.startsWith("layout.") ||
+          method.startsWith("works.") ||
           method.startsWith("messages.") ||
           method.startsWith("feedback.") ||
           method.startsWith("comments.")) &&

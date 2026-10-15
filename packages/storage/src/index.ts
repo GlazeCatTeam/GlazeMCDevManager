@@ -7,4 +7,5 @@ export {
   type StoredSessionStatus,
 } from "./db/accounts";
 export { openDatabase } from "./db/database";
+export { PreferenceStore } from "./db/preferences";
 export { type Cipher, Vault } from "./vault/vault";

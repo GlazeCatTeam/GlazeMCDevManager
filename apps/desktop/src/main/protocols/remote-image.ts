@@ -13,6 +13,13 @@ interface CachedImage {
 }
 
 const cache = new Map<string, CachedImage>();
+let generation = 0;
+
+/** Drop cached image bytes and prevent pending downloads from repopulating the cleared cache */
+export function clearRemoteImageCache(): void {
+  generation++;
+  cache.clear();
+}
 
 /** Register the scheme as secure and standard; must run before the app is ready */
 export function registerRemoteImageScheme(): void {
@@ -56,11 +63,12 @@ export function handleRemoteImages(): void {
     }
     let image = cache.get(target) ?? null;
     if (!image) {
+      const expected = generation;
       image = await download(target);
       if (!image) {
         return failed(502);
       }
-      cache.set(target, image);
+      if (generation === expected) cache.set(target, image);
       if (cache.size > CACHE_SIZE) {
         const oldest = cache.keys().next().value;
         if (oldest !== undefined) {

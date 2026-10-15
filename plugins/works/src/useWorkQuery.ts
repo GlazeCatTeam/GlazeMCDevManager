@@ -11,6 +11,17 @@ import { WorkQueryCache } from "./query-cache";
 
 const pages = new WorkQueryCache<WorkPage>(30_000, 50);
 const covers = new WorkQueryCache<WorkDetail>(5 * 60_000, 200);
+let cleanupListening = false;
+
+/** Keep cached reads invalidatable after the works page has unmounted */
+function observeCacheCleanup(): void {
+  if (cleanupListening) return;
+  onHostEvent("cache.cleared", () => {
+    pages.invalidate();
+    covers.invalidate();
+  });
+  cleanupListening = true;
+}
 
 /** Invalidate list and cover metadata after a mutation or an explicit refresh */
 export function invalidateWorks(account: string): void {
@@ -62,6 +73,7 @@ function useCachedWork<T>(cache: WorkQueryCache<T>, key: string, load: () => Pro
 
 /** Page requests are account-specific and reuse recent rows on route re-entry */
 export function useWorksPage(account: string, page: number, pageSize: number): HostQuery<WorkPage> {
+  useEffect(observeCacheCleanup, []);
   const load = useCallback(() => callHost("works.page", { account, page, pageSize }), [account, page, pageSize]);
   useEffect(
     () =>

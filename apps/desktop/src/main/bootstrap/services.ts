@@ -1,8 +1,13 @@
 import { join } from "node:path";
 import type { EventName, EventPayloads } from "@glaze/contracts";
-import { AccountStore, type Cipher, openDatabase, Vault } from "@glaze/storage";
-import { app, safeStorage } from "electron";
+import { AccountStore, type Cipher, openDatabase, PreferenceStore, Vault } from "@glaze/storage";
+import { app, safeStorage, session } from "electron";
 import { sendEvent } from "../ipc/rpc";
+import { AppearanceService } from "../preferences/appearance";
+import { CacheService } from "../preferences/cache";
+import { GeneralService } from "../preferences/general";
+import { readLoginItem, setLoginItem } from "../preferences/login-item";
+import { clearRemoteImageCache } from "../protocols/remote-image";
 import { SessionManager } from "../session/session-manager";
 import { appWindows } from "../windows/main-window";
 
@@ -27,12 +32,18 @@ function broadcast<E extends EventName>(event: E, payload: EventPayloads[E]): vo
 }
 
 /** Open the database and create the main-process services; call after app is ready */
-export function createServices(): { sessions: SessionManager } {
+export function createServices(ensureTray: () => void) {
   const db = openDatabase(join(app.getPath("userData"), "glaze.db"));
   const sessions = new SessionManager(new AccountStore(db), new Vault(db, dpapiCipher), {
     changed: (payload) => broadcast("account.changed", payload),
     progress: (step) => broadcast("login.progress", { step }),
   });
   app.on("will-quit", () => db.close());
-  return { sessions };
+  const preferences = new PreferenceStore(db);
+  return {
+    sessions,
+    appearance: new AppearanceService(preferences),
+    general: new GeneralService(preferences, { readLoginItem, setLoginItem, ensureTray }),
+    cache: new CacheService(session.defaultSession, clearRemoteImageCache, () => broadcast("cache.cleared", undefined)),
+  };
 }

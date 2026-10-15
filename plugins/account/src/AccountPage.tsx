@@ -3,6 +3,7 @@ import {
   Button,
   callHost,
   Dialog,
+  EmptyState,
   Icon,
   Notice,
   PageHeader,
@@ -65,10 +66,6 @@ export function AccountPage() {
     }
   };
 
-  if (!current) {
-    return null;
-  }
-
   return (
     <div className={styles.page}>
       <PageHeader
@@ -85,15 +82,21 @@ export function AccountPage() {
 
       <div className={styles.columns}>
         <div className={styles.column}>
-          <CurrentAccountCard
-            className={styles.current}
-            account={current}
-            verifying={verifying}
-            onVerify={verify}
-            onOpenConsole={() => window.open(DEVELOPER_CONSOLE_URL)}
-            onLogout={() => void callHost("account.logout")}
-          />
-          <LevelCard className={styles.level} info={levelInfo} />
+          {current ? (
+            <>
+              <CurrentAccountCard
+                className={styles.current}
+                account={current}
+                verifying={verifying}
+                onVerify={verify}
+                onOpenConsole={() => window.open(DEVELOPER_CONSOLE_URL)}
+                onLogout={() => void callHost("account.logout")}
+              />
+              <LevelCard className={styles.level} info={levelInfo} />
+            </>
+          ) : (
+            <EmptyState title="尚未登录账号" hint="添加新账号，或从已保存账号中选择一个登录" />
+          )}
         </div>
         <div className={styles.column}>
           <SavedAccountsCard

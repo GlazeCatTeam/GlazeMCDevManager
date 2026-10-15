@@ -13,6 +13,7 @@ import {
 } from "@glaze/plugin-sdk";
 import { useEffect, useRef, useState } from "react";
 import { RANK_LIMIT, rankBoards, rankCategories } from "../boards";
+import { useRankingLayout } from "../useRankingLayout";
 import styles from "./RankingCard.module.css";
 
 export interface RankingCardProps {
@@ -81,8 +82,8 @@ function useDismiss(open: boolean, close: () => void) {
 export function RankingCard({ className, onOpenAll }: RankingCardProps) {
   const [category, setCategory] = useState(0);
   const [subCategory, setSubCategory] = useState(0);
-  // TODO: persist with usePluginStorage once the plugin SDK has storage
-  const [shown, setShown] = useState<boolean[]>(() => rankBoards.map((_, i) => i < 3));
+  const layout = useRankingLayout();
+  const shown = rankBoards.map(({ board }) => layout.boards.includes(board));
   const [popover, setPopover] = useState<"none" | "more" | "layout">("none");
   const toolbarRef = useDismiss(popover !== "none", () => setPopover("none"));
 
@@ -104,14 +105,10 @@ export function RankingCard({ className, onOpenAll }: RankingCardProps) {
     setPopover("none");
   };
 
+  /** Keep one tab visible and persist changes through the host */
   const toggleShown = (index: number) => {
-    setShown((current) => {
-      // Keep at least one tab visible
-      if (current[index] && current.filter(Boolean).length === 1) {
-        return current;
-      }
-      return current.map((value, i) => (i === index ? !value : value));
-    });
+    if (layout.busy || (shown[index] && layout.boards.length === 1)) return;
+    void layout.save(rankBoards.filter((_, i) => (i === index ? !shown[i] : shown[i])).map(({ board }) => board));
   };
 
   return (
@@ -194,6 +191,7 @@ export function RankingCard({ className, onOpenAll }: RankingCardProps) {
                     type="checkbox"
                     className={styles.nativeCheck}
                     checked={shown[tab.index] ?? false}
+                    disabled={layout.busy || (shown[tab.index] && layout.boards.length === 1)}
                     onChange={() => toggleShown(tab.index)}
                   />
                   <span
@@ -229,6 +227,17 @@ export function RankingCard({ className, onOpenAll }: RankingCardProps) {
         </div>
       )}
 
+      {layout.error && (
+        <Notice
+          action={
+            <TextButton onClick={layout.retry} disabled={layout.busy}>
+              重试读取排版
+            </TextButton>
+          }
+        >
+          {layout.error}
+        </Notice>
+      )}
       {ranking.error && (
         <Notice
           action={

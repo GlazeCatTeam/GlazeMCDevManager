@@ -15,10 +15,11 @@ export interface AppearanceSectionProps {
   value: AppearanceSettings;
   onChange: (value: AppearanceSettings) => void;
   onRestoreLayout: () => void;
+  disabled?: boolean | undefined;
 }
 
 /** Theme cards, color mode, interface scale and layout reset */
-export function AppearanceSection({ value, onChange, onRestoreLayout }: AppearanceSectionProps) {
+export function AppearanceSection({ value, onChange, onRestoreLayout, disabled }: AppearanceSectionProps) {
   const fluent = value.themeId === "fluent-dark";
   const colorModes = [
     { value: "dark", label: "深色" },
@@ -31,7 +32,12 @@ export function AppearanceSection({ value, onChange, onRestoreLayout }: Appearan
     onChange({ ...value, themeId, colorMode: themeId === "fluent-dark" ? "dark" : value.colorMode });
 
   return (
-    <div className={sections.stack}>
+    <fieldset
+      className={`${sections.stack} ${styles.controls}`}
+      disabled={disabled}
+      aria-label="外观选项"
+      aria-busy={disabled}
+    >
       <SettingGroup title="主题">
         <div className={styles.cards}>
           {themes.map((theme) => {
@@ -88,12 +94,12 @@ export function AppearanceSection({ value, onChange, onRestoreLayout }: Appearan
       </SettingGroup>
 
       <SettingGroup title="排版">
-        <SettingRow title="恢复默认排版" description="将所有页面的组件位置和大小恢复为默认值">
+        <SettingRow title="恢复默认排版" description="恢复首页排行榜的默认显示项；当前页面位置和大小固定">
           <Button size="xs" onClick={onRestoreLayout}>
             恢复默认
           </Button>
         </SettingRow>
       </SettingGroup>
-    </div>
+    </fieldset>
   );
 }

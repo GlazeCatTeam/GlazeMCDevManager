@@ -17,16 +17,23 @@ const pages: Record<string, ComponentType> = {
   "glaze.community/feedback": FeedbackPage,
   "glaze.community/comments": CommentsPage,
   "glaze.messages/messages": MessagesPage,
-  "glaze.settings/settings": SettingsPreview,
+  "glaze.settings/settings": Settings,
   "glaze.account/account": AccountPage,
   "glaze.account/login": LoginPage,
   "glaze.account/login-expired": LoginExpiredPage,
 };
 
-/** Connect the settings preview to the host's existing theme engine */
-function SettingsPreview() {
-  const { appearance, setAppearance } = useAppearance();
-  return <SettingsPage appearance={appearance} onAppearanceChange={setAppearance} />;
+/** Connect settings to persisted host appearance and save feedback */
+function Settings() {
+  const { appearance, setAppearance, saving, status } = useAppearance();
+  return (
+    <SettingsPage
+      appearance={appearance}
+      onAppearanceChange={setAppearance}
+      appearanceSaving={saving}
+      appearanceStatus={status}
+    />
+  );
 }
 
 /** Render the page registered for a route, or a placeholder when it is not built yet */

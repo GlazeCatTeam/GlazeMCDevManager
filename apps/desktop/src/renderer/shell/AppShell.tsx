@@ -1,5 +1,6 @@
 import {
   callHost,
+  isRestorableRoute,
   type Navigation,
   NavigationProvider,
   onHostEvent,
@@ -22,6 +23,7 @@ interface Location {
 const loginRoute = "glaze.account/login";
 const loginExpiredRoute = "glaze.account/login-expired";
 const authRoutes = new Set([loginRoute, loginExpiredRoute]);
+const publicRoutes = new Set([...authRoutes, "glaze.settings/settings", "glaze.account/account"]);
 
 /** Workbench frame: title bar, side navigation and the active page; chrome-less pages fill the window */
 export function AppShell() {
@@ -51,7 +53,7 @@ export function AppShell() {
   // Leave the workbench when the current account signs out or its session expires
   const { current } = session;
   useEffect(() => {
-    if (!location || authRoutes.has(location.route)) {
+    if (!location || publicRoutes.has(location.route)) {
       return;
     }
     if (!current) {
@@ -60,6 +62,12 @@ export function AppShell() {
       setLocation({ route: loginExpiredRoute, params: { id: current.id } });
     }
   }, [current, location]);
+
+  // Remember only page roots while authenticated, leaving editor parameters and login flows out
+  useEffect(() => {
+    if (!location || !current || current.status === "expired" || !isRestorableRoute(location.route)) return;
+    void callHost("app.rememberRoute", { route: location.route }).catch(() => {});
+  }, [location, current]);
 
   const navigation = useMemo<Navigation | null>(
     () => location && { ...location, navigate: (route, params = {}) => setLocation({ route, params }) },

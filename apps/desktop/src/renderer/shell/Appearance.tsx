@@ -1,12 +1,24 @@
-import type { AppearanceSettings } from "@glaze/plugin-settings";
+import { type AppearanceSettings, callHost, defaultAppearance, onHostEvent } from "@glaze/plugin-sdk";
 import { applyTheme } from "@glaze/theme";
 import fluentDark from "@glaze/theme-fluent-dark/theme.json";
 import oreUi from "@glaze/theme-ore-ui/theme.json";
-import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 interface AppearanceContextValue {
   appearance: AppearanceSettings;
-  setAppearance: (value: AppearanceSettings) => void;
+  setAppearance: (value: AppearanceSettings) => Promise<void>;
+  saving: boolean;
+  status: string;
 }
 
 const AppearanceContext = createContext<AppearanceContextValue | null>(null);
@@ -22,15 +34,40 @@ function resolveVariant(appearance: AppearanceSettings, systemDark: boolean): "d
   return appearance.colorMode;
 }
 
-/** Apply session-only appearance preferences across page navigation */
+/** Load preferences before showing pages and apply only successfully saved changes */
 export function AppearanceProvider({ children }: { children: ReactNode }) {
-  const [appearance, setAppearance] = useState<AppearanceSettings>({
-    themeId: "ore-ui",
-    colorMode: "dark",
-    scale: 100,
-  });
+  const [appearance, setAppearance] = useState<AppearanceSettings>({ ...defaultAppearance });
+  const [ready, setReady] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState("");
+  const writing = useRef(false);
 
   useEffect(() => {
+    let active = true;
+    let changed = false;
+    const unsubscribe = onHostEvent("appearance.changed", (value) => {
+      changed = true;
+      setAppearance(value);
+    });
+    void callHost("appearance.get")
+      .then((result) => {
+        if (!active || changed) return;
+        if (result.ok) setAppearance(result.value);
+        else setStatus(`外观读取失败，暂用默认值：${result.error.message}`);
+      })
+      .catch(() => {
+        if (active && !changed) setStatus("外观读取失败，暂用默认值；重新选择外观可重试保存。");
+      })
+      .finally(() => {
+        if (active) setReady(true);
+      });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
+
+  useLayoutEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     // Resolve system mode whenever the OS preference changes
     const update = () => {
@@ -45,8 +82,30 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     return () => media.removeEventListener("change", update);
   }, [appearance]);
 
-  const value = useMemo(() => ({ appearance, setAppearance }), [appearance]);
-  return <AppearanceContext.Provider value={value}>{children}</AppearanceContext.Provider>;
+  /** Serialize writes and keep the last saved appearance when persistence fails */
+  const save = useCallback(async (next: AppearanceSettings) => {
+    if (writing.current) return;
+    writing.current = true;
+    setSaving(true);
+    setStatus("正在保存外观…");
+    try {
+      const result = await callHost("appearance.set", next);
+      if (!result.ok) throw new Error(result.error.message);
+      setAppearance(result.value);
+      setStatus("外观已应用并保存，重启后仍然有效。");
+    } catch (error) {
+      setStatus(`外观保存失败，已保留原设置：${error instanceof Error ? error.message : "请重试"}`);
+    } finally {
+      writing.current = false;
+      setSaving(false);
+    }
+  }, []);
+
+  const value = useMemo(
+    () => ({ appearance, setAppearance: save, saving, status }),
+    [appearance, save, saving, status],
+  );
+  return <AppearanceContext.Provider value={value}>{ready ? children : null}</AppearanceContext.Provider>;
 }
 
 /** Access host-owned appearance state without coupling plugins to the theme engine */

@@ -17,4 +17,17 @@ export const migrations: string[] = [
     session_blob BLOB NOT NULL,
     updated_at INTEGER NOT NULL
   );`,
+  // 2: application preferences and user layout overrides
+  `CREATE TABLE settings (
+    scope TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value_json TEXT NOT NULL,
+    PRIMARY KEY (scope, key)
+  );
+  CREATE TABLE layouts (
+    page TEXT PRIMARY KEY,
+    version INTEGER NOT NULL,
+    layout_json TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  );`,
 ];

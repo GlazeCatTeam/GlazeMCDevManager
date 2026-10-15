@@ -8,6 +8,10 @@ export function openDatabase(file: string): DatabaseSync {
   db.exec("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)");
   const row = db.prepare("SELECT MAX(version) AS version FROM schema_version").get() as { version: number | null };
   const current = row.version ?? 0;
+  // Snapshot existing data before upgrading a file-backed database
+  if (current > 0 && current < migrations.length && file !== ":memory:") {
+    db.prepare("VACUUM INTO ?").run(`${file}.v${current}.${Date.now()}.bak`);
+  }
   for (const [index, sql] of migrations.entries()) {
     const version = index + 1;
     if (version <= current) {
