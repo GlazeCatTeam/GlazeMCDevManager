@@ -3,6 +3,10 @@
 export type {
   AccountSummary,
   AnalyticsOverview,
+  CommentListParams,
+  CommentPage,
+  CommentReplyParams,
+  CommentTypeCode,
   DeveloperLevel,
   IncomeEstimate,
   LoginMethod,
@@ -12,6 +16,7 @@ export type {
   MessagePage,
   MessageSummary,
   MessageType,
+  PlayerComment,
   RankBoard,
   RankCategory,
   RankChange,
@@ -34,7 +39,15 @@ export type {
   WorkUploadKind,
   WorkValue,
 } from "@glaze/contracts";
-export { emptyWorkCreateFields, isWorkRecord, messageTypes, remoteImageUrl, workSections } from "@glaze/contracts";
+export {
+  commentTypes,
+  emptyWorkCreateFields,
+  isWorkRecord,
+  MAX_COMMENT_REPLY_LENGTH,
+  messageTypes,
+  remoteImageUrl,
+  workSections,
+} from "@glaze/contracts";
 export * from "@glaze/ui";
 export { type Navigation, NavigationProvider, type RouteParams, useNavigation } from "./context/navigation";
 export {

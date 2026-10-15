@@ -10,10 +10,11 @@ export interface EntryListProps {
   entries: (PlayerFeedback | PlayerComment)[];
   selectedId: string | undefined;
   onSelect: (id: string) => void;
+  showReplyStatus?: boolean;
 }
 
-/** Fixed-height selectable list of feedback or comments; the list scrolls inside the panel */
-export function EntryList({ title, entries, selectedId, onSelect }: EntryListProps) {
+/** Fixed-height list; omit reply badges when the data source does not report reply state */
+export function EntryList({ title, entries, selectedId, onSelect, showReplyStatus = true }: EntryListProps) {
   return (
     <section className={styles.panel} aria-label={title}>
       <div className={styles.heading}>
@@ -33,7 +34,7 @@ export function EntryList({ title, entries, selectedId, onSelect }: EntryListPro
                 <span className={styles.entryHeading}>
                   {"type" in entry ? <FeedbackBadge type={entry.type} /> : <CommentRating value={entry.stars} />}
                   <span className={styles.nickname}>{entry.nickname}</span>
-                  <ReplyStatus entry={entry} />
+                  {showReplyStatus && <ReplyStatus entry={entry} />}
                 </span>
                 <span className={styles.excerpt}>{entry.content}</span>
                 <span className={styles.footer}>
@@ -42,7 +43,7 @@ export function EntryList({ title, entries, selectedId, onSelect }: EntryListPro
                 </span>
                 {"tag" in entry && (
                   <span className={styles.tagRow}>
-                    <Tag>{entry.tag}</Tag>
+                    {entry.tag && <Tag>{entry.tag}</Tag>}
                     <span>UID: {entry.uid}</span>
                   </span>
                 )}

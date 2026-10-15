@@ -1,6 +1,7 @@
 // NetEase platform adapter; runs only in the main process
 
 export { passportFromCookie, sessionCookieFromInput } from "./auth/cookie";
+export { listComments, replyComment } from "./endpoints/comments";
 export { getAnalyticsOverview, getDeveloperLevel } from "./endpoints/developer";
 export {
   deleteMessages,

@@ -1,5 +1,6 @@
 // Temporary hand-written contracts; replaced by Zod schemas in M1
 import type { AccountChanged, AccountSummary, InitialRoute, LoginStep } from "./account";
+import type { CommentListParams, CommentPage, CommentReplyParams } from "./comments";
 import type { AccountParams, AnalyticsOverview, DeveloperLevel } from "./developer";
 import type { IncomeEstimate, IncomeEstimateParams } from "./income";
 import type { MessageContent, MessageDeleteParams, MessageListParams, MessagePage, MessageParams } from "./messages";
@@ -26,6 +27,8 @@ export interface WindowState {
 }
 
 export interface RpcMethods {
+  "comments.list": { params: CommentListParams; result: CommentPage };
+  "comments.reply": { params: CommentReplyParams; result: undefined };
   "messages.list": { params: MessageListParams; result: MessagePage };
   "messages.unreadCount": { params: AccountParams | undefined; result: number };
   "messages.get": { params: MessageParams; result: MessageContent };

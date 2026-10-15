@@ -3,6 +3,8 @@ import {
   type EventMessage,
   type EventName,
   type EventPayloads,
+  isCommentListParams,
+  isCommentReplyParams,
   isMessageId,
   isMessageIds,
   isMessageListParams,
@@ -27,12 +29,14 @@ import {
   getReviewFeedback,
   getWork,
   getWorkEditorOptions,
+  listComments,
   listMessages,
   listWorks,
   markAllMessagesRead,
   monthOf,
   parseMonth,
   readWorkEditor,
+  replyComment,
   saveWorkEditor,
   submitWorkReview,
 } from "@glaze/netease";
@@ -133,6 +137,16 @@ function createHandlers(sessions: SessionManager): HandlerTable {
       const account = messageAccount(params);
       if (!isMessageIds(params.ids)) throw new CapabilityError("validation", "待删除的消息列表无效");
       return sessions.request(account, (session) => deleteMessages(session, params.ids));
+    },
+    "comments.list": (params) => {
+      if (!isCommentListParams(params)) throw new CapabilityError("validation", "评论查询参数无效");
+      return sessions.request(params.account, (session) => listComments(session, params));
+    },
+    "comments.reply": (params) => {
+      if (!isCommentReplyParams(params)) throw new CapabilityError("validation", "评论回复参数无效，回复须为 1–100 字");
+      if (sessions.current()?.id !== params.account)
+        throw new CapabilityError("account_changed", "账号已切换，请重新选择评论");
+      return sessions.request(params.account, (session) => replyComment(session, params));
     },
     "works.create": (params) => {
       if (!isWorkCreateParams(params)) throw new CapabilityError("validation", "新建作品参数无效");
@@ -266,7 +280,7 @@ export function registerRpc(sessions: SessionManager): void {
     }
     try {
       if (
-        (method.startsWith("works.") || method.startsWith("messages.")) &&
+        (method.startsWith("works.") || method.startsWith("messages.") || method.startsWith("comments.")) &&
         (!appWindows().some((window) => window.webContents === event.sender) ||
           event.senderFrame !== event.sender.mainFrame)
       ) {
