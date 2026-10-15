@@ -28,6 +28,13 @@
   gap: 18px;
 }
 
+.explain {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--g-text-muted);
+}
+
 .submit {
   margin-top: 6px;
 }

@@ -181,6 +181,9 @@ importers:
       '@glaze/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@glaze/netease':
+        specifier: workspace:*
+        version: link:../../packages/netease
       '@glaze/plugin-account':
         specifier: workspace:*
         version: link:../../plugins/account
@@ -205,6 +208,9 @@ importers:
       '@glaze/plugin-works':
         specifier: workspace:*
         version: link:../../plugins/works
+      '@glaze/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
       '@glaze/theme':
         specifier: workspace:*
         version: link:../../packages/theme
@@ -258,6 +264,9 @@ importers:
 
   packages/plugin-sdk:
     dependencies:
+      '@glaze/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@glaze/ui':
         specifier: workspace:*
         version: link:../ui
@@ -271,7 +280,11 @@ importers:
 
   packages/shared: {}
 
-  packages/storage: {}
+  packages/storage:
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
 
   packages/theme: {}
 

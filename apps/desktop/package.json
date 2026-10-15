@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@glaze/contracts": "workspace:*",
+    "@glaze/netease": "workspace:*",
     "@glaze/plugin-account": "workspace:*",
     "@glaze/plugin-analytics": "workspace:*",
     "@glaze/plugin-community": "workspace:*",
@@ -21,6 +22,7 @@
     "@glaze/plugin-sdk": "workspace:*",
     "@glaze/plugin-settings": "workspace:*",
     "@glaze/plugin-works": "workspace:*",
+    "@glaze/storage": "workspace:*",
     "@glaze/theme": "workspace:*",
     "@glaze/theme-fluent-dark": "workspace:*",
     "@glaze/theme-ore-ui": "workspace:*",

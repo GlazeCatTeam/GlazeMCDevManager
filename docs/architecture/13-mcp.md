@@ -70,8 +70,8 @@ flowchart LR
 ## 多账号
 
 - 工具参数里的 `account` 可选，默认当前账号。
-- 指定其他账号时直接使用该账号的会话，**不切换界面上的当前账号**。会话管理按 UID 各自持有 Cookie，本来就支持。
-- 提供 `account_list` 工具，只返回 UID、昵称、会话状态，不含任何凭据。
+- 指定其他账号时直接使用该账号的会话，**不切换界面上的当前账号**。会话管理按账号（本地 ID）各自持有 Cookie，本来就支持。
+- 提供 `account_list` 工具，只返回本地 ID、昵称、通行证账号、会话状态，不含任何凭据。
 
 ## 传输与启动
 
@@ -124,7 +124,7 @@ type CallerIdentity =
 
 | 模块 | 计划暴露的工具 | 风险 |
 |---|---|---|
-| 账号 | `account_list`、`account_current` | read |
+| 账号 | `account_list`、`account_current`（能力已在 `@glaze/contracts` 的 `capabilities` 定义，MCP 服务待接入）；登录、Cookie 导入、切换、退出、删除永不开放 | read |
 | 作品 | `works_list`、`works_get`、`works_update_info` | read / write |
 | 数据分析 | `analytics_query` | read |
 | 收益 | `income_summary`、`income_monthly`；`income_settle` | read；dangerous |

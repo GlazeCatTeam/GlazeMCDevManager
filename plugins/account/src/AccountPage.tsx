@@ -1,52 +1,73 @@
-import { Button, Dialog, Icon, PageHeader, useNavigation } from "@glaze/plugin-sdk";
+import {
+  type AccountSummary,
+  Button,
+  callHost,
+  Dialog,
+  Icon,
+  Notice,
+  PageHeader,
+  useNavigation,
+  useSession,
+} from "@glaze/plugin-sdk";
 import { useCallback, useState } from "react";
 import styles from "./AccountPage.module.css";
-import {
-  initialCurrentUid,
-  initialSettings,
-  initialVerifiedAt,
-  levelInfo,
-  accounts as mockAccounts,
-  type SavedAccount,
-} from "./mock";
+import { initialSettings, levelInfo } from "./mock";
 import { routes } from "./routes";
 import { CurrentAccountCard } from "./widgets/CurrentAccountCard";
 import { LevelCard } from "./widgets/LevelCard";
 import { SavedAccountsCard } from "./widgets/SavedAccountsCard";
 import { SessionSecurityCard } from "./widgets/SessionSecurityCard";
 
-// Actions that need the session manager or navigation are no-ops for now
-const noop = () => {};
-
-/** Current time as HH:MM, used for the mock "verified at" stamp */
-function nowHHMM(): string {
-  return new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
-}
+const DEVELOPER_CONSOLE_URL = "https://mcdev.webapp.163.com/";
 
 /** Account management page; a fixed arrangement for now, moved onto the layout grid in M1 */
 export function AccountPage() {
   const { navigate } = useNavigation();
-  const [accounts, setAccounts] = useState<SavedAccount[]>(mockAccounts);
-  const [currentUid, setCurrentUid] = useState(initialCurrentUid);
-  const [verifiedAt, setVerifiedAt] = useState(initialVerifiedAt);
+  const { current, accounts } = useSession();
   const [settings, setSettings] = useState(initialSettings);
-  const [pendingDelete, setPendingDelete] = useState<SavedAccount | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<AccountSummary | null>(null);
+  const [verifying, setVerifying] = useState(false);
+  const [switchingId, setSwitchingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const closeDelete = useCallback(() => setPendingDelete(null), []);
 
-  const current = accounts.find((account) => account.uid === currentUid);
-
-  const switchTo = (uid: string) => {
-    // Mock switch always succeeds; the real one verifies first and rolls back on failure
-    setCurrentUid(uid);
-    setVerifiedAt(nowHHMM());
-  };
-
-  const confirmDelete = () => {
-    if (pendingDelete) {
-      setAccounts((list) => list.filter((account) => account.uid !== pendingDelete.uid));
+  /** Re-check the current session with NetEase */
+  const verify = async () => {
+    setError(null);
+    setVerifying(true);
+    const result = await callHost("account.verify");
+    setVerifying(false);
+    if (!result.ok) {
+      setError(result.error.message);
     }
-    setPendingDelete(null);
   };
+
+  /** Verify another account and make it current; the current one stays if that fails */
+  const switchTo = async (id: string) => {
+    setError(null);
+    setSwitchingId(id);
+    const result = await callHost("account.switch", { id });
+    setSwitchingId(null);
+    if (!result.ok) {
+      setError(`切换失败：${result.error.message}`);
+    }
+  };
+
+  /** Delete the confirmed account and its saved session */
+  const confirmDelete = async () => {
+    if (!pendingDelete) {
+      return;
+    }
+    const result = await callHost("account.remove", { id: pendingDelete.id });
+    setPendingDelete(null);
+    if (!result.ok) {
+      setError(result.error.message);
+    }
+  };
+
+  if (!current) {
+    return null;
+  }
 
   return (
     <div className={styles.page}>
@@ -60,28 +81,27 @@ export function AccountPage() {
           </Button>
         }
       />
+      {error && <Notice>{error}</Notice>}
 
       <div className={styles.columns}>
         <div className={styles.column}>
-          {current && (
-            <CurrentAccountCard
-              className={styles.current}
-              account={current}
-              verifiedAt={verifiedAt}
-              onVerify={() => setVerifiedAt(nowHHMM())}
-              onOpenConsole={noop}
-              onLogout={() => navigate(routes.login)}
-            />
-          )}
+          <CurrentAccountCard
+            className={styles.current}
+            account={current}
+            verifying={verifying}
+            onVerify={verify}
+            onOpenConsole={() => window.open(DEVELOPER_CONSOLE_URL)}
+            onLogout={() => void callHost("account.logout")}
+          />
           <LevelCard className={styles.level} info={levelInfo} />
         </div>
         <div className={styles.column}>
           <SavedAccountsCard
             className={styles.saved}
             accounts={accounts}
-            currentUid={currentUid}
+            switchingId={switchingId}
             onSwitch={switchTo}
-            onRelogin={(uid) => navigate(routes.loginExpired, { uid })}
+            onRelogin={(id) => navigate(routes.loginExpired, { id })}
             onDelete={setPendingDelete}
             onAdd={() => navigate(routes.login)}
           />
@@ -102,7 +122,7 @@ export function AccountPage() {
             </>
           }
         >
-          「{pendingDelete.nickname}」在本机保存的会话和密码会一并清除，之后需要重新登录。
+          「{pendingDelete.nickname}」在本机加密保存的会话会一并清除，之后需要重新登录。
         </Dialog>
       )}
     </div>

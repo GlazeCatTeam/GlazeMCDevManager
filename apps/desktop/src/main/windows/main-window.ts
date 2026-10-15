@@ -3,6 +3,13 @@ import { pathToFileURL } from "node:url";
 import { app, BrowserWindow, shell } from "electron";
 import { sendEvent } from "../ipc/rpc";
 
+const windows = new Set<BrowserWindow>();
+
+/** App windows that receive glaze:event pushes */
+export function appWindows(): BrowserWindow[] {
+  return [...windows];
+}
+
 /** Create the frameless main window with the security baseline from docs/architecture/10-security.md */
 export function createMainWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -22,6 +29,8 @@ export function createMainWindow(): BrowserWindow {
     },
   });
 
+  windows.add(win);
+  win.on("closed", () => windows.delete(win));
   win.once("ready-to-show", () => win.show());
 
   // Keep the title bar's maximize button in sync

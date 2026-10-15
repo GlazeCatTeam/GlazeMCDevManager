@@ -1,4 +1,5 @@
 // Temporary hand-written contracts; replaced by Zod schemas in M1
+import type { AccountChanged, AccountSummary, InitialRoute, LoginStep } from "./account";
 
 export const RPC_CHANNEL = "glaze:rpc";
 export const EVENT_CHANNEL = "glaze:event";
@@ -15,10 +16,22 @@ export interface RpcMethods {
   "window.toggleMaximize": { params: undefined; result: undefined };
   "window.close": { params: undefined; result: undefined };
   "window.getState": { params: undefined; result: WindowState };
+  "app.getInitialRoute": { params: undefined; result: InitialRoute };
+  "account.list": { params: undefined; result: AccountSummary[] };
+  "account.current": { params: undefined; result: AccountSummary | null };
+  "account.loginWithWindow": { params: undefined; result: AccountSummary };
+  "account.cancelLogin": { params: undefined; result: undefined };
+  "account.loginWithCookie": { params: { cookie: string }; result: AccountSummary };
+  "account.verify": { params: undefined; result: AccountSummary };
+  "account.switch": { params: { id: string }; result: AccountSummary };
+  "account.logout": { params: undefined; result: undefined };
+  "account.remove": { params: { id: string }; result: undefined };
 }
 
 export interface EventPayloads {
   "window.stateChanged": WindowState;
+  "account.changed": AccountChanged;
+  "login.progress": { step: LoginStep };
 }
 
 export type RpcMethod = keyof RpcMethods;

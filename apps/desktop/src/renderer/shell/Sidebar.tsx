@@ -1,14 +1,20 @@
-import { Icon, PixelAvatar } from "@glaze/ui";
-import type { MockAccount } from "../mock/session";
+import type { AccountSummary, SessionStatus } from "@glaze/contracts";
+import { avatarColorsFor, Icon, PixelAvatar } from "@glaze/ui";
 import type { NavEntry } from "./nav";
 import styles from "./Sidebar.module.css";
 
 const accountRoute = "glaze.account/account";
 
+const statusLabels: Record<SessionStatus, string> = {
+  active: "会话有效",
+  offline: "离线 · 网络异常",
+  expired: "登录已过期",
+};
+
 export interface SidebarProps {
   entries: NavEntry[];
   activeRoute: string;
-  account: MockAccount;
+  account: AccountSummary | null;
   onNavigate: (route: string) => void;
 }
 
@@ -37,22 +43,24 @@ export function Sidebar({ entries, activeRoute, account, onNavigate }: SidebarPr
       {entries.filter((e) => e.group === "top").map(renderItem)}
       <div className={styles.spacer} />
       {entries.filter((e) => e.group === "bottom").map(renderItem)}
-      <button
-        type="button"
-        className={accountActive ? `${styles.account} ${styles.active}` : styles.account}
-        aria-label={`${account.nickname}，账号管理`}
-        aria-current={accountActive ? "page" : undefined}
-        title="账号管理"
-        onClick={() => onNavigate(accountRoute)}
-      >
-        <PixelAvatar colors={account.avatar} size={28} />
-        <span className={styles.accountText}>
-          <span className={styles.nickname}>{account.nickname}</span>
-          <span className={account.sessionValid ? styles.valid : styles.expired}>
-            {account.sessionValid ? "会话有效" : "登录已过期"}
+      {account && (
+        <button
+          type="button"
+          className={accountActive ? `${styles.account} ${styles.active}` : styles.account}
+          aria-label={`${account.nickname}，账号管理`}
+          aria-current={accountActive ? "page" : undefined}
+          title="账号管理"
+          onClick={() => onNavigate(accountRoute)}
+        >
+          <PixelAvatar colors={avatarColorsFor(account.id)} size={28} />
+          <span className={styles.accountText}>
+            <span className={styles.nickname}>{account.nickname}</span>
+            <span className={account.status === "active" ? styles.valid : styles.expired}>
+              {statusLabels[account.status]}
+            </span>
           </span>
-        </span>
-      </button>
+        </button>
+      )}
     </nav>
   );
 }

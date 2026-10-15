@@ -10,8 +10,10 @@
 | [0004](0004-design-tokens.md) | 三层设计令牌 + 主题包 | 已接受 |
 | [0005](0005-plugin-trust-tiers.md) | 插件按信任等级隔离运行 | 已接受 |
 | [0006](0006-credentials-stay-in-main.md) | 凭据只存在于主进程 | 已接受 |
-| [0007](0007-sqlite.md) | 本地存储使用 SQLite（better-sqlite3） | 已接受 |
+| [0007](0007-sqlite.md) | 本地存储使用 SQLite（better-sqlite3） | 已接受，驱动部分被 0010 取代 |
 | [0008](0008-capabilities-and-mcp.md) | 每个功能先定义能力，并通过 MCP 对外部 AI 工具开放 | 已接受 |
+| [0009](0009-official-login-window.md) | 登录使用网易官方登录窗口 | 已接受 |
+| [0010](0010-node-sqlite.md) | SQLite 驱动改用 Electron 内置的 node:sqlite | 已接受 |
 
 新增 ADR 时复制下面的模板，编号顺延。
 

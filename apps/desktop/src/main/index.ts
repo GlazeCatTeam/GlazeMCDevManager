@@ -1,10 +1,14 @@
 import { app, BrowserWindow } from "electron";
+import { createServices } from "./bootstrap/services";
 import { registerRpc } from "./ipc/rpc";
 import { createMainWindow } from "./windows/main-window";
 
 app.whenReady().then(() => {
-  registerRpc();
+  const { sessions } = createServices();
+  registerRpc(sessions);
   createMainWindow();
+  // Check the saved session in the background; the window opens from saved state right away
+  void sessions.restore();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

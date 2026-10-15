@@ -1,27 +1,29 @@
-import { Button, Panel, PixelAvatar, TextButton } from "@glaze/plugin-sdk";
-import { loginMethodLabels, type SavedAccount } from "../mock";
+import { type AccountSummary, avatarColorsFor, Button, Panel, PixelAvatar, TextButton } from "@glaze/plugin-sdk";
+import { monthDay } from "../format";
+import { loginMethodLabels } from "../mock";
 import styles from "./SavedAccountsCard.module.css";
 
 export interface SavedAccountsCardProps {
-  accounts: SavedAccount[];
-  currentUid: string;
-  onSwitch: (uid: string) => void;
-  onRelogin: (uid: string) => void;
-  onDelete: (account: SavedAccount) => void;
+  accounts: AccountSummary[];
+  /** Account being switched to, while the switch is verified */
+  switchingId: string | null;
+  onSwitch: (id: string) => void;
+  onRelogin: (id: string) => void;
+  onDelete: (account: AccountSummary) => void;
   onAdd: () => void;
   className?: string | undefined;
 }
 
 /** Second line under a saved account's name */
-function subtitle(account: SavedAccount, current: boolean): string {
+function subtitle(account: AccountSummary): string {
   const method = loginMethodLabels[account.loginMethod];
-  return current ? method : `${method} · ${account.lastLoginAt} 登录`;
+  return account.current ? method : `${method} · ${monthDay(account.lastLoginAt)} 登录`;
 }
 
 /** Every account saved on this machine, with switch, re-login and delete actions */
 export function SavedAccountsCard({
   accounts,
-  currentUid,
+  switchingId,
   onSwitch,
   onRelogin,
   onDelete,
@@ -32,29 +34,29 @@ export function SavedAccountsCard({
     <Panel aria-label="已保存账号" title="已保存账号" className={className}>
       <ul className={styles.list}>
         {accounts.map((account) => {
-          const current = account.uid === currentUid;
+          const expired = account.status === "expired";
           return (
-            <li key={account.uid} className={styles.row}>
-              <PixelAvatar colors={account.avatar} size={40} />
+            <li key={account.id} className={styles.row}>
+              <PixelAvatar colors={avatarColorsFor(account.id)} size={40} />
               <span className={styles.text}>
                 <span className={styles.nickname}>{account.nickname}</span>
-                {account.sessionValid ? (
-                  <span className={styles.muted}>{subtitle(account, current)}</span>
-                ) : (
+                {expired ? (
                   <span className={styles.expired}>登录已过期</span>
+                ) : (
+                  <span className={styles.muted}>{subtitle(account)}</span>
                 )}
               </span>
-              {current ? (
+              {account.current ? (
                 <span className={styles.current}>当前使用</span>
               ) : (
                 <>
-                  {account.sessionValid ? (
-                    <Button size="sm" onClick={() => onSwitch(account.uid)}>
-                      切换
+                  {expired ? (
+                    <Button size="sm" onClick={() => onRelogin(account.id)}>
+                      重新登录
                     </Button>
                   ) : (
-                    <Button size="sm" onClick={() => onRelogin(account.uid)}>
-                      重新登录
+                    <Button size="sm" disabled={switchingId !== null} onClick={() => onSwitch(account.id)}>
+                      {switchingId === account.id ? "验证中…" : "切换"}
                     </Button>
                   )}
                   <TextButton

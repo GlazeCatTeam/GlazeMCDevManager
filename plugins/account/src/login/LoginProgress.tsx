@@ -1,22 +1,29 @@
+import type { LoginStep } from "@glaze/plugin-sdk";
 import styles from "./LoginProgress.module.css";
 
-// Steps of the NetEase login protocol, shown while signing in
-export const loginSteps = ["初始化", "安全验证", "获取票据", "验证账号"] as const;
+// What the user sees for each login step
+const stepLabels: Record<LoginStep, string> = {
+  window: "在网易登录窗口中完成登录",
+  verify: "验证账号",
+};
 
-/** Segmented progress for the login protocol; `step` is the index of the step in progress */
-export function LoginProgress({ step }: { step: number }) {
-  const current = Math.min(step, loginSteps.length - 1);
+/** Segmented progress; `steps` lists the steps of this login, `step` is the one in progress */
+export function LoginProgress({ steps, step }: { steps: readonly LoginStep[]; step: LoginStep }) {
+  const current = Math.max(0, steps.indexOf(step));
   return (
     <div role="status" aria-live="polite" className={styles.progress}>
-      <div className={styles.segments}>
-        {loginSteps.map((label, index) => (
-          <span key={label} className={index < step ? styles.done : index === step ? styles.current : styles.todo} />
+      <div className={styles.segments} style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}>
+        {steps.map((item, index) => (
+          <span
+            key={item}
+            className={index < current ? styles.done : index === current ? styles.current : styles.todo}
+          />
         ))}
       </div>
       <span className={styles.caption}>
-        <span className={styles.label}>{loginSteps[current]}…</span>
+        <span className={styles.label}>{stepLabels[step]}…</span>
         <span className={styles.count}>
-          {current + 1} / {loginSteps.length}
+          {current + 1} / {steps.length}
         </span>
       </span>
     </div>
