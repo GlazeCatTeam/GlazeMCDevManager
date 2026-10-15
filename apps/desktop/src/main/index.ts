@@ -22,7 +22,14 @@ if (!app.requestSingleInstanceLock()) {
       lifecycle.ensureTray();
     });
     lifecycle = new WindowLifecycle(() => services.general.preferences(), createMainWindow);
-    registerRpc(services.sessions, services.appearance, services.general, services.cache);
+    registerRpc(
+      services.sessions,
+      services.appearance,
+      services.general,
+      services.cache,
+      services.plugins,
+      services.logs,
+    );
     lifecycle.attach(createMainWindow());
     // Check the saved session in the background; the window opens from saved state right away
     void services.sessions.restore();

@@ -1,7 +1,7 @@
 import type { RankBoard } from "./rank";
 
 export interface AppearanceSettings {
-  themeId: "ore-ui" | "fluent-dark";
+  themeId: string;
   colorMode: "dark" | "light" | "system";
   scale: 90 | 100 | 110 | 125;
 }
@@ -15,7 +15,8 @@ export function isAppearanceSettings(value: unknown): value is AppearanceSetting
   if (!value || typeof value !== "object") return false;
   const item = value as Record<string, unknown>;
   return (
-    (item.themeId === "ore-ui" || item.themeId === "fluent-dark") &&
+    typeof item.themeId === "string" &&
+    /^[a-z][a-z0-9.-]{0,99}$/.test(item.themeId) &&
     (item.colorMode === "dark" || item.colorMode === "light" || item.colorMode === "system") &&
     (item.themeId !== "fluent-dark" || item.colorMode === "dark") &&
     (item.scale === 90 || item.scale === 100 || item.scale === 110 || item.scale === 125)

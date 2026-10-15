@@ -1,15 +1,21 @@
 import { AccountPage, LoginExpiredPage, LoginPage } from "@glaze/plugin-account";
-import { AnalyticsPage } from "@glaze/plugin-analytics";
-import { CommentsPage, FeedbackPage } from "@glaze/plugin-community";
 import { HomePage } from "@glaze/plugin-home";
-import { MessagesPage } from "@glaze/plugin-messages";
+import { EmptyState, usePluginRegistry } from "@glaze/plugin-sdk";
 import { SettingsPage } from "@glaze/plugin-settings";
-import { WorksPage } from "@glaze/plugin-works";
-import type { ComponentType } from "react";
+import { type ComponentType, lazy, Suspense } from "react";
 import { useAppearance } from "../shell/Appearance";
+import { PageBoundary } from "./PageBoundary";
 import { PagePlaceholder } from "./PagePlaceholder";
 
-// Temporary static page table until the plugin registry loads built-in plugins (M1)
+const AnalyticsPage = lazy(() =>
+  import("@glaze/plugin-analytics").then((module) => ({ default: module.AnalyticsPage })),
+);
+const CommentsPage = lazy(() => import("@glaze/plugin-community").then((module) => ({ default: module.CommentsPage })));
+const FeedbackPage = lazy(() => import("@glaze/plugin-community").then((module) => ({ default: module.FeedbackPage })));
+const MessagesPage = lazy(() => import("@glaze/plugin-messages").then((module) => ({ default: module.MessagesPage })));
+const WorksPage = lazy(() => import("@glaze/plugin-works").then((module) => ({ default: module.WorksPage })));
+
+// The host registry decides availability; optional code is loaded only when enabled
 const pages: Record<string, ComponentType> = {
   "glaze.home/home": HomePage,
   "glaze.works/works": WorksPage,
@@ -25,19 +31,31 @@ const pages: Record<string, ComponentType> = {
 
 /** Connect settings to persisted host appearance and save feedback */
 function Settings() {
-  const { appearance, setAppearance, saving, status } = useAppearance();
+  const { appearance, setAppearance, saving, status, themePreviewStyles } = useAppearance();
   return (
     <SettingsPage
       appearance={appearance}
       onAppearanceChange={setAppearance}
       appearanceSaving={saving}
       appearanceStatus={status}
+      themePreviewStyles={themePreviewStyles}
     />
   );
 }
 
 /** Render the page registered for a route, or a placeholder when it is not built yet */
 export function RouteView({ route, title }: { route: string; title: string }) {
+  const registry = usePluginRegistry();
+  if (registry?.snapshot && !registry.snapshot.plugins.find((plugin) => plugin.id === route.split("/")[0])?.enabled)
+    return <EmptyState title="此插件已停用" hint="可在设置的插件页重新启用" />;
   const Page = pages[route];
-  return Page ? <Page /> : <PagePlaceholder title={title} />;
+  return Page ? (
+    <PageBoundary key={route}>
+      <Suspense fallback={<EmptyState title="正在加载页面…" />}>
+        <Page />
+      </Suspense>
+    </PageBoundary>
+  ) : (
+    <PagePlaceholder title={title} />
+  );
 }

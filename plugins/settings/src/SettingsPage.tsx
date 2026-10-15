@@ -1,5 +1,5 @@
 import { Button, callHost, Dialog, PageHeader, Panel, useNavigation } from "@glaze/plugin-sdk";
-import { useCallback, useState } from "react";
+import { type CSSProperties, useCallback, useState } from "react";
 import {
   type AppearanceSettings,
   categories,
@@ -7,10 +7,6 @@ import {
   initialAppearance,
   initialClients,
   initialGeneral,
-  initialLogs,
-  initialNotifications,
-  initialPlugins,
-  type NotificationSettings,
   type PendingAction,
   type SettingsCategory,
 } from "./mock";
@@ -20,7 +16,6 @@ import { AiSection } from "./sections/AiSection";
 import { AppearanceSection } from "./sections/AppearanceSection";
 import { GeneralSection } from "./sections/GeneralSection";
 import { LogsSection } from "./sections/LogsSection";
-import { NotificationsSection } from "./sections/NotificationsSection";
 import { PluginsSection } from "./sections/PluginsSection";
 import { useGeneralSettings } from "./useGeneralSettings";
 
@@ -30,6 +25,8 @@ export interface SettingsPageProps {
   onAppearanceChange?: ((value: AppearanceSettings) => void | Promise<void>) | undefined;
   appearanceSaving?: boolean | undefined;
   appearanceStatus?: string | undefined;
+  /** Host-resolved theme tokens scoped to each thumbnail */
+  themePreviewStyles?: Record<string, CSSProperties> | undefined;
 }
 
 /** Settings: category list on the left, one fixed-height content panel on the right */
@@ -38,15 +35,13 @@ export function SettingsPage({
   onAppearanceChange,
   appearanceSaving,
   appearanceStatus,
+  themePreviewStyles,
 }: SettingsPageProps) {
   const { navigate } = useNavigation();
   const [category, setCategory] = useState<SettingsCategory>("appearance");
   const [localAppearance, setLocalAppearance] = useState(initialAppearance);
   const general = useGeneralSettings(category === "general");
-  const [notifications, setNotifications] = useState(initialNotifications);
-  const [plugins, setPlugins] = useState(initialPlugins);
   const [clients, setClients] = useState(initialClients);
-  const [logs, setLogs] = useState(initialLogs);
   const [autoUpdate, setAutoUpdate] = useState(true);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [notice, setNotice] = useState("");
@@ -69,18 +64,6 @@ export function SettingsPage({
     setNotice(onAppearanceChange ? "" : "已更新外观选项，等待宿主接入主题预览。");
   };
 
-  /** Preview notification options without scheduling background checks */
-  const changeNotifications = (value: NotificationSettings) => {
-    setNotifications(value);
-    setNotice("已更新本页通知选项，实际通知与后台检查待服务接入。");
-  };
-
-  /** Preview an optional plugin's enabled state without unloading its code */
-  const togglePlugin = (id: string, enabled: boolean) => {
-    setPlugins((items) => items.map((item) => (item.id === id && !item.required ? { ...item, enabled } : item)));
-    setNotice("已更新插件状态预览，实际启停待插件管理器接入。");
-  };
-
   /** Restore persisted layouts or run the remaining preview actions */
   const confirmAction = async () => {
     if (!pending || restoring) {
@@ -100,9 +83,6 @@ export function SettingsPage({
     } else if (pending.kind === "revoke") {
       setClients((items) => items.filter((client) => client.id !== pending.client.id));
       setNotice(`已移除模拟客户端「${pending.client.name}」。真实授权服务尚未接入。`);
-    } else if (pending.kind === "clearLogs") {
-      setLogs([]);
-      setNotice("本页模拟日志已清空，未修改本地日志文件。");
     } else if (pending.kind === "cache") {
       setRestoring(true);
       try {
@@ -151,6 +131,7 @@ export function SettingsPage({
               <AppearanceSection
                 value={appearance ?? localAppearance}
                 disabled={appearanceSaving || restoring}
+                themePreviewStyles={themePreviewStyles}
                 onChange={changeAppearance}
                 onRestoreLayout={() => setPending({ kind: "restore" })}
               />
@@ -174,16 +155,7 @@ export function SettingsPage({
                 onClearCache={() => setPending({ kind: "cache" })}
               />
             )}
-            {category === "notifications" && (
-              <NotificationsSection value={notifications} onChange={changeNotifications} />
-            )}
-            {category === "plugins" && (
-              <PluginsSection
-                plugins={plugins}
-                onToggle={togglePlugin}
-                onInstall={() => setNotice("本地插件安装需由主进程校验权限与加载文件，安装服务尚未接入。")}
-              />
-            )}
+            {category === "plugins" && <PluginsSection />}
             {category === "ai" && (
               <AiSection
                 clients={clients}
@@ -191,17 +163,7 @@ export function SettingsPage({
                 onUnavailable={setNotice}
               />
             )}
-            {category === "logs" && (
-              <LogsSection
-                logs={logs}
-                onRefresh={() => {
-                  setLogs(initialLogs);
-                  setNotice("已重新加载模拟日志。");
-                }}
-                onClear={() => setPending({ kind: "clearLogs" })}
-                onNotice={setNotice}
-              />
-            )}
+            {category === "logs" && <LogsSection />}
             {category === "about" && (
               <AboutSection
                 autoUpdate={autoUpdate}
@@ -219,7 +181,11 @@ export function SettingsPage({
                 ? appearanceStatus || "外观设置自动保存；恢复排版不会重置主题和缩放。"
                 : category === "general"
                   ? general.status || "通用设置自动保存；启动页面在下次启动时生效。"
-                  : "界面预览 · 系统功能与业务服务尚待接入")}
+                  : category === "plugins"
+                    ? "插件启停自动保存；本地安装支持无代码主题包。"
+                    : category === "logs"
+                      ? "运行日志自动记录并脱敏，可导出当前级别的最近 500 条。"
+                      : "界面预览 · 系统功能与业务服务尚待接入")}
           </div>
         </Panel>
       </div>

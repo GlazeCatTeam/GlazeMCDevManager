@@ -15,7 +15,9 @@ import type { AccountParams, AnalyticsOverview, DeveloperLevel } from "./develop
 import type { FeedbackListParams, FeedbackPageData, FeedbackReplyParams } from "./feedback";
 import type { CacheClearResult, GeneralSettings, GeneralState } from "./general";
 import type { IncomeEstimate, IncomeEstimateParams, IncomePlatform } from "./income";
+import type { LogPage, LogQuery } from "./logs";
 import type { MessageContent, MessageDeleteParams, MessageListParams, MessagePage, MessageParams } from "./messages";
+import type { PluginInstallPreview, PluginSnapshot } from "./plugins";
 import type { RankBoard, RankEntry, RankListParams } from "./rank";
 import type { WorkCreateParams } from "./work-create";
 import type {
@@ -40,6 +42,15 @@ export interface WindowState {
 }
 
 export interface RpcMethods {
+  "app.reportRendererError": { params: { kind: "error" | "unhandled-rejection" }; result: undefined };
+  "plugins.list": { params: undefined; result: PluginSnapshot };
+  "plugins.setEnabled": { params: { id: string; enabled: boolean }; result: PluginSnapshot };
+  "plugins.pickInstall": { params: undefined; result: PluginInstallPreview | null };
+  "plugins.install": { params: { token: string }; result: PluginSnapshot };
+  "logs.list": { params: LogQuery; result: LogPage };
+  "logs.export": { params: LogQuery; result: { cancelled: boolean; count: number } };
+  "logs.clear": { params: undefined; result: undefined };
+  "logs.openFolder": { params: undefined; result: undefined };
   "general.get": { params: undefined; result: GeneralState };
   "general.set": { params: GeneralSettings; result: GeneralState };
   "general.clearCache": { params: undefined; result: CacheClearResult };
@@ -52,13 +63,13 @@ export interface RpcMethods {
   "feedback.list": { params: FeedbackListParams; result: FeedbackPageData };
   "feedback.reply": { params: FeedbackReplyParams; result: undefined };
   "feedback.log": { params: { url: string }; result: string };
-  "comments.list": { params: CommentListParams; result: CommentPage };
-  "comments.reply": { params: CommentReplyParams; result: undefined };
   "messages.list": { params: MessageListParams; result: MessagePage };
   "messages.unreadCount": { params: AccountParams | undefined; result: number };
   "messages.get": { params: MessageParams; result: MessageContent };
   "messages.markAllRead": { params: { account: string }; result: undefined };
   "messages.delete": { params: MessageDeleteParams; result: undefined };
+  "comments.list": { params: CommentListParams; result: CommentPage };
+  "comments.reply": { params: CommentReplyParams; result: undefined };
   "window.minimize": { params: undefined; result: undefined };
   "window.toggleMaximize": { params: undefined; result: undefined };
   "window.close": { params: undefined; result: undefined };
@@ -102,6 +113,8 @@ export interface RpcMethods {
 }
 
 export interface EventPayloads {
+  "plugins.changed": PluginSnapshot;
+  "logs.changed": undefined;
   "general.changed": GeneralState;
   "cache.cleared": undefined;
   "appearance.changed": AppearanceSettings;

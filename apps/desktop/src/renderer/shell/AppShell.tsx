@@ -1,12 +1,15 @@
 import {
+  Button,
   callHost,
   isRestorableRoute,
   type Navigation,
   NavigationProvider,
+  Notice,
   onHostEvent,
   type RouteParams,
   type Session,
   SessionProvider,
+  usePluginRegistry,
 } from "@glaze/plugin-sdk";
 import { useEffect, useMemo, useState } from "react";
 import { RouteView } from "../routes/pages";
@@ -27,11 +30,12 @@ const publicRoutes = new Set([...authRoutes, "glaze.settings/settings", "glaze.a
 
 /** Workbench frame: title bar, side navigation and the active page; chrome-less pages fill the window */
 export function AppShell() {
+  const registry = usePluginRegistry();
+  const pluginStates = registry?.snapshot?.plugins;
   const entries = useMemo(loadNavEntries, []);
   const pages = useMemo(loadPages, []);
   const [location, setLocation] = useState<Location | null>(null);
   const [session, setSession] = useState<Session>({ current: null, accounts: [] });
-
   // First page and accounts come from the main process; account changes are pushed afterwards
   useEffect(() => {
     let alive = true;
@@ -74,10 +78,13 @@ export function AppShell() {
     [location],
   );
 
-  if (!location || !navigation) {
+  if (!location || !navigation || (registry && !registry.snapshot)) {
     return (
       <div className={styles.shell}>
         <TitleBar />
+        {registry?.error && (
+          <Notice action={<Button onClick={registry.refresh}>重试插件加载</Button>}>{registry.error}</Notice>
+        )}
       </div>
     );
   }
@@ -97,7 +104,10 @@ export function AppShell() {
           ) : (
             <div className={styles.body}>
               <Sidebar
-                entries={entries}
+                entries={entries.filter(
+                  (entry) =>
+                    !pluginStates || pluginStates.find((plugin) => plugin.id === entry.route.split("/")[0])?.enabled,
+                )}
                 activeRoute={location.route}
                 account={current}
                 onNavigate={(route) => navigation.navigate(route)}

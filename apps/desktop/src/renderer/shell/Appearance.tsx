@@ -1,8 +1,15 @@
-import { type AppearanceSettings, callHost, defaultAppearance, onHostEvent } from "@glaze/plugin-sdk";
-import { applyTheme } from "@glaze/theme";
+import {
+  type AppearanceSettings,
+  callHost,
+  defaultAppearance,
+  onHostEvent,
+  usePluginRegistry,
+} from "@glaze/plugin-sdk";
+import { applyTheme, resolveTheme } from "@glaze/theme";
 import fluentDark from "@glaze/theme-fluent-dark/theme.json";
 import oreUi from "@glaze/theme-ore-ui/theme.json";
 import {
+  type CSSProperties,
   createContext,
   type ReactNode,
   useCallback,
@@ -19,6 +26,7 @@ interface AppearanceContextValue {
   setAppearance: (value: AppearanceSettings) => Promise<void>;
   saving: boolean;
   status: string;
+  themePreviewStyles: Record<string, CSSProperties>;
 }
 
 const AppearanceContext = createContext<AppearanceContextValue | null>(null);
@@ -36,6 +44,21 @@ function resolveVariant(appearance: AppearanceSettings, systemDark: boolean): "d
 
 /** Load preferences before showing pages and apply only successfully saved changes */
 export function AppearanceProvider({ children }: { children: ReactNode }) {
+  const registry = usePluginRegistry();
+  const themes = registry?.snapshot?.themes;
+  // Resolve each thumbnail from its own default variant, independent of the active appearance
+  const themePreviewStyles = useMemo<Record<string, CSSProperties>>(
+    () =>
+      Object.fromEntries(
+        (
+          themes ?? [
+            { id: "ore-ui", definition: oreUi },
+            { id: "fluent-dark", definition: fluentDark },
+          ]
+        ).map((theme) => [theme.id, resolveTheme(theme.definition).vars]),
+      ),
+    [themes],
+  );
   const [appearance, setAppearance] = useState<AppearanceSettings>({ ...defaultAppearance });
   const [ready, setReady] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -71,7 +94,9 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     // Resolve system mode whenever the OS preference changes
     const update = () => {
-      const theme = appearance.themeId === "fluent-dark" ? fluentDark : oreUi;
+      const theme =
+        themes?.find((item) => item.id === appearance.themeId)?.definition ??
+        (appearance.themeId === "fluent-dark" ? fluentDark : oreUi);
       const variant = resolveVariant(appearance, media.matches);
       applyTheme(theme, variant);
       document.documentElement.style.zoom = String(appearance.scale / 100);
@@ -80,7 +105,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     update();
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
-  }, [appearance]);
+  }, [appearance, themes]);
 
   /** Serialize writes and keep the last saved appearance when persistence fails */
   const save = useCallback(async (next: AppearanceSettings) => {
@@ -102,8 +127,8 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ appearance, setAppearance: save, saving, status }),
-    [appearance, save, saving, status],
+    () => ({ appearance, setAppearance: save, saving, status, themePreviewStyles }),
+    [appearance, save, saving, status, themePreviewStyles],
   );
   return <AppearanceContext.Provider value={value}>{ready ? children : null}</AppearanceContext.Provider>;
 }

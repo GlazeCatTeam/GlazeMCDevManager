@@ -3,6 +3,9 @@ import type { EventName, EventPayloads } from "@glaze/contracts";
 import { AccountStore, type Cipher, openDatabase, PreferenceStore, Vault } from "@glaze/storage";
 import { app, safeStorage, session } from "electron";
 import { sendEvent } from "../ipc/rpc";
+import { LogService } from "../logs/service";
+import { bundledPlugins, bundledThemes } from "../plugins/bundled";
+import { PluginRegistry } from "../plugins/registry";
 import { AppearanceService } from "../preferences/appearance";
 import { CacheService } from "../preferences/cache";
 import { GeneralService } from "../preferences/general";
@@ -33,16 +36,33 @@ function broadcast<E extends EventName>(event: E, payload: EventPayloads[E]): vo
 
 /** Open the database and create the main-process services; call after app is ready */
 export function createServices(ensureTray: () => void) {
+  const logs = new LogService(join(app.getPath("userData"), "logs"), () => broadcast("logs.changed", undefined));
   const db = openDatabase(join(app.getPath("userData"), "glaze.db"));
   const sessions = new SessionManager(new AccountStore(db), new Vault(db, dpapiCipher), {
-    changed: (payload) => broadcast("account.changed", payload),
+    changed: (payload) => {
+      logs.write("info", "account", "账号会话状态已更新");
+      broadcast("account.changed", payload);
+    },
     progress: (step) => broadcast("login.progress", { step }),
   });
   app.on("will-quit", () => db.close());
   const preferences = new PreferenceStore(db);
+  const plugins = new PluginRegistry(
+    preferences,
+    join(app.getPath("userData"), "plugins"),
+    bundledPlugins,
+    bundledThemes,
+    logs,
+    () => broadcast("plugins.changed", plugins.snapshot()),
+  );
+  logs.write("info", "app", `应用启动，已发现 ${plugins.snapshot().plugins.length} 个插件与主题`);
+  process.on("uncaughtExceptionMonitor", () => logs.write("error", "app", "主进程发生未捕获异常"));
+  app.on("render-process-gone", () => logs.write("error", "renderer", "界面进程意外退出"));
   return {
     sessions,
-    appearance: new AppearanceService(preferences),
+    logs,
+    plugins,
+    appearance: new AppearanceService(preferences, () => plugins.snapshot().themes),
     general: new GeneralService(preferences, { readLoginItem, setLoginItem, ensureTray }),
     cache: new CacheService(session.defaultSession, clearRemoteImageCache, () => broadcast("cache.cleared", undefined)),
   };

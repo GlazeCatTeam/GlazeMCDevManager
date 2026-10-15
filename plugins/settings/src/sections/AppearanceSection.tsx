@@ -1,13 +1,14 @@
-import { Button, SegmentedControl } from "@glaze/plugin-sdk";
+import { type AvailableTheme, Button, SegmentedControl, usePluginRegistry } from "@glaze/plugin-sdk";
+import type { CSSProperties } from "react";
 import type { AppearanceSettings } from "../mock";
 import { SettingGroup, SettingRow } from "../widgets/SettingRow";
 import styles from "./AppearanceSection.module.css";
 import sections from "./Sections.module.css";
 
-const themes = [
-  { id: "ore-ui", name: "Ore UI", description: "方块风格" },
-  { id: "fluent-dark", name: "Fluent 深色", description: "简约、柔和" },
-] as const;
+const previewThemes: Pick<AvailableTheme, "id" | "name" | "description" | "modes">[] = [
+  { id: "ore-ui", name: "Ore UI", description: "方块风格", modes: ["dark", "light"] },
+  { id: "fluent-dark", name: "Fluent 深色", description: "简约、柔和", modes: ["dark"] },
+];
 
 const scales = ([90, 100, 110, 125] as const).map((scale) => ({ value: scale, label: `${scale}%` }));
 
@@ -16,20 +17,32 @@ export interface AppearanceSectionProps {
   onChange: (value: AppearanceSettings) => void;
   onRestoreLayout: () => void;
   disabled?: boolean | undefined;
+  themePreviewStyles?: Record<string, CSSProperties> | undefined;
 }
 
 /** Theme cards, color mode, interface scale and layout reset */
-export function AppearanceSection({ value, onChange, onRestoreLayout, disabled }: AppearanceSectionProps) {
-  const fluent = value.themeId === "fluent-dark";
+export function AppearanceSection({
+  value,
+  onChange,
+  onRestoreLayout,
+  disabled,
+  themePreviewStyles,
+}: AppearanceSectionProps) {
+  const registry = usePluginRegistry();
+  const themes = registry?.snapshot?.themes ?? previewThemes;
+  const modes = themes.find((theme) => theme.id === value.themeId)?.modes ?? ["dark"];
   const colorModes = [
-    { value: "dark", label: "深色" },
-    { value: "light", label: "浅色", disabled: fluent },
-    { value: "system", label: "跟随系统", disabled: fluent },
+    { value: "dark", label: "深色", disabled: !modes.includes("dark") },
+    { value: "light", label: "浅色", disabled: !modes.includes("light") },
+    { value: "system", label: "跟随系统", disabled: modes.length < 2 },
   ] as const;
 
-  /** Switch theme; Fluent only has a dark variant */
-  const pickTheme = (themeId: AppearanceSettings["themeId"]) =>
-    onChange({ ...value, themeId, colorMode: themeId === "fluent-dark" ? "dark" : value.colorMode });
+  /** Keep the current mode only if the newly selected theme supports it */
+  const pickTheme = (themeId: AppearanceSettings["themeId"]) => {
+    const supported = themes.find((theme) => theme.id === themeId)?.modes ?? ["dark"];
+    const valid = value.colorMode === "system" ? supported.length === 2 : supported.includes(value.colorMode);
+    onChange({ ...value, themeId, colorMode: valid ? value.colorMode : (supported[0] ?? "dark") });
+  };
 
   return (
     <fieldset
@@ -50,13 +63,16 @@ export function AppearanceSection({ value, onChange, onRestoreLayout, disabled }
                 aria-pressed={selected}
                 onClick={() => pickTheme(theme.id)}
               >
-                <span
-                  className={theme.id === "fluent-dark" ? `${styles.preview} ${styles.fluent}` : styles.preview}
-                  aria-hidden="true"
-                >
-                  <span className={styles.previewSidebar} />
-                  <span className={styles.previewPanel} />
-                  <span className={styles.previewButton} />
+                <span className={styles.preview} style={themePreviewStyles?.[theme.id]} aria-hidden="true">
+                  {themePreviewStyles?.[theme.id] ? (
+                    <>
+                      <span className={styles.previewSidebar} />
+                      <span className={styles.previewPanel} />
+                      <span className={styles.previewButton} />
+                    </>
+                  ) : (
+                    <span>预览暂不可用</span>
+                  )}
                 </span>
                 <span className={styles.label}>
                   <span>
@@ -74,7 +90,11 @@ export function AppearanceSection({ value, onChange, onRestoreLayout, disabled }
       <SettingGroup title="显示">
         <SettingRow
           title="颜色模式"
-          description={fluent ? "Fluent 主题目前仅支持深色模式" : "选择深色、浅色或跟随系统外观"}
+          description={
+            modes.length < 2
+              ? `当前主题仅支持${modes[0] === "light" ? "浅色" : "深色"}模式`
+              : "选择深色、浅色或跟随系统外观"
+          }
         >
           <SegmentedControl
             label="颜色模式"

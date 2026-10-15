@@ -10,6 +10,7 @@ import {
   isCommentReplyParams,
   isFeedbackListParams,
   isFeedbackReplyParams,
+  isLogQuery,
   isMessageId,
   isMessageIds,
   isMessageListParams,
@@ -54,6 +55,8 @@ import {
   submitWorkReview,
 } from "@glaze/netease";
 import { BrowserWindow, type IpcMainInvokeEvent, ipcMain } from "electron";
+import type { LogService } from "../logs/service";
+import type { PluginRegistry } from "../plugins/registry";
 import type { AppearanceService } from "../preferences/appearance";
 import type { CacheService } from "../preferences/cache";
 import type { GeneralService } from "../preferences/general";
@@ -61,6 +64,7 @@ import type { SessionManager } from "../session/session-manager";
 import { closeLoginWindow, loginWithOfficialWindow } from "../windows/login-window";
 import { appWindows } from "../windows/main-window";
 import { CapabilityError, fromNeteaseError } from "./errors";
+import { exportLogs, openLogs, pickPlugin } from "./settings-files";
 import { pickAndUploadWorkFile } from "./work-files";
 import { createWorkOperationHandlers } from "./work-operations";
 
@@ -136,7 +140,10 @@ function createHandlers(
   appearance: AppearanceService,
   general: GeneralService,
   cache: CacheService,
+  plugins: PluginRegistry,
+  logs: LogService,
 ): HandlerTable {
+  let lastRendererError = 0;
   /** Pin mailbox writes and detail reads to the account that initiated them */
   const messageAccount = (params: unknown): string => {
     const account = requireString(params, "account");
@@ -145,6 +152,41 @@ function createHandlers(
   };
   return {
     ...createWorkOperationHandlers(sessions),
+    "app.reportRendererError": (params) => {
+      if (!params || (params.kind !== "error" && params.kind !== "unhandled-rejection"))
+        throw new CapabilityError("validation", "界面错误类型无效");
+      if (Date.now() - lastRendererError > 5000) {
+        lastRendererError = Date.now();
+        logs.write("error", "renderer", params.kind === "error" ? "界面脚本发生错误" : "界面异步操作发生未处理异常");
+      }
+      return undefined;
+    },
+    "plugins.list": () => plugins.snapshot(),
+    "plugins.setEnabled": (params) => plugins.setEnabled(params?.id, params?.enabled),
+    "plugins.pickInstall": (_params, event) => {
+      const window = senderWindow(event);
+      if (!window) throw new Error("找不到应用窗口");
+      return pickPlugin(window, plugins);
+    },
+    "plugins.install": (params) => plugins.install(params?.token),
+    "logs.list": (params) => {
+      if (!isLogQuery(params)) throw new CapabilityError("validation", "日志筛选参数无效");
+      return logs.list(params);
+    },
+    "logs.export": (params, event) => {
+      if (!isLogQuery(params)) throw new CapabilityError("validation", "日志筛选参数无效");
+      const window = senderWindow(event);
+      if (!window) throw new Error("找不到应用窗口");
+      return exportLogs(window, logs, params);
+    },
+    "logs.clear": () => {
+      logs.clear();
+      return undefined;
+    },
+    "logs.openFolder": async () => {
+      await openLogs(logs);
+      return undefined;
+    },
     "general.get": () => general.get(),
     "general.set": (params) => {
       const saved = general.set(params);
@@ -282,7 +324,13 @@ function createHandlers(
       return undefined;
     },
     "window.getState": (_params, event) => ({ maximized: senderWindow(event)?.isMaximized() ?? false }),
-    "app.getInitialRoute": () => general.initialRoute(sessions.initialRoute()),
+    "app.getInitialRoute": () => {
+      const route = general.initialRoute(sessions.initialRoute());
+      const owner = route.route.split("/")[0];
+      return plugins.snapshot().plugins.find((item) => item.id === owner)?.enabled
+        ? route
+        : { route: "glaze.home/home", params: {} };
+    },
     "account.list": () => sessions.list(),
     "account.current": () => sessions.current(),
     "account.loginWithWindow": (_params, event) =>
@@ -374,8 +422,10 @@ export function registerRpc(
   appearance: AppearanceService,
   general: GeneralService,
   cache: CacheService,
+  plugins: PluginRegistry,
+  logs: LogService,
 ): void {
-  const handlers = createHandlers(sessions, appearance, general, cache);
+  const handlers = createHandlers(sessions, appearance, general, cache, plugins, logs);
   const isRpcMethod = (method: unknown): method is RpcMethod =>
     typeof method === "string" && Object.hasOwn(handlers, method);
 
@@ -386,8 +436,11 @@ export function registerRpc(
     }
     try {
       if (
-        (method.startsWith("general.") ||
+        (method.startsWith("plugins.") ||
+          method.startsWith("logs.") ||
+          method.startsWith("general.") ||
           method === "app.rememberRoute" ||
+          method === "app.reportRendererError" ||
           method.startsWith("appearance.") ||
           method.startsWith("layout.") ||
           method.startsWith("works.") ||
@@ -400,9 +453,40 @@ export function registerRpc(
         throw new CapabilityError("internal", "业务接口只允许主界面调用");
       }
       const handler = handlers[method] as Handler<RpcMethod>;
+      plugins.assertMethodEnabled(method);
       const value = await handler((request as { params?: unknown }).params as undefined, event);
+      if (
+        [
+          "appearance.set",
+          "general.set",
+          "general.clearCache",
+          "layout.reset",
+          "works.save",
+          "works.create",
+          "works.submitReview",
+          "works.cancelReview",
+          "works.publish",
+          "works.appointOnline",
+          "works.cancelAppointOnline",
+          "works.submitSelfTest",
+          "works.cancelTest",
+          "works.delete",
+          "works.changePrice",
+          "comments.reply",
+          "feedback.reply",
+        ].includes(method)
+      )
+        logs.write(
+          "info",
+          "rpc",
+          value && typeof value === "object" && "outcome" in value && value.outcome === "uncertain"
+            ? `操作结果待核对：${method}`
+            : `操作完成：${method}`,
+        );
       return { ok: true, value };
     } catch (error) {
+      // Never record request parameters, remote response bodies or exception text containing credentials
+      if (!method.startsWith("logs.")) logs.write("error", "rpc", `操作失败：${method}`);
       if (error instanceof CapabilityError) {
         return { ok: false, error: { kind: error.kind, message: error.message } };
       }
@@ -416,6 +500,7 @@ export function registerRpc(
 
 /** Push an event to one window over glaze:event */
 export function sendEvent<E extends EventName>(win: BrowserWindow, event: E, payload: EventPayloads[E]): void {
+  if (win.isDestroyed() || win.webContents.isDestroyed()) return;
   const message: EventMessage = { event, payload };
   win.webContents.send(EVENT_CHANNEL, message);
 }

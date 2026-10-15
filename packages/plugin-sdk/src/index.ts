@@ -12,6 +12,7 @@ export type {
   AnalyticsRecord,
   AnalyticsValues,
   AppearanceSettings,
+  AvailableTheme,
   CommentListParams,
   CommentPage,
   CommentReplyParams,
@@ -25,8 +26,13 @@ export type {
   GeneralState,
   IncomeEstimate,
   IncomePlatform,
+  InstalledPlugin,
+  LogEntry,
   LoginMethod,
   LoginStep,
+  LogLevel,
+  LogPage,
+  LogQuery,
   MessageContent,
   MessageListParams,
   MessagePage,
@@ -34,6 +40,8 @@ export type {
   MessageType,
   PlayerComment,
   PlayerFeedback,
+  PluginInstallPreview,
+  PluginSnapshot,
   RankBoard,
   RankCategory,
   RankChange,
@@ -80,6 +88,7 @@ export {
 } from "@glaze/contracts";
 export * from "@glaze/ui";
 export { type Navigation, NavigationProvider, type RouteParams, useNavigation } from "./context/navigation";
+export { PluginProvider, usePluginRegistry } from "./context/plugins";
 export {
   callHost,
   onHostEvent,

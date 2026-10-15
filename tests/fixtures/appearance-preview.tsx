@@ -49,7 +49,7 @@ Object.assign(globalThis, { glaze: bridge });
 
 /** Show the production settings, theme provider and home layout controls with fault injection */
 function Preview() {
-  const { appearance, setAppearance, saving, status } = useAppearance();
+  const { appearance, setAppearance, saving, status, themePreviewStyles } = useAppearance();
   const [failed, setFailed] = useState(false);
   const [showSettings, setShowSettings] = useState(true);
   return (
@@ -75,6 +75,7 @@ function Preview() {
             onAppearanceChange={setAppearance}
             appearanceSaving={saving}
             appearanceStatus={status}
+            themePreviewStyles={themePreviewStyles}
           />
         ) : (
           <RankingCard onOpenAll={() => {}} />
