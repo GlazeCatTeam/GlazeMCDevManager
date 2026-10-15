@@ -1,23 +1,21 @@
-import { Button, EmptyState, type PlayerFeedback } from "@glaze/plugin-sdk";
+import { EmptyState, type PlayerFeedback } from "@glaze/plugin-sdk";
 import styles from "./EntryList.module.css";
 import { ReplyStatus } from "./EntryMeta";
 import { FeedbackBadge } from "./FeedbackBadge";
 
-/** Scrollable feedback rows with the load-more action fixed beneath the list */
+/** Show the current page in a fixed-height scrollable feedback list */
 export function FeedbackList({
   entries,
   selectedId,
   onSelect,
   loading,
-  hasMore,
-  onLoadMore,
+  error,
 }: {
   entries: PlayerFeedback[];
   selectedId: string | undefined;
   onSelect: (id: string) => void;
   loading: boolean;
-  hasMore: boolean;
-  onLoadMore: () => void;
+  error: string;
 }) {
   return (
     <section className={styles.panel} aria-label="反馈列表" aria-busy={loading}>
@@ -51,16 +49,9 @@ export function FeedbackList({
         </ul>
       ) : (
         <EmptyState
-          title={loading ? "正在加载反馈…" : "没有符合条件的反馈"}
-          hint={loading ? "请稍候" : "可调整筛选条件，或继续加载更多反馈"}
+          title={loading ? "正在加载反馈…" : error ? "反馈加载失败" : "没有符合条件的反馈"}
+          hint={loading ? "请稍候" : error ? "点击重试以重新加载当前页" : "可调整筛选条件，或翻页查看其他反馈"}
         />
-      )}
-      {hasMore && (
-        <div className={styles.loadMore}>
-          <Button size="sm" disabled={loading} onClick={onLoadMore}>
-            {loading ? "正在加载…" : "加载更多反馈"}
-          </Button>
-        </div>
       )}
     </section>
   );

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
-import type { FeedbackPageData, RpcResult } from "../packages/contracts/src";
+import type { FeedbackPageData, PlayerFeedback, RpcResult } from "../packages/contracts/src";
 import { capabilities } from "../packages/contracts/src/rpc/capabilities";
 import { isFeedbackListParams, isFeedbackReplyParams } from "../packages/contracts/src/rpc/feedback";
 import {
@@ -10,6 +10,7 @@ import {
   readFeedbackPage,
   replyFeedback,
 } from "../packages/netease/src/endpoints/feedback";
+import { filterFeedbackPage, loadAllFeedback } from "../plugins/community/src/feedback-query";
 import { createFeedbackLoader } from "../plugins/community/src/feedback-requests";
 
 const originalFetch = globalThis.fetch;
@@ -27,6 +28,85 @@ const row = {
   res_name: "测试组件",
   type: "0",
 };
+
+test("reply filtering collects all source pages before counting and slicing matches", async () => {
+  const entries: PlayerFeedback[] = Array.from({ length: 125 }, (_, index) => ({
+    id: String(index),
+    nickname: "玩家",
+    uid: String(index),
+    work: "组件",
+    content: "反馈",
+    createdAt: "",
+    canReply: true,
+    type: "故障问题",
+    images: [],
+    conflicts: [],
+    ...([0, 100, 124].includes(index) ? { reply: { content: "已回复", createdAt: "" } } : {}),
+  }));
+  const starts: number[] = [];
+  const result = await loadAllFeedback(
+    { account: "a", start: 20, span: 20, type: "0", search: "组件" },
+    async (params) => {
+      starts.push(params.start);
+      assert.equal(params.type, "0");
+      assert.equal(params.search, "组件");
+      assert.equal(params.account, "a");
+      return {
+        ok: true,
+        value: { total: entries.length, entries: entries.slice(params.start, params.start + params.span) },
+      };
+    },
+    () => true,
+  );
+  assert.ok(result?.ok);
+  assert.deepEqual(starts, [0, 100]);
+  const replied = filterFeedbackPage(result.value.entries, "已回复", 0, 20);
+  assert.equal(replied.total, 3);
+  assert.deepEqual(
+    replied.entries.map((entry) => entry.id),
+    ["0", "100", "124"],
+  );
+  const unread = filterFeedbackPage(result.value.entries, "未回复", 1, 20);
+  assert.equal(unread.total, 122);
+  assert.equal(unread.entries.length, 20);
+  assert.equal(unread.entries[0]?.id, "21");
+});
+
+test("incomplete or failed full feedback reads cannot publish partial filtered totals", async () => {
+  for (const failure of [false, true]) {
+    const result = await loadAllFeedback(
+      { start: 0, span: 20 },
+      async ({ start }) => {
+        if (start === 0) {
+          const parsed = readFeedbackPage({ data: [row], count: 2 });
+          assert.ok(parsed.ok);
+          return parsed;
+        }
+        return failure
+          ? { ok: false, error: { kind: "network", message: "offline" } }
+          : { ok: true, value: { entries: [], total: 2 } };
+      },
+      () => true,
+    );
+    assert.equal(result?.ok, false);
+  }
+});
+
+test("obsolete full feedback queries stop requesting more pages", async () => {
+  let active = true;
+  let calls = 0;
+  const result = await loadAllFeedback(
+    { start: 0, span: 20 },
+    async () => {
+      calls++;
+      active = false;
+      return readFeedbackPage({ data: [row], count: 200 });
+    },
+    () => active,
+  );
+  assert.equal(result, null);
+  assert.equal(calls, 1);
+});
 afterEach(() => {
   globalThis.fetch = originalFetch;
 });

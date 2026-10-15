@@ -1,24 +1,34 @@
 import { callHost, type FeedbackTypeCode, MAX_FEEDBACK_REPLY_LENGTH, type PlayerFeedback } from "@glaze/plugin-sdk";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { type FeedbackReplyFilter, filterFeedbackPage, loadAllFeedback } from "./feedback-query";
 import { createFeedbackLoader } from "./feedback-requests";
+
+export const FEEDBACK_PER_PAGE = 20;
 
 interface FeedbackState {
   key: string;
   entries: PlayerFeedback[];
   total: number;
-  nextStart: number;
-  ended: boolean;
+  page: number;
 }
 
-/** Refresh account-scoped feedback in place, sharing pending reads and discarding stale responses */
-export function useFeedback(account: string, type: FeedbackTypeCode | "全部", search: string) {
-  const key = JSON.stringify([account, type, search]);
-  const [state, setState] = useState<FeedbackState>({ key: "", entries: [], total: 0, nextStart: 0, ended: false });
+/** Filter complete feedback queries before paging, retaining refresh results and ignoring obsolete reads */
+export function useFeedback(
+  account: string,
+  type: FeedbackTypeCode | "全部",
+  search: string,
+  page: number,
+  replyFilter: FeedbackReplyFilter,
+) {
+  const filtered = replyFilter !== "全部";
+  const sourcePage = filtered ? -1 : page;
+  const key = JSON.stringify([account, type, search, filtered]);
+  const requestKey = JSON.stringify([key, sourcePage]);
+  const [state, setState] = useState<FeedbackState>({ key: "", entries: [], total: 0, page: -1 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [version, setVersion] = useState(0);
   const [load] = useState(() => createFeedbackLoader((params) => callHost("feedback.list", params)));
-  const [failedAction, setFailedAction] = useState<"refresh" | "more">("refresh");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [replies, setReplies] = useState<Record<string, string>>({});
   const [sending, setSending] = useState<string | null>(null);
@@ -26,8 +36,8 @@ export function useFeedback(account: string, type: FeedbackTypeCode | "全部", 
   const request = useRef(0);
   const busy = useRef(false);
   const mounted = useRef(false);
-  const activeKey = useRef(key);
-  activeKey.current = key;
+  const activeKey = useRef(requestKey);
+  activeKey.current = requestKey;
 
   /** Opaque platform ids must not resolve inherited object properties */
   const draftOf = (id: string) => (Object.hasOwn(drafts, id) ? (drafts[id] ?? "") : "");
@@ -45,24 +55,24 @@ export function useFeedback(account: string, type: FeedbackTypeCode | "全部", 
     const token = ++request.current;
     setLoading(true);
     setError("");
-    setFailedAction("refresh");
-    setState((current) => (current.key === key ? current : { key, entries: [], total: 0, nextStart: 0, ended: false }));
-    load({
+    const params = {
       account,
-      start: 0,
-      span: 20,
+      start: filtered ? 0 : sourcePage * FEEDBACK_PER_PAGE,
+      span: FEEDBACK_PER_PAGE,
       ...(type === "全部" ? {} : { type }),
       ...(search ? { search } : {}),
-    })
+    };
+    const active = () => request.current === token && activeKey.current === requestKey;
+    const result = filtered ? loadAllFeedback(params, load, active) : load(params);
+    result
       .then((result) => {
-        if (request.current !== token || activeKey.current !== key) return;
+        if (!active() || !result) return;
         if (result.ok)
           setState({
             key,
             entries: result.value.entries,
             total: result.value.total,
-            nextStart: result.value.entries.length,
-            ended: result.value.entries.length === 0 || result.value.entries.length >= result.value.total,
+            page: sourcePage,
           });
         else setError(result.error.message);
       })
@@ -75,42 +85,7 @@ export function useFeedback(account: string, type: FeedbackTypeCode | "全部", 
     return () => {
       request.current++;
     };
-  }, [account, key, type, search, version, load]);
-
-  /** Append a platform page and deduplicate rows when new feedback shifts offsets */
-  const loadMore = async () => {
-    if (loading || state.key !== key || state.ended) return;
-    const token = ++request.current;
-    setLoading(true);
-    setError("");
-    setFailedAction("more");
-    try {
-      const result = await load({
-        account,
-        start: state.nextStart,
-        span: 20,
-        ...(type === "全部" ? {} : { type }),
-        ...(search ? { search } : {}),
-      });
-      if (request.current !== token || activeKey.current !== key) return;
-      if (!result.ok) {
-        setError(result.error.message);
-        return;
-      }
-      const nextStart = state.nextStart + result.value.entries.length;
-      setState((current) => ({
-        key,
-        entries: [...new Map([...current.entries, ...result.value.entries].map((entry) => [entry.id, entry])).values()],
-        total: result.value.total,
-        nextStart,
-        ended: result.value.entries.length === 0 || nextStart >= result.value.total,
-      }));
-    } catch {
-      if (request.current === token) setError("反馈加载失败，请重试");
-    } finally {
-      if (request.current === token) setLoading(false);
-    }
-  };
+  }, [account, key, requestKey, sourcePage, filtered, type, search, version, load]);
 
   /** Submit once and update the original account's record only after confirmed success */
   const sendReply = async (entry: PlayerFeedback) => {
@@ -140,27 +115,25 @@ export function useFeedback(account: string, type: FeedbackTypeCode | "全部", 
 
   /** Store a separate draft for each feedback */
   const setDraft = (id: string, text: string) => setDrafts((current) => ({ ...current, [id]: text }));
-  const entries = useMemo(
-    () =>
-      state.key === key
-        ? state.entries.map((entry) => {
-            const content = Object.hasOwn(replies, entry.id) ? replies[entry.id] : undefined;
-            return content ? { ...entry, canReply: false, reply: { content, createdAt: "" } } : entry;
-          })
-        : [],
-    [state.key, state.entries, key, replies],
-  );
+  const data = useMemo(() => {
+    if (state.key !== key) return { entries: [], total: 0 };
+    const entries = state.entries.map((entry) => {
+      const content = Object.hasOwn(replies, entry.id) ? replies[entry.id] : undefined;
+      return content ? { ...entry, canReply: false, reply: { content, createdAt: "" } } : entry;
+    });
+    return filtered
+      ? filterFeedbackPage(entries, replyFilter, page, FEEDBACK_PER_PAGE)
+      : { entries: state.page === page ? entries : [], total: state.total };
+  }, [state, key, page, filtered, replyFilter, replies]);
   /** Explicit refresh always revalidates; pending identical requests are shared */
   const refresh = () => setVersion((value) => value + 1);
   return {
-    entries,
-    total: state.key === key ? state.total : 0,
-    hasMore: state.key === key && !state.ended && state.nextStart > 0,
-    loading: loading || state.key !== key,
+    entries: data.entries,
+    total: data.total,
+    loading: loading || (!error && (state.key !== key || state.page !== sourcePage)),
     error,
     refresh,
-    retry: failedAction === "more" ? loadMore : refresh,
-    loadMore,
+    retry: refresh,
     draftOf,
     setDraft,
     sendReply,

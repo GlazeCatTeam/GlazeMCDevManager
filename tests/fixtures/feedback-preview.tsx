@@ -23,6 +23,9 @@ let slow = false;
 let reads = 0;
 let writes = 0;
 const replies = new Map<string, string>();
+if (new URLSearchParams(location.search).has("reply-filter")) {
+  for (const index of [0, 20, 24]) replies.set(`fixture-${index}`, "已处理");
+}
 const rows: PlayerFeedback[] = Array.from({ length: 25 }, (_, index) => ({
   id: `fixture-${index}`,
   nickname: `测试玩家${index + 1}`,
