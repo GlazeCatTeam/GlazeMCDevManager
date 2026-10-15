@@ -1,7 +1,7 @@
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { AccountSummary, AnalyticsRecord, GlazeBridge, WorkSummary } from "../../packages/contracts/src";
-import { estimateProfit } from "../../packages/netease/src/income/rules";
+import { allocatePePeriodIncome } from "../../packages/netease/src/income/period-allocation";
 import { SessionProvider } from "../../packages/plugin-sdk/src";
 import { applyTheme } from "../../packages/theme/src";
 import { AnalyticsPage } from "../../plugins/analytics/src/AnalyticsPage";
@@ -79,7 +79,7 @@ const rpc: GlazeBridge["rpc"] = async (method, params) => {
   let value: unknown;
   if (method === "works.list") value = callAccount === account.id ? (params as { platform?: string } | undefined)?.platform === "pc" ? works.slice(0, 1).map(work => ({ ...work, itemId: "900", name: "PC 独立资源" })) : works : [];
   else if (method === "analytics.daily" || method === "analytics.periodIncome") {
-    const query = params as { resourceIds: string[]; startDate: string; endDate: string; platform?: string };
+    const query = params as { resourceIds: string[]; startDate: string; endDate: string; platform?: string; settlementMonth?: string; allResources?: boolean };
     value = periodPreview
       ? Array.from(
           { length: Math.round((Date.parse(query.endDate) - Date.parse(query.startDate)) / 86_400_000) + 1 },
@@ -97,10 +97,17 @@ const rpc: GlazeBridge["rpc"] = async (method, params) => {
       : query.resourceIds.map((id) => record(id, query.startDate));
     if (method === "analytics.periodIncome") {
       const records = value as AnalyticsRecord[];
-      const sales = new Map<string, number>();
-      for (const row of records)
-        sales.set(row.resourceId, (sales.get(row.resourceId) ?? 0) + (row.diamonds ?? 0) * (1 - (row.refundRate ?? 0)));
-      value = { records, estimate: records.length && query.platform !== "pc" ? estimateProfit([...sales.values()]) : null };
+      const month = query.settlementMonth ?? query.endDate.slice(0, 7);
+      const previous = new Date(`${month}-01T00:00:00Z`);
+      previous.setUTCMonth(previous.getUTCMonth() - 1);
+      const provisional = new URLSearchParams(location.search).has("pending-month");
+      const dailySales = new Map<string, number>();
+      for (const row of records) dailySales.set(row.resourceId, (dailySales.get(row.resourceId) ?? 0) + (row.diamonds ?? 0));
+      const sales = provisional ? [...dailySales.values()] : query.allResources ? [300000, 100000, 200] : query.resourceIds.map(() => 100000);
+      value = { records, estimate: query.platform === "pc" ? null : {
+        ...allocatePePeriodIncome(sales.map((diamonds, index) => ({ resourceId: provisional ? [...dailySales.keys()][index]! : String(index + 1), name: works[index]?.name ?? "历史模组", diamonds })), 0.34), month, startDate: provisional ? query.startDate : `${month}-01`, endDate: query.endDate,
+        source: provisional ? "pe-period-daily" : "pe-monthly", costRate: 0.34, costSourceMonth: previous.toISOString().slice(0, 7), works: sales.length, failedWorks: [], warnings: provisional ? ["平台月汇总尚未提供，暂按当前周期已返回的日记录估算。"] : [],
+      } };
     }
   } else if (method === "analytics.monthly") {
     const query = params as { startDate: string };

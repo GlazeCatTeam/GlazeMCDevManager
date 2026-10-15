@@ -2,9 +2,11 @@
 
 export type {
   AccountSummary,
+  AnalyticsIncomeAllocation,
   AnalyticsMetric,
   AnalyticsOrder,
   AnalyticsOverview,
+  AnalyticsPeriodEstimate,
   AnalyticsPeriodIncome,
   AnalyticsRealtime,
   AnalyticsRecord,

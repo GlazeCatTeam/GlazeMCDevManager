@@ -1,6 +1,7 @@
 import {
   Button,
   type IncomePlatform,
+  Notice,
   Pagination,
   Panel,
   SearchField,
@@ -14,6 +15,7 @@ import {
   incomeCycle,
   incomeMetrics,
   periodIncomeYuan,
+  sumAllocatedIncome,
   summarizePeriodIncome,
 } from "../period-income";
 import { QueryState, useRefresh } from "../QueryState";
@@ -21,6 +23,7 @@ import { useAnalyticsQuery } from "../useAnalyticsQuery";
 import { DataTable, TableNote } from "../widgets/DataTable";
 import { InlineSelect } from "../widgets/InlineSelect";
 import { MinecraftCurrencyIcon } from "../widgets/MinecraftCurrencyIcon";
+import { PeriodAllocationTable } from "../widgets/PeriodAllocationTable";
 import { SearchableSelect } from "../widgets/SearchableSelect";
 import { StatStrip } from "../widgets/StatStrip";
 import { Swatch } from "../widgets/Swatch";
@@ -144,7 +147,13 @@ function PeriodIncomeScope({
           <Button
             size="sm"
             variant="primary"
-            onClick={() => setQuery({ offset: draftOffset, resourceId: draftResource, version: query.version + 1 })}
+            onClick={() =>
+              setQuery({
+                offset: draftOffset,
+                resourceId: draftResource,
+                version: changed ? query.version : query.version + 1,
+              })
+            }
           >
             查询收益
           </Button>
@@ -152,9 +161,10 @@ function PeriodIncomeScope({
       </Panel>
       {cycle.queryEnd && selectedResources.length > 0 ? (
         <PeriodIncomeResults
-          key={`${cycle.startDate}:${query.resourceId}`}
+          key={cycle.startDate}
           platform={platform}
-          resources={selectedResources}
+          selectedId={query.resourceId}
+          resources={resources}
           cycle={cycle}
           refreshVersion={refreshVersion + query.version}
         />
@@ -173,11 +183,13 @@ function PeriodIncomeScope({
 
 /** Show returned income totals, inspectable day trends and paginated resource breakdowns */
 function PeriodIncomeResults({
+  selectedId,
   platform,
   resources,
   cycle,
   refreshVersion,
 }: {
+  selectedId: string;
   platform: IncomePlatform;
   resources: Resource[];
   cycle: ReturnType<typeof incomeCycle>;
@@ -186,18 +198,28 @@ function PeriodIncomeResults({
   const [metric, setMetric] = useState<IncomeMetric>("diamonds");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
+  const allResources = selectedId === "all";
+  const displayedResources = useMemo(
+    () => resources.filter((resource) => selectedId === "all" || resource.id === selectedId),
+    [resources, selectedId],
+  );
   const result = useAnalyticsQuery("analytics.periodIncome", {
+    settlementMonth: cycle.endDate.slice(0, 7),
+    allResources: platform === "pe" || allResources,
     platform,
-    resourceIds: resources.map((resource) => resource.id),
+    resourceIds: (platform === "pe" ? resources : displayedResources).map((resource) => resource.id),
     startDate: cycle.startDate,
     endDate: cycle.queryEnd as string,
   });
   useRefresh(result.reload, refreshVersion);
   const summary = useMemo(
-    () => summarizePeriodIncome(resources, result.data?.records ?? [], cycle.dates),
-    [resources, result.data, cycle.dates],
+    () => summarizePeriodIncome(displayedResources, result.data?.records ?? [], cycle.dates),
+    [displayedResources, result.data, cycle.dates],
   );
   const estimate = result.data?.estimate;
+  const allocations = estimate?.allocations.filter((row) => allResources || row.resourceId === selectedId) ?? [];
+  const displayedEstimate = estimate && allocations.length ? sumAllocatedIncome(allocations) : null;
+  const provisional = estimate?.source === "pe-period-daily";
   const selectedMetric = incomeMetrics.find((item) => item.id === metric) ?? incomeMetrics[0];
   const rows = summary.resources
     .filter(({ resource }) => resource.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()))
@@ -220,20 +242,30 @@ function PeriodIncomeResults({
               {platform.toUpperCase()} · {cycle.startDate} — {cycle.endDate}
             </strong>
             <span className={styles.muted}>
-              统计至 {cycle.queryEnd} · {resources.length} 个资源 · {cycle.dates.length} 天
+              统计至 {cycle.queryEnd} · {displayedResources.length} 个资源 · {cycle.dates.length} 天
             </span>
           </div>
+          {platform === "pe" && !estimate && result.data.estimateError && (
+            <Notice action={<TextButton onClick={result.reload}>重试估算</TextButton>}>
+              预计收益暂不可用：{result.data.estimateError}
+            </Notice>
+          )}
+          {platform === "pe" && estimate && !allResources && !allocations.length && (
+            <Notice>本期估算数据中没有所选模组的记录，暂不能显示其分摊金额；全周期合计仍可在下方查看。</Notice>
+          )}
           <StatStrip
             items={incomeMetrics.map((item) => ({
               label: item.label,
               value: formatValue(summary.totals[item.id]),
               icon: item.id === "purchases" ? undefined : <MinecraftCurrencyIcon currency={item.id} />,
               ...(item.id === "diamonds" && platform === "pe"
-                ? { detail: `预计收益 ${periodIncomeYuan(estimate?.totalYuan)}` }
+                ? {
+                    detail: `${provisional ? "临时" : ""}${allResources ? "预计收益" : "分摊收益"} ${periodIncomeYuan(displayedEstimate?.totalYuan)}`,
+                  }
                 : {}),
               note:
                 item.id === "diamonds" && platform === "pe"
-                  ? `税后约 ${periodIncomeYuan(estimate?.afterTaxYuan)}`
+                  ? `税后约 ${periodIncomeYuan(displayedEstimate?.afterTaxYuan)}`
                   : `已返回日记录合计 · ${item.unit}`,
             }))}
           />
@@ -243,12 +275,23 @@ function PeriodIncomeResults({
             ) : (
               <>
                 {estimate
-                  ? `开发者分成 ${periodIncomeYuan(estimate.developerShareYuan)} + 平台激励 ${periodIncomeYuan(estimate.subsidyYuan)}。`
-                  : "缺少有效销量或退款数据，暂不能估算。"}
-                使用首页的退款、分成、激励及税额算法，按所选 PE 资源的本周期销量独立估算，以账号最终结算为准。
+                  ? `全周期税前 ${periodIncomeYuan(estimate.totalYuan)}，税后 ${periodIncomeYuan(estimate.afterTaxYuan)}。当前范围基础分成 ${periodIncomeYuan(displayedEstimate?.developerShareYuan)} + 激励分摊 ${periodIncomeYuan(displayedEstimate?.subsidyYuan)}。`
+                  : (result.data?.estimateError ?? "平台月汇总尚未提供，暂不能估算。")}
+                {estimate &&
+                  (provisional
+                    ? `人民币暂按 ${estimate.startDate} 至 ${estimate.endDate} 已返回日记录的 ${formatValue(estimate.diamonds)} 钻石（扣已知退款）估算。`
+                    : `人民币按 ${estimate.month} PE平台月汇总的 ${formatValue(estimate.diamonds)} 钻石统一估算，包含月汇总返回的全部资源。`)}
+                {estimate && "选择模组只查看其分摊结果，不重新计算激励或税额。"}
+                {estimate &&
+                  `周期专用算法：比例激励按扣成本后完整流水计算。成本率 ${((estimate.costRate ?? 0.3) * 100).toFixed(2)}%${estimate.costSourceMonth ? `，来源 ${estimate.costSourceMonth} 已结算账单` : "（默认值）"}。`}
+                {estimate?.warnings?.join("；")}
+                以平台最终结算为准，临时估算与月汇总估算可能不同。
               </>
             )}
           </p>
+          {platform === "pe" && estimate && (
+            <PeriodAllocationTable key={selectedId} estimate={estimate} selectedId={selectedId} />
+          )}
           <p className={styles.note} role="status">
             起止两个 22 日都计入，相邻周期会重叠一天，不可直接跨周期累加。收益按平台日数据汇总，不代表最终结算金额。
             {summary.missingDays > 0 &&

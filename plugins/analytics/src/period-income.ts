@@ -1,4 +1,4 @@
-import type { AnalyticsRecord } from "@glaze/plugin-sdk";
+import type { AnalyticsIncomeAllocation, AnalyticsRecord } from "@glaze/plugin-sdk";
 import { aggregate, type Resource, shiftDay, todayKey } from "./data";
 
 export const incomeMetrics = [
@@ -7,6 +7,20 @@ export const incomeMetrics = [
   { id: "purchases", label: "购买次数", unit: "次" },
 ] as const;
 export type IncomeMetric = (typeof incomeMetrics)[number]["id"];
+
+/** Sum allocated cents without reapplying incentive tiers, bonuses or tax to a filtered subset */
+export function sumAllocatedIncome(rows: AnalyticsIncomeAllocation[]) {
+  const sum = (key: "developerShareYuan" | "subsidyYuan" | "totalYuan" | "taxYuan" | "afterTaxYuan") =>
+    rows.reduce((total, row) => total + Math.round(row[key] * 100), 0) / 100;
+  return {
+    developerShareYuan: sum("developerShareYuan"),
+    subsidyYuan: sum("subsidyYuan"),
+    totalYuan: sum("totalYuan"),
+    taxYuan: sum("taxYuan"),
+    afterTaxYuan: sum("afterTaxYuan"),
+    diamonds: rows.reduce((total, row) => total + row.diamonds, 0),
+  };
+}
 
 const yuanFormatter = new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" });
 

@@ -3,6 +3,7 @@ import type { AccountChanged, AccountSummary, InitialRoute, LoginStep } from "./
 import type {
   AnalyticsDailyParams,
   AnalyticsPeriodIncome,
+  AnalyticsPeriodIncomeParams,
   AnalyticsRangeParams,
   AnalyticsRealtime,
   AnalyticsRealtimeParams,
@@ -75,7 +76,7 @@ export interface RpcMethods {
   "developer.level": { params: AccountParams | undefined; result: DeveloperLevel };
   "analytics.overview": { params: AccountParams | undefined; result: AnalyticsOverview };
   "analytics.daily": { params: AnalyticsDailyParams; result: AnalyticsRecord[] };
-  "analytics.periodIncome": { params: AnalyticsDailyParams; result: AnalyticsPeriodIncome };
+  "analytics.periodIncome": { params: AnalyticsPeriodIncomeParams; result: AnalyticsPeriodIncome };
   "analytics.monthly": { params: AnalyticsRangeParams; result: AnalyticsRecord[] };
   "analytics.realtime": { params: AnalyticsRealtimeParams; result: AnalyticsRealtime };
   "income.estimate": { params: IncomeEstimateParams | undefined; result: IncomeEstimate };

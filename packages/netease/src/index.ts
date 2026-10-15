@@ -4,7 +4,6 @@ export { passportFromCookie, sessionCookieFromInput } from "./auth/cookie";
 export {
   getAnalyticsDaily,
   getAnalyticsMonthly,
-  getAnalyticsPeriodIncome,
   getAnalyticsRealtime,
 } from "./endpoints/analytics";
 export { listComments, replyComment } from "./endpoints/comments";
@@ -36,4 +35,5 @@ export {
   SESSION_COOKIE,
 } from "./http/hosts";
 export { estimateIncome, monthOf, parseMonth } from "./income/estimate";
+export { getAnalyticsPeriodIncome } from "./income/period";
 export { estimateProfit, incomeTax } from "./income/rules";

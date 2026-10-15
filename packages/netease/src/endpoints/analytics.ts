@@ -1,7 +1,6 @@
 import {
   type AnalyticsDailyParams,
   type AnalyticsOrder,
-  type AnalyticsPeriodIncome,
   type AnalyticsRangeParams,
   type AnalyticsRealtime,
   type AnalyticsRealtimeParams,
@@ -15,7 +14,6 @@ import {
 import { describeError, fail, ok, type Result } from "../errors";
 import { getMcDevData, type NeteaseSession, withQuery } from "../http/client";
 import { readArray, readNumber, readRecord, readString } from "../http/parse";
-import { estimateProfit } from "../income/rules";
 import { runAnalyticsPool } from "./analytics-pool";
 
 const ALL = 2_147_483_647;
@@ -226,30 +224,6 @@ export async function getAnalyticsDaily(
   return ok(records);
 }
 
-/** Keep platform sales separate and apply verified homepage payout rules only to PE */
-export async function getAnalyticsPeriodIncome(
-  session: NeteaseSession,
-  params: AnalyticsDailyParams,
-): Promise<Result<AnalyticsPeriodIncome>> {
-  const daily = await getAnalyticsDaily(session, { ...params, includePeers: false });
-  if (!daily.ok) return daily;
-  const records = daily.value;
-  // PC settlement has different fees and tax amounts; PE incentive rules are not a PC estimate
-  if (params.platform === "pc") return ok({ records, estimate: null });
-  if (
-    !records.length ||
-    records.some((row) => row.diamonds === null || (row.refundRate ?? 0) < 0 || (row.refundRate ?? 0) > 1)
-  ) {
-    return ok({ records, estimate: null });
-  }
-  const sales = new Map<string, number>();
-  for (const row of records) {
-    sales.set(row.resourceId, (sales.get(row.resourceId) ?? 0) + (row.diamonds ?? 0) * (1 - (row.refundRate ?? 0)));
-  }
-  const profit = estimateProfit([...sales.values()]);
-  return ok({ records, estimate: profit });
-}
-
 /** Native monthly totals for ordinary PE resources */
 export async function getAnalyticsMonthly(
   session: NeteaseSession,
@@ -276,6 +250,9 @@ export async function getAnalyticsMonthly(
     { timeoutMs: 60_000 },
   );
   if (!result.ok) return result;
+  // The platform returns an empty object before a monthly aggregate is available
+  if (result.value !== null && typeof result.value === "object" && !Array.isArray(result.value) && Object.keys(result.value).length === 0)
+    return fail({ kind: "business", code: "no_monthly_data", message: "平台暂未提供该月份的月汇总数据" });
   const parsed = readAnalyticsRecords(result.value, true);
   return parsed.ok
     ? ok(

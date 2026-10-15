@@ -15,8 +15,25 @@ export interface AnalyticsRecord extends AnalyticsValues {
 
 export interface AnalyticsPeriodIncome {
   records: AnalyticsRecord[];
-  /** Homepage calculation applied to this window's per-resource sales, or null when unavailable */
-  estimate: Omit<IncomeEstimate, "month" | "startDate" | "endDate" | "works" | "failedWorks"> | null;
+  /** PE period-only candidate from month totals; daily records and homepage estimates stay independent */
+  estimate: AnalyticsPeriodEstimate | null;
+  estimateError?: string;
+}
+
+export interface AnalyticsIncomeAllocation {
+  resourceId: string;
+  name: string;
+  diamonds: number;
+  developerShareYuan: number;
+  subsidyYuan: number;
+  totalYuan: number;
+  taxYuan: number;
+  afterTaxYuan: number;
+}
+
+/** Account-wide PE estimate with additive, cent-exact resource allocations */
+export interface AnalyticsPeriodEstimate extends IncomeEstimate {
+  allocations: AnalyticsIncomeAllocation[];
 }
 
 export interface AnalyticsRangeParams extends AccountParams {
@@ -30,6 +47,13 @@ export interface AnalyticsDailyParams extends AnalyticsRangeParams {
   resourceIds: string[];
   /** Only module comparison needs the platform's extra peer statistics */
   includePeers?: boolean;
+}
+
+export interface AnalyticsPeriodIncomeParams extends AnalyticsDailyParams {
+  /** Month associated with the cycle end, even when daily querying ends earlier */
+  settlementMonth?: string;
+  /** Legacy display scope flag; PE financial calculations always use the entire available account */
+  allResources?: boolean;
 }
 
 export interface AnalyticsRealtimeParams extends AccountParams {
