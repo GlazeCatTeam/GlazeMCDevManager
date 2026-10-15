@@ -22,6 +22,8 @@ export type WorkPriceType = "diamond" | "point" | "free";
 
 export interface WorkSummary {
   itemId: string;
+  /** Source platform; older clients omit this for PE works */
+  platform?: "pe" | "pc";
   name: string;
   status: WorkStatus;
   price: number;

@@ -40,8 +40,8 @@ export function readWorkStatus(value: unknown): WorkStatus {
   return status !== null && knownStatuses.has(status as WorkStatus) ? (status as WorkStatus) : "unknown";
 }
 
-/** One work from a list row, or null when its id or name is missing */
-function readWork(row: Record<string, unknown>): WorkSummary | null {
+/** One work with its source platform, or null when required fields are missing */
+function readWork(row: Record<string, unknown>, platform: IncomePlatform = "pe"): WorkSummary | null {
   const itemId = readString(row.item_id);
   const name = readString(row.item_name);
   const createTime = readString(row.create_time);
@@ -51,6 +51,7 @@ function readWork(row: Record<string, unknown>): WorkSummary | null {
   const priceType = readString(row.price_type);
   return {
     itemId,
+    platform,
     name,
     status: readWorkStatus(row.status),
     price: readNumber(row.price) ?? 0,
@@ -88,7 +89,7 @@ export async function listWorks(
   }
   const works: WorkSummary[] = [];
   for (const row of rows) {
-    const work = readWork(row);
+    const work = readWork(row, platform);
     if (work === null) {
       return fail({ kind: "parse", endpoint: `items.${category}` });
     }

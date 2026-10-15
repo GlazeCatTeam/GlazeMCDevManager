@@ -38,7 +38,7 @@ function Cover({ iconUrl, seed }: { iconUrl: string | null; seed: string }) {
   );
 }
 
-/** Fixed-size tile for one work: status, price, dates and the actions its status allows */
+/** Fixed-size tile for one work: status, platform, price, dates and available actions */
 export function WorkTile({ work, account, onAction, onOpenDetail, canWrite }: WorkTileProps) {
   const detail = useWorkCover(account, work.itemId);
   const actions = actionsFor(work.status);
@@ -68,7 +68,7 @@ export function WorkTile({ work, account, onAction, onOpenDetail, canWrite }: Wo
           <WorkPrice price={work.price} priceType={work.priceType} />
         </span>
         {work.isOriginal && <Tag>原创</Tag>}
-        {work.syncPc && <Tag>PE + PC</Tag>}
+        <Tag>{work.syncPc ? "PE + PC" : work.platform === "pc" ? "PC" : "PE"}</Tag>
         {work.weakOffline && <Tag tone="warning">弱下架</Tag>}
       </div>
 
