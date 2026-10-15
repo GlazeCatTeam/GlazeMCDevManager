@@ -83,7 +83,10 @@ export interface WorkReviewResult {
   queueLength: number;
 }
 export type WorkUploadKind = "resource" | "image" | "banner" | "video" | "videoCover" | "richImage";
-export interface WorkUploadParams extends WorkParams {
+export interface WorkUploadParams {
+  account: string;
+  /** Absent while uploading files for a new work */
+  itemId?: string;
   kind: WorkUploadKind;
   channelId?: number;
   platform?: "pe" | "pc";

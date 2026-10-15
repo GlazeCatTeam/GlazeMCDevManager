@@ -4,6 +4,7 @@ export { passportFromCookie, sessionCookieFromInput } from "./auth/cookie";
 export { getAnalyticsOverview, getDeveloperLevel } from "./endpoints/developer";
 export { getRankList } from "./endpoints/rank";
 export { getUserInfo, type UserInfo } from "./endpoints/user";
+export { createWork } from "./endpoints/work-create";
 export { getWorkEditorOptions, readWorkEditor, saveWorkEditor, submitWorkReview } from "./endpoints/work-editor";
 export { uploadWorkFile } from "./endpoints/work-upload";
 export { getReviewFeedback, getWork, listWorks } from "./endpoints/works";

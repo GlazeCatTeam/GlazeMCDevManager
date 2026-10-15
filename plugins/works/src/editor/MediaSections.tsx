@@ -116,7 +116,9 @@ export function MediaSections({
   upload,
   update,
   dirty,
-}: EditorSectionProps & SectionActions & { choices: WorkEditorOptions | null; upload: UploadFile }) {
+  creating = false,
+}: EditorSectionProps &
+  SectionActions & { choices: WorkEditorOptions | null; upload: UploadFile; creating?: boolean }) {
   const videos = rows(value.video_info_list);
   const video = videos[0];
   /** Replace one video while retaining any remaining server records */
@@ -138,9 +140,11 @@ export function MediaSections({
       <Panel
         title="PE 图片"
         actions={
-          <TextButton disabled={disabled || !dirty("images")} onClick={() => update("images")}>
-            更新此分区
-          </TextButton>
+          !creating && (
+            <TextButton disabled={disabled || !dirty("images")} onClick={() => update("images")}>
+              更新此分区
+            </TextButton>
+          )
         }
       >
         {!choices ? (
@@ -158,9 +162,11 @@ export function MediaSections({
       <Panel
         title="资源中心首页轮播推广广图"
         actions={
-          <TextButton disabled={disabled || !dirty("banner")} onClick={() => update("banner")}>
-            更新此分区
-          </TextButton>
+          !creating && (
+            <TextButton disabled={disabled || !dirty("banner")} onClick={() => update("banner")}>
+              更新此分区
+            </TextButton>
+          )
         }
       >
         <div className={styles.promotion}>
@@ -193,9 +199,11 @@ export function MediaSections({
       <Panel
         title="视频与封面"
         actions={
-          <TextButton disabled={disabled || !dirty("video")} onClick={() => update("video")}>
-            更新此分区
-          </TextButton>
+          !creating && (
+            <TextButton disabled={disabled || !dirty("video")} onClick={() => update("video")}>
+              更新此分区
+            </TextButton>
+          )
         }
       >
         <div className={styles.fields}>

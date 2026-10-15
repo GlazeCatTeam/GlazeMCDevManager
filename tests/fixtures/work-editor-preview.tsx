@@ -107,9 +107,15 @@ const options: WorkEditorOptions = {
   pcImages: [],
   pcTags: [],
   pcScopes: [{ id: "all", title: "全部" }],
-  prices: [{ id: "free", title: "免费", min: 0, max: 0, step: 0 }],
+  prices: [
+    { id: "free", title: "免费", min: 0, max: 0, step: 0 },
+    { id: "diamond", title: "钻石", min: 300, max: 20000, step: 100 },
+  ],
 };
 const requests: { method: string; params: unknown }[] = [];
+const workList = [work];
+const documents = new Map([[work.itemId, document]]);
+const creationResult = new URLSearchParams(location.search).get("creation");
 /** Model the preload contract locally; this fixture has no network implementation */
 const rpc = async (method: string, params?: unknown) => {
   requests.push({ method, params: structuredClone(params) });
@@ -118,7 +124,7 @@ const rpc = async (method: string, params?: unknown) => {
     "window.getState": { maximized: false },
     "account.list": [account],
     "account.current": account,
-    "works.list": [work],
+    "works.list": workList,
     "works.get": {
       itemId: work.itemId,
       name: work.name,
@@ -128,10 +134,34 @@ const rpc = async (method: string, params?: unknown) => {
       firstOnlineTime: null,
       appointOnlineTime: null,
     },
-    "works.editor": document,
+    "works.editor": documents.get((params as { itemId?: string } | undefined)?.itemId ?? work.itemId),
     "works.options": options,
     "works.reviewFeedback": null,
   };
+  if (method === "works.create") {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    if (creationResult === "timeout") return { ok: false, error: { kind: "timeout", message: "模拟请求超时" } };
+    if (creationResult === "reject")
+      return { ok: false, error: { kind: "business", message: "模拟平台拒绝：请完善作品信息" } };
+    const fields = (params as { fields: WorkRecord }).fields;
+    if (!fields.item_name || !Array.isArray(fields.res) || !fields.res.length)
+      return { ok: false, error: { kind: "validation", message: "请填写名称并上传资源文件" } };
+    const created = {
+      ...work,
+      itemId: String(2000 + workList.length),
+      name: String(fields.item_name),
+      price: Number(fields.price),
+      priceType: fields.price_type === "diamond" ? ("diamond" as const) : ("free" as const),
+    };
+    workList.unshift(created);
+    documents.set(created.itemId, {
+      ...document,
+      itemId: created.itemId,
+      version: "0.1",
+      fields: structuredClone(fields),
+    });
+    return { ok: true, value: undefined };
+  }
   if (method === "works.save") {
     Object.assign(document.fields, (params as { patch: WorkRecord }).patch);
     work.name = String(document.fields.item_name);
@@ -141,6 +171,16 @@ const rpc = async (method: string, params?: unknown) => {
     document.status = "reviewing";
     return { ok: true, value: { needCheckApply: false, queueLength: 2 } };
   }
+  if (method === "works.upload" && (params as { kind: string }).kind === "resource")
+    return {
+      ok: true,
+      value: {
+        name: "new-mod.zip",
+        size: 128,
+        url: "https://x19.fp.ps.netease.com/fixture.zip",
+        receipt: { body: "{}", sign: "fixture-signature", file_type: "zip_package" },
+      },
+    };
   if (method === "works.upload")
     return {
       ok: true,

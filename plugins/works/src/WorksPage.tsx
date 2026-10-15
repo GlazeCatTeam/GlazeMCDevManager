@@ -11,7 +11,7 @@ import {
   type WorkSummary,
 } from "@glaze/plugin-sdk";
 import { useCallback, useState } from "react";
-import { WorkDetailPage } from "./editor/WorkDetailPage";
+import { WorkCreatePage, WorkDetailPage } from "./editor/WorkDetailPage";
 import type { WorkAction } from "./status";
 import styles from "./WorksPage.module.css";
 import { ReviewFeedbackDialog } from "./widgets/ReviewFeedbackDialog";
@@ -35,8 +35,11 @@ export function WorksPage() {
   const [page, setPage] = useState(0);
   const [feedbackFor, setFeedbackFor] = useState<WorkSummary | null>(null);
   const [viewing, setViewing] = useState<{ work: WorkSummary; account: string } | null>(null);
+  const [creatingFor, setCreatingFor] = useState<string | null>(null);
+  const [createdFor, setCreatedFor] = useState<string | null>(null);
   const closeFeedback = useCallback(() => setFeedbackFor(null), []);
   const closeView = useCallback(() => setViewing(null), []);
+  const closeCreate = useCallback(() => setCreatingFor(null), []);
 
   const list = works.data ?? [];
   const pageCount = Math.max(1, Math.ceil(list.length / PER_PAGE));
@@ -50,6 +53,22 @@ export function WorksPage() {
     }
     if ((action === "update" || action === "submitReview") && account) setViewing({ work, account: account.id });
   };
+
+  if (creatingFor && creatingFor === account?.id)
+    return (
+      <WorkCreatePage
+        key={`new:${creatingFor}`}
+        account={creatingFor}
+        works={list}
+        onClose={closeCreate}
+        onSaved={() => {
+          setCreatingFor(null);
+          setCreatedFor(creatingFor);
+          setPage(0);
+          works.reload();
+        }}
+      />
+    );
 
   if (viewing && viewing.account === account?.id)
     return (
@@ -73,13 +92,21 @@ export function WorksPage() {
             <Button onClick={works.reload} disabled={works.loading}>
               {works.loading ? "刷新中…" : "刷新"}
             </Button>
-            <Button variant="primary" disabled title="暂未接入，请在开发者平台操作">
+            <Button
+              variant="primary"
+              disabled={account?.status !== "active"}
+              onClick={() => account && setCreatingFor(account.id)}
+            >
               <Icon name="action.add" size={14} />
               新增作品
             </Button>
           </>
         }
       />
+
+      {createdFor === account?.id && (
+        <Notice>作品已创建，尚未提交审核。请在刷新后的列表中打开作品继续编辑或提审。</Notice>
+      )}
 
       {works.error && (
         <Notice
@@ -116,7 +143,7 @@ export function WorksPage() {
             <>
               <span className={styles.emptyTitle}>{works.error ? "作品加载失败" : "暂无作品"}</span>
               <span className={styles.emptyHint}>
-                {works.error ? "检查网络后点「重试」" : "在开发者平台创建作品后，会显示在这里"}
+                {works.error ? "检查网络后点「重试」" : "点击「新增作品」，创建你的第一个作品"}
               </span>
             </>
           )}

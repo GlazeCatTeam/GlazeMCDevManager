@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import { validateWorkVideo } from "../apps/desktop/src/main/ipc/work-video";
+import { capabilities } from "../packages/contracts/src/rpc/capabilities";
+import { emptyWorkCreateFields, isWorkCreateParams } from "../packages/contracts/src/rpc/work-create";
 import { isWorkSaveParams } from "../packages/contracts/src/rpc/work-editor";
+import { buildWorkCreate, createWork } from "../packages/netease/src/endpoints/work-create";
 import {
   buildWorkUpdate,
   getWorkEditorOptions,
@@ -78,6 +81,109 @@ function response(data?: unknown, status = "ok") {
 }
 afterEach(() => {
   globalThis.fetch = originalFetch;
+});
+
+const createConstants = {
+  pri_type: { pe: [{ id: 2, title: "add_ons" }], comp: [] },
+  sub_type: { pe: { 2: [{ id: 4, title: "玩法" }] } },
+  mod_second_type: { 4: [{ id: 7, title: "大型玩法" }] },
+  mod_version: ["3.9"],
+  label_type: { 1: [{ id: 23, title: "生存" }] },
+  item_tag_limit: 3,
+  channel: { pe: [{ id: 5, title: "ICON", width: 1000, height: 1000, version: 3 }] },
+  price_type: [
+    { id: "free", min: 0, max: 0, step: 0 },
+    { id: "diamond", min: 300, max: 20000, step: 100 },
+  ],
+};
+/** Local signed-receipt fixtures model the create schema, not update URL strings */
+function newWorkFields() {
+  return {
+    ...emptyWorkCreateFields(),
+    item_name: " 新建测试模组 ",
+    pri_type: 2,
+    sub_type: 4,
+    mod_second_type: 7,
+    mod_version: "3.9",
+    res: [
+      {
+        res_name: "new.zip",
+        res_url: { body: "{}", sign: "test-sign", file_type: "zip_package" },
+        add_version: true,
+        old_metadata: "strip",
+      },
+    ],
+    channel: [{ channel_id: 5, channel_url: { body: "{}", sign: "test-sign", file_type: "image" }, version: 3 }],
+  };
+}
+
+test("creation is shell-only and rejects identifiers, review flags and update-only fields", () => {
+  assert.equal(capabilities["works.create"].caller, "shell");
+  assert.equal(capabilities["works.create"].mcp, undefined);
+  assert.equal(isWorkCreateParams({ account: "a", fields: newWorkFields() }), true);
+  for (const key of ["item_id", "is_check_apply", "sync_item_info", "sync_pc_flag", "relate_item_id"])
+    assert.equal(isWorkCreateParams({ account: "a", fields: { ...newWorkFields(), [key]: true } }), false);
+  assert.equal(isWorkCreateParams({ account: "", fields: newWorkFields() }), false);
+  const a = emptyWorkCreateFields();
+  a.item_name = "changed";
+  assert.equal(emptyWorkCreateFields().item_name, "");
+});
+
+test("create uses its own DTO and accepts a successful response without an id", async () => {
+  const calls = mockFetch((url, init) =>
+    init.method === "POST" ? response() : response(url.endsWith("/item-tag/") ? { tag_list: [] } : createConstants),
+  );
+  assert.deepEqual(await createWork(session, { account: "a", fields: newWorkFields() }), {
+    ok: true,
+    value: undefined,
+  });
+  const writes = calls.filter((call) => call.init.method === "POST");
+  assert.equal(writes.length, 1);
+  assert.ok(writes[0]?.url.endsWith("/items/categories/pe/upload"));
+  const body = JSON.parse(String(writes[0]?.init.body));
+  assert.equal(body.item_name, "新建测试模组");
+  assert.equal(body.item_version, "0.1");
+  assert.equal(body.is_check_apply, false);
+  assert.equal(body.res[0].res_url.sign, "test-sign");
+  assert.equal(body.res[0].old_metadata, undefined);
+  assert.equal(body.channel[0].version, undefined);
+  assert.deepEqual(body.mc_version, []);
+  assert.equal(body.sync_item_info, undefined);
+  body.res.push({});
+  assert.equal((buildWorkCreate(newWorkFields()).res as unknown[]).length, 1);
+});
+
+test("create validates missing resources, stale classifications and prices before POST", async () => {
+  for (const patch of [
+    { item_name: " " },
+    { res: [] },
+    { pri_type: 999 },
+    { sub_type: 99 },
+    { mod_version: "obsolete" },
+    { label_type_list: [999] },
+    { price_type: "diamond", price_rank: 1, price: 300 },
+    { res: [{ res_name: "old.zip", res_url: "existing-url", add_version: true }] },
+    { channel: [{ channel_id: 5, channel_url: "https://x19.fp.ps.netease.com/old.png" }] },
+  ]) {
+    const calls = mockFetch((url) => response(url.endsWith("/item-tag/") ? { tag_list: [] } : createConstants));
+    const result = await createWork(session, { account: "a", fields: { ...newWorkFields(), ...patch } });
+    assert.equal(result.ok, false, JSON.stringify(patch));
+    assert.equal(calls.filter((call) => call.init.method === "POST").length, 0);
+  }
+});
+
+test("creation never retries an uncertain POST or hides a platform rejection", async () => {
+  for (const networkFailure of [true, false]) {
+    const calls = mockFetch((url, init) => {
+      if (init.method !== "POST") return response(url.endsWith("/item-tag/") ? { tag_list: [] } : createConstants);
+      if (networkFailure) throw new TypeError("connection lost after sending");
+      return response(undefined, "rejected");
+    });
+    const result = await createWork(session, { account: "a", fields: newWorkFields() });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error.kind, networkFailure ? "network" : "business");
+    assert.equal(calls.filter((call) => call.init.method === "POST").length, 1);
+  }
 });
 
 /** Construct tiny MP4 metadata fixtures without embedding real media files */

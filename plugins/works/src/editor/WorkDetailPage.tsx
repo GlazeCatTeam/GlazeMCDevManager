@@ -2,6 +2,7 @@ import {
   Button,
   callHost,
   Dialog,
+  emptyWorkCreateFields,
   Notice,
   PageHeader,
   Panel,
@@ -35,7 +36,10 @@ const tabs = [
 ];
 const diamondPrices = [300, 600, 1000, 2000, 5000, 10000, 20000];
 const editableStatuses = new Set(["init", "online", "reject", "offline", "system_offline"]);
-const drafts = new Map<string, { document: WorkEditorDocument; base: WorkRecord; value: WorkRecord }>();
+const drafts = new Map<
+  string,
+  { document: WorkEditorDocument; base: WorkRecord; value: WorkRecord; uncertain?: boolean }
+>();
 
 interface DetailProps {
   work: WorkSummary;
@@ -43,6 +47,40 @@ interface DetailProps {
   works: WorkSummary[];
   onClose: () => void;
   onSaved: () => void;
+  creating?: boolean;
+}
+
+/** New works use the existing editor without requesting a nonexistent server detail */
+export function WorkCreatePage(props: Omit<DetailProps, "work" | "creating">) {
+  const choices = useHostQuery("works.options", { account: props.account });
+  const [revision, setRevision] = useState(0);
+  const work: WorkSummary = {
+    itemId: "",
+    name: "新增作品",
+    status: "init",
+    price: 0,
+    priceType: "free",
+    isOriginal: true,
+    syncPc: false,
+    isPrerequisite: false,
+    weakOffline: false,
+    weakOfflineReason: null,
+    createTime: "",
+    applyReviewTime: null,
+  };
+  return (
+    <Editor
+      {...props}
+      key={revision}
+      creating
+      work={work}
+      initial={{ itemId: "", status: "init", version: "0.1", modCode: "", guides: [], fields: emptyWorkCreateFields() }}
+      choices={choices.data}
+      optionsError={choices.error?.message ?? null}
+      reloadOptions={choices.reload}
+      reload={() => setRevision((v) => v + 1)}
+    />
+  );
 }
 
 /** Full-page details reuse the workbench shell and reload with the captured account */
@@ -84,6 +122,7 @@ function Section({
   dirty,
   save,
   children,
+  creating = false,
 }: {
   section: WorkSection;
   title: string;
@@ -91,14 +130,17 @@ function Section({
   dirty: (section: WorkSection) => boolean;
   save: (section: WorkSection) => void;
   children: ReactNode;
+  creating?: boolean;
 }) {
   return (
     <Panel
       title={title}
       actions={
-        <TextButton disabled={disabled || !dirty(section)} onClick={() => save(section)}>
-          更新此分区
-        </TextButton>
+        !creating && (
+          <TextButton disabled={disabled || !dirty(section)} onClick={() => save(section)}>
+            更新此分区
+          </TextButton>
+        )
       }
     >
       {children}
@@ -132,9 +174,9 @@ function Editor({
   const alive = useRef(true);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [uncertain, setUncertain] = useState(false);
+  const [uncertain, setUncertain] = useState(restored?.uncertain ?? false);
   const [tagInput, setTagInput] = useState("");
-  const [confirm, setConfirm] = useState<"back" | "reload" | "review" | null>(null);
+  const [confirm, setConfirm] = useState<"back" | "reload" | "review" | "create" | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const dirtyKeys = Object.keys(value).filter(
     (key) => JSON.stringify(value[key] ?? null) !== JSON.stringify(base[key] ?? null),
@@ -147,9 +189,9 @@ function Editor({
   const availableTabs = value.sync_pc_flag ? [...tabs, { id: "pc", label: "PC 同步" }] : tabs;
 
   useEffect(() => {
-    if (JSON.stringify(base) === JSON.stringify(value)) drafts.delete(draftKey);
-    else drafts.set(draftKey, { document, base, value });
-  }, [draftKey, document, base, value]);
+    if (JSON.stringify(base) === JSON.stringify(value) && !uncertain) drafts.delete(draftKey);
+    else drafts.set(draftKey, { document, base, value, uncertain });
+  }, [draftKey, document, base, value, uncertain]);
 
   useEffect(() => {
     alive.current = true;
@@ -243,8 +285,40 @@ function Editor({
     }
   };
   const save = (section?: WorkSection) => {
+    if (props.creating) {
+      setConfirm("create");
+      return;
+    }
     void run(async () => {
       await persist(section);
+    });
+  };
+
+  /** Keep an uncertain draft locked across navigation; never retry creation automatically */
+  const create = () => {
+    setConfirm(null);
+    void run(async () => {
+      drafts.set(draftKey, { document, base, value, uncertain: true });
+      const result = await callHost("works.create", { account: props.account, fields: value }).catch(() => ({
+        ok: false as const,
+        error: { kind: "internal", message: "无法确认主进程的创建响应" },
+      }));
+      if (result.ok) {
+        drafts.delete(draftKey);
+        if (alive.current) props.onSaved();
+        return;
+      }
+      const unknown =
+        ["network", "timeout", "internal", "account_changed"].includes(result.error.kind) ||
+        result.error.message.includes("数据格式无法识别");
+      drafts.set(draftKey, { document, base, value, uncertain: unknown });
+      if (!alive.current) return;
+      setUncertain(unknown);
+      setError(
+        unknown
+          ? `${result.error.message}。创建结果尚不确定，请返回列表刷新核对，避免重复创建。`
+          : result.error.message,
+      );
     });
   };
 
@@ -257,7 +331,7 @@ function Editor({
     setMessage("选择文件并上传中，请稍候…");
     try {
       const result = await callHost("works.upload", {
-        itemId: props.work.itemId,
+        ...(props.creating ? {} : { itemId: props.work.itemId }),
         account: props.account,
         kind,
         platform,
@@ -269,7 +343,13 @@ function Editor({
         setMessage("");
         return null;
       }
-      setMessage(result.value ? "文件已上传，请保存对应分区以应用到作品" : "已取消文件选择");
+      setMessage(
+        result.value
+          ? props.creating
+            ? "文件已上传，创建作品时会一并保存"
+            : "文件已上传，请保存对应分区以应用到作品"
+          : "已取消文件选择",
+      );
       return result.value;
     } catch (caught) {
       if (alive.current) setError(caught instanceof Error ? caught.message : "上传失败");
@@ -314,7 +394,7 @@ function Editor({
     change("tag", [...existing, { name, source: 0 }]);
     setTagInput("");
   };
-  const common = { disabled, dirty, save };
+  const common = { disabled, dirty, save, creating: props.creating ?? false };
   const peType = number(value.pri_type);
   const resources = rows(value.res);
   const resource = resources[0];
@@ -325,27 +405,40 @@ function Editor({
         <TextButton disabled={busy} onClick={() => (dirtyKeys.length ? setConfirm("back") : props.onClose())}>
           ‹ 返回作品管理
         </TextButton>
-        <span>/ 模组详情</span>
-        <Tag>{statusLabels[document.status]}</Tag>
+        <span>/ {props.creating ? "新增作品" : "模组详情"}</span>
+        <Tag>{props.creating ? "未创建" : statusLabels[document.status]}</Tag>
       </div>
       <PageHeader
         title={text(value.item_name) || props.work.name}
         subtitle={`资源版本 ${document.version || "—"} · ${value.sync_pc_flag ? "PE + PC" : "PE"}`}
         actions={
           <>
-            <Button disabled={busy} onClick={() => (dirtyKeys.length ? setConfirm("reload") : reload())}>
-              刷新
+            <Button disabled={busy} onClick={() => (dirtyKeys.length || uncertain ? setConfirm("reload") : reload())}>
+              {props.creating ? "重置表单" : "刷新"}
             </Button>
-            <Button disabled={disabled} onClick={() => setConfirm("review")}>
-              提交审核
-            </Button>
-            <Button variant="primary" disabled={disabled || !dirtyKeys.length} onClick={() => save()}>
-              {busy ? "处理中…" : "保存"}
+            {!props.creating && (
+              <Button disabled={disabled} onClick={() => setConfirm("review")}>
+                提交审核
+              </Button>
+            )}
+            <Button
+              variant="primary"
+              disabled={disabled || !dirtyKeys.length || (props.creating && (!choices || !!optionsError))}
+              onClick={() => save()}
+            >
+              {busy ? "处理中…" : props.creating ? "创建作品" : "保存"}
             </Button>
           </>
         }
       />
       {error && <Notice>{error}</Notice>}
+      {props.creating && (
+        <Notice>
+          {uncertain
+            ? "上次创建结果尚未确认，请先返回作品列表核对。重置表单不会撤销已发送的创建请求。"
+            : "填写作品信息并上传资源后创建。创建不会自动提交审核；PC 同步及关联模组可在创建后配置。"}
+        </Notice>
+      )}
       {message && (
         <div className={styles.success} role="status">
           {message}
@@ -378,7 +471,7 @@ function Editor({
               <div className={styles.stack}>
                 <div className={styles.meta}>
                   <Field label="资源 ID">
-                    <span className={styles.mono}>{props.work.itemId}</span>
+                    <span className={styles.mono}>{props.work.itemId || "创建后由平台生成"}</span>
                   </Field>
                   <Field label="模组码">
                     <span className={styles.mono}>{document.modCode || "—"}</span>
@@ -463,7 +556,7 @@ function Editor({
                   <YesNo
                     label="是否为关联模组"
                     value={dlc.dlc_switch === true}
-                    disabled={disabled}
+                    disabled={disabled || props.creating === true}
                     onChange={(v) =>
                       change("dlc_info", {
                         ...dlc,
@@ -475,7 +568,7 @@ function Editor({
                   <YesNo
                     label="同步生成 PC 模组"
                     value={value.sync_pc_flag === true}
-                    disabled={disabled}
+                    disabled={disabled || props.creating === true}
                     onChange={(v) => change("sync_pc_flag", v)}
                   />
                 </div>
@@ -527,11 +620,42 @@ function Editor({
             <Section section="price" title="资源定价" {...common}>
               <div className={styles.stack}>
                 <Field label="定价类型">
-                  <Tag>
-                    {value.price_type === "diamond" ? "钻石" : value.price_type === "point" ? "绿宝石" : "免费"}
-                  </Tag>
+                  {props.creating ? (
+                    <select
+                      className={styles.input}
+                      aria-label="定价类型"
+                      value={text(value.price_type)}
+                      disabled={disabled || !choices}
+                      onChange={(e) => {
+                        const type = e.target.value;
+                        change("price_type", type);
+                        change("price_rank", type === "diamond" ? 0 : type === "point" ? -5 : -4);
+                        change(
+                          "price",
+                          type === "diamond" ? 300 : (choices?.prices.find((p) => p.id === type)?.min ?? 0),
+                        );
+                      }}
+                    >
+                      <option value="free">免费</option>
+                      {choices?.prices
+                        .filter((p) => ["diamond", "point"].includes(p.id))
+                        .map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.title}
+                          </option>
+                        ))}
+                    </select>
+                  ) : (
+                    <Tag>
+                      {value.price_type === "diamond" ? "钻石" : value.price_type === "point" ? "绿宝石" : "免费"}
+                    </Tag>
+                  )}
                 </Field>
-                <p className={styles.hint}>已有作品保留原定价类型；前置模组强制免费。</p>
+                <p className={styles.hint}>
+                  {props.creating
+                    ? "请确认定价类型，创建后此处不可切换。"
+                    : "已有作品保留原定价类型；前置模组强制免费。"}
+                </p>
                 {value.price_type === "diamond" ? (
                   <Select
                     label="钻石价格档位"
@@ -725,6 +849,7 @@ function Editor({
               upload={upload}
               update={save}
               dirty={dirty}
+              creating={props.creating ?? false}
             />
           )}
           {tab === "release" && (
@@ -905,11 +1030,18 @@ function Editor({
             <dl className={styles.summary}>
               <div>
                 <dt>状态</dt>
-                <dd>{statusLabels[document.status]}</dd>
+                <dd>{props.creating ? "未创建" : statusLabels[document.status]}</dd>
               </div>
               <div>
                 <dt>价格</dt>
-                <dd>{priceText({ ...props.work, price: number(value.price) })}</dd>
+                <dd>
+                  {priceText({
+                    ...props.work,
+                    price: number(value.price),
+                    priceType:
+                      value.price_type === "diamond" ? "diamond" : value.price_type === "point" ? "point" : "free",
+                  })}
+                </dd>
               </div>
               <div>
                 <dt>资源版本</dt>
@@ -921,7 +1053,11 @@ function Editor({
               </div>
             </dl>
             <span className={styles.hint}>
-              {dirtyKeys.length ? `${dirtyKeys.length} 项修改尚未保存` : "与当前已加载详情一致"}
+              {props.creating
+                ? "所有分区将在创建时一并提交"
+                : dirtyKeys.length
+                  ? `${dirtyKeys.length} 项修改尚未保存`
+                  : "与当前已加载详情一致"}
             </span>
           </Panel>
           <Panel title="快速定位">
@@ -934,12 +1070,18 @@ function Editor({
         </aside>
       </div>
       <div className={styles.footer}>
-        <span>{busy ? "正在处理，请勿重复提交" : "分区更新仅保存当前分区，保存按钮提交全部修改"}</span>
+        <span>
+          {busy
+            ? "正在处理，请勿重复提交"
+            : props.creating
+              ? "所有分区在创建作品时一并保存"
+              : "分区更新仅保存当前分区，保存按钮提交全部修改"}
+        </span>
         <span>{imageChoices.length ? `已加载 ${imageChoices.length} 个 PE 图片位` : "图片位来自平台配置"}</span>
       </div>
       {confirm && (
         <Dialog
-          title={confirm === "review" ? "保存并提交审核" : "放弃未保存的修改？"}
+          title={confirm === "create" ? "确认创建作品" : confirm === "review" ? "保存并提交审核" : "放弃未保存的修改？"}
           onClose={() => !busy && setConfirm(null)}
           actions={
             <>
@@ -948,7 +1090,8 @@ function Editor({
                 variant="primary"
                 disabled={busy}
                 onClick={() => {
-                  if (confirm === "review") submit();
+                  if (confirm === "create") create();
+                  else if (confirm === "review") submit();
                   else {
                     const action = confirm;
                     drafts.delete(draftKey);
@@ -958,15 +1101,19 @@ function Editor({
                   }
                 }}
               >
-                {confirm === "review" ? "确认提交审核" : "放弃修改并继续"}
+                {confirm === "create" ? "确认创建" : confirm === "review" ? "确认提交审核" : "放弃修改并继续"}
               </Button>
             </>
           }
         >
           <p className={styles.hint}>
-            {confirm === "review"
-              ? `将保存「${text(value.item_name)}」的全部修改，再向网易提交审核。提交后编辑将暂时锁定。`
-              : "离开后，这些修改不会写入网易平台。"}
+            {confirm === "create"
+              ? `将在当前账号下创建「${text(value.item_name)}」，定价为 ${priceText({ ...props.work, price: number(value.price), priceType: value.price_type === "diamond" ? "diamond" : value.price_type === "point" ? "point" : "free" })}。创建后返回作品列表，不会自动提交审核。`
+              : confirm === "review"
+                ? `将保存「${text(value.item_name)}」的全部修改，再向网易提交审核。提交后编辑将暂时锁定。`
+                : props.creating && uncertain
+                  ? "上次创建可能已成功。请先到作品列表刷新核对；放弃草稿或重置不会撤销已发送的请求。"
+                  : "离开后，这些修改不会写入网易平台。"}
           </p>
         </Dialog>
       )}

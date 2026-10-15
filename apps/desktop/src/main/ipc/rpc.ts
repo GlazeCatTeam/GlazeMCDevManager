@@ -3,6 +3,7 @@ import {
   type EventMessage,
   type EventName,
   type EventPayloads,
+  isWorkCreateParams,
   isWorkSaveParams,
   type RankBoard,
   type RankCategory,
@@ -12,6 +13,7 @@ import {
   type RpcResult,
 } from "@glaze/contracts";
 import {
+  createWork,
   estimateIncome,
   getAnalyticsOverview,
   getDeveloperLevel,
@@ -102,6 +104,12 @@ const rankCategories: readonly RankCategory[] = ["mod", "map", "texture", "lobby
 /** Handlers for every RPC method, backed by the session manager */
 function createHandlers(sessions: SessionManager): HandlerTable {
   return {
+    "works.create": (params) => {
+      if (!isWorkCreateParams(params)) throw new CapabilityError("validation", "新建作品参数无效");
+      if (sessions.current()?.id !== params.account)
+        throw new CapabilityError("account_changed", "账号已切换，请重新打开新建页面");
+      return sessions.request(params.account, (session) => createWork(session, params));
+    },
     "works.editor": (params) => {
       const itemId = requireItemId(params);
       return sessions.request(optionalString(params, "account"), (session) => readWorkEditor(session, itemId));
@@ -122,7 +130,7 @@ function createHandlers(sessions: SessionManager): HandlerTable {
       return sessions.request(account, (session) => submitWorkReview(session, itemId));
     },
     "works.upload": (params, event) => {
-      const itemId = requireItemId(params);
+      const itemId = optionalString(params, "itemId") === undefined ? undefined : requireItemId(params);
       const account = requireString(params, "account");
       const kind = optionalOneOf(params, "kind", [
         "resource",
@@ -138,7 +146,7 @@ function createHandlers(sessions: SessionManager): HandlerTable {
       if (!kind || !window || (kind === "image" && channelId === undefined))
         throw new CapabilityError("validation", "上传参数无效");
       return pickAndUploadWorkFile(sessions, window, {
-        itemId,
+        ...(itemId === undefined ? {} : { itemId }),
         account,
         kind,
         platform,

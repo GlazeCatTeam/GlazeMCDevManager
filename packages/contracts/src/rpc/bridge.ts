@@ -3,6 +3,7 @@ import type { AccountChanged, AccountSummary, InitialRoute, LoginStep } from "./
 import type { AccountParams, AnalyticsOverview, DeveloperLevel } from "./developer";
 import type { IncomeEstimate, IncomeEstimateParams } from "./income";
 import type { RankEntry, RankListParams } from "./rank";
+import type { WorkCreateParams } from "./work-create";
 import type {
   WorkEditorDocument,
   WorkEditorOptions,
@@ -43,6 +44,7 @@ export interface RpcMethods {
   "income.estimate": { params: IncomeEstimateParams | undefined; result: IncomeEstimate };
   "rank.list": { params: RankListParams; result: RankEntry[] };
   "works.list": { params: AccountParams | undefined; result: WorkSummary[] };
+  "works.create": { params: WorkCreateParams; result: undefined };
   "works.get": { params: WorkParams; result: WorkDetail };
   "works.reviewFeedback": { params: WorkParams; result: WorkReviewFeedback | null };
   "works.editor": { params: WorkParams; result: WorkEditorDocument };

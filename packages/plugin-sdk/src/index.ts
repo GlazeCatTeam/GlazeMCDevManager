@@ -29,7 +29,7 @@ export type {
   WorkUploadKind,
   WorkValue,
 } from "@glaze/contracts";
-export { isWorkRecord, remoteImageUrl, workSections } from "@glaze/contracts";
+export { emptyWorkCreateFields, isWorkRecord, remoteImageUrl, workSections } from "@glaze/contracts";
 export * from "@glaze/ui";
 export { type Navigation, NavigationProvider, type RouteParams, useNavigation } from "./context/navigation";
 export {
