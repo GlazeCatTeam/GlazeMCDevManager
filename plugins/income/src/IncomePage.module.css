@@ -1,0 +1,150 @@
+.page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 36px 40px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.platforms,
+.filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.muted,
+.hint,
+.details dt {
+  color: var(--g-text-muted);
+  font-size: 12px;
+}
+
+.hint {
+  margin: 0;
+  line-height: 1.7;
+}
+
+.filters {
+  justify-content: flex-start;
+  padding-bottom: 16px;
+  border-bottom: var(--g-border-width) solid var(--g-border-subtle);
+}
+
+.filters label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--g-text-muted);
+}
+
+.filters select {
+  min-height: 34px;
+  padding: 4px 12px;
+  border: var(--g-border-width) solid var(--g-field-borderColor);
+  border-radius: var(--g-radius-control);
+  background: var(--g-surface-sunken);
+  color: var(--g-text-primary);
+  font: inherit;
+}
+
+.filters select:focus-visible {
+  outline: 2px solid var(--g-focus-ring);
+  outline-offset: 2px;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th,
+.table td {
+  padding: 16px 12px;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: var(--g-border-width) solid var(--g-border-subtle);
+}
+
+.table thead th {
+  font-size: 12px;
+  font-weight: normal;
+  color: var(--g-text-muted);
+}
+
+.table th:first-child,
+.table td:nth-last-child(2) {
+  text-align: left;
+}
+
+.table tr[data-selected="true"] {
+  background: var(--g-surface-sunken);
+}
+
+.table .detailRow > td {
+  padding: 0;
+  text-align: left;
+  white-space: normal;
+  background: var(--g-surface-sunken);
+}
+
+.detailPanel {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.state {
+  padding: 48px 16px;
+  text-align: center;
+  color: var(--g-text-muted);
+}
+
+.details {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 24px;
+  margin: 12px 0;
+}
+
+.details dd {
+  margin: 8px 0 0;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.carryover {
+  border-top: var(--g-border-width) solid var(--g-border-subtle);
+  padding-top: 8px;
+}
+
+.carryover h3 {
+  font-size: 13px;
+}
+
+@media (max-width: 1100px) {
+  .details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding: 24px 20px;
+  }
+
+  .details {
+    gap: 18px 12px;
+  }
+}

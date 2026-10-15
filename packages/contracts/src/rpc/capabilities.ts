@@ -122,6 +122,26 @@ export const capabilities: Record<RpcMethod, Capability> = {
         "返回整个账号的钻石收益和下载量概览：本月与上月、昨日与近 14 日日均。数值来自网易平台，不含作品明细。参数 account 可选，默认当前账号。",
     },
   },
+  "income.list": {
+    caller: "any",
+    permission: "netease:income.read",
+    risk: "read",
+    mcp: {
+      title: "月度收益记录",
+      description:
+        "查询网易平台的月度结算记录与汇总。platform 必填：pe 手机版、pc 电脑版；account 可选，默认当前账号。金额单位为元，缺失金额为 null；availableYuan 可能包含历史月份，不可跨记录累加。本能力只查询，不申请结算。",
+    },
+  },
+  "income.detail": {
+    caller: "any",
+    permission: "netease:income.read",
+    risk: "read",
+    mcp: {
+      title: "收益结算详情",
+      description:
+        "按 income.list 返回的记录 id 查询收益、扣费、激励和可结算月份。account 可选，默认当前账号。不返回银行和身份信息，不申请结算。",
+    },
+  },
   "income.estimate": {
     caller: "any",
     permission: "netease:income.read",

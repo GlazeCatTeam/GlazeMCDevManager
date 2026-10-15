@@ -10,6 +10,8 @@ import {
   isCommentReplyParams,
   isFeedbackListParams,
   isFeedbackReplyParams,
+  isIncomeDetailParams,
+  isIncomeListParams,
   isLogQuery,
   isMessageId,
   isMessageIds,
@@ -33,6 +35,8 @@ import {
   getAnalyticsPeriodIncome,
   getAnalyticsRealtime,
   getDeveloperLevel,
+  getIncomeDetail,
+  getIncomeList,
   getMessage,
   getMessageUnreadCount,
   getRankList,
@@ -376,6 +380,14 @@ function createHandlers(
       if (!params || !isAnalyticsDate(params.date) || !isAnalyticsResourceIds(params.resourceIds))
         throw new CapabilityError("internal", "实时收益日期或资源参数无效");
       return sessions.request(optionalString(params, "account"), (session) => getAnalyticsRealtime(session, params));
+    },
+    "income.list": (params) => {
+      if (!isIncomeListParams(params)) throw new CapabilityError("internal", "收益平台参数无效");
+      return sessions.request(optionalString(params, "account"), (session) => getIncomeList(session, params));
+    },
+    "income.detail": (params) => {
+      if (!isIncomeDetailParams(params)) throw new CapabilityError("internal", "收益记录参数无效");
+      return sessions.request(optionalString(params, "account"), (session) => getIncomeDetail(session, params));
     },
     "income.estimate": (params) => {
       const month = optionalString(params, "month") ?? monthOf(new Date());

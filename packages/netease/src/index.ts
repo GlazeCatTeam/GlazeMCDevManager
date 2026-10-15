@@ -9,6 +9,7 @@ export {
 export { listComments, replyComment } from "./endpoints/comments";
 export { getAnalyticsOverview, getDeveloperLevel } from "./endpoints/developer";
 export { listFeedback, readFeedbackLog, replyFeedback } from "./endpoints/feedback";
+export { getIncomeDetail, getIncomeList } from "./endpoints/income";
 export {
   deleteMessages,
   getMessage,

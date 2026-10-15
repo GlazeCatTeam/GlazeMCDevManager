@@ -1,0 +1,16 @@
+{
+  "id": "glaze.income",
+  "name": "收益管理",
+  "version": "0.0.0",
+  "publisher": "glaze",
+  "description": "手机版与电脑版月度收益、结算状态及收益详情",
+  "engines": { "glaze": "^0.1.0" },
+  "entries": { "ui": "src/index.ts" },
+  "activationEvents": ["onPage:income"],
+  "contributes": {
+    "pages": [{ "id": "income", "title": "收益管理" }],
+    "navItems": [{ "page": "income", "icon": "nav.income", "group": "top", "order": 40 }],
+    "widgets": []
+  },
+  "permissions": ["netease:income.read"]
+}

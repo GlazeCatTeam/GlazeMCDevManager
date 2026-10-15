@@ -14,7 +14,15 @@ import type { CommentListParams, CommentPage, CommentReplyParams } from "./comme
 import type { AccountParams, AnalyticsOverview, DeveloperLevel } from "./developer";
 import type { FeedbackListParams, FeedbackPageData, FeedbackReplyParams } from "./feedback";
 import type { CacheClearResult, GeneralSettings, GeneralState } from "./general";
-import type { IncomeEstimate, IncomeEstimateParams, IncomePlatform } from "./income";
+import type {
+  IncomeDetail,
+  IncomeDetailParams,
+  IncomeEstimate,
+  IncomeEstimateParams,
+  IncomeList,
+  IncomeListParams,
+  IncomePlatform,
+} from "./income";
 import type { LogPage, LogQuery } from "./logs";
 import type { MessageContent, MessageDeleteParams, MessageListParams, MessagePage, MessageParams } from "./messages";
 import type { PluginInstallPreview, PluginSnapshot } from "./plugins";
@@ -91,6 +99,8 @@ export interface RpcMethods {
   "analytics.monthly": { params: AnalyticsRangeParams; result: AnalyticsRecord[] };
   "analytics.realtime": { params: AnalyticsRealtimeParams; result: AnalyticsRealtime };
   "income.estimate": { params: IncomeEstimateParams | undefined; result: IncomeEstimate };
+  "income.list": { params: IncomeListParams; result: IncomeList };
+  "income.detail": { params: IncomeDetailParams; result: IncomeDetail };
   "rank.list": { params: RankListParams; result: RankEntry[] };
   "works.list": { params: (AccountParams & { platform?: IncomePlatform }) | undefined; result: WorkSummary[] };
   "works.page": { params: WorkPageParams; result: WorkPage };

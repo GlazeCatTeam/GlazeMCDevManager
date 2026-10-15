@@ -18,6 +18,7 @@
     "@glaze/plugin-analytics": "workspace:*",
     "@glaze/plugin-community": "workspace:*",
     "@glaze/plugin-home": "workspace:*",
+    "@glaze/plugin-income": "workspace:*",
     "@glaze/plugin-messages": "workspace:*",
     "@glaze/plugin-sdk": "workspace:*",
     "@glaze/plugin-settings": "workspace:*",

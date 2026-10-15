@@ -196,6 +196,9 @@ importers:
       '@glaze/plugin-home':
         specifier: workspace:*
         version: link:../../plugins/home
+      '@glaze/plugin-income':
+        specifier: workspace:*
+        version: link:../../plugins/income
       '@glaze/plugin-messages':
         specifier: workspace:*
         version: link:../../plugins/messages
@@ -341,6 +344,19 @@ importers:
         version: 19.3.0
 
   plugins/home:
+    dependencies:
+      '@glaze/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
+    devDependencies:
+      '@types/react':
+        specifier: ^19.3.0
+        version: 19.3.0
+      react:
+        specifier: ^19.3.0
+        version: 19.3.0
+
+  plugins/income:
     dependencies:
       '@glaze/plugin-sdk':
         specifier: workspace:*

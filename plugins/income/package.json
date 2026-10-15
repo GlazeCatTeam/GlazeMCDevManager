@@ -1,0 +1,23 @@
+{
+  "name": "@glaze/plugin-income",
+  "version": "0.0.0",
+  "private": true,
+  "description": "内置插件：income",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@glaze/plugin-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "react": "^19.3.0"
+  },
+  "peerDependencies": {
+    "react": "^19.3.0"
+  }
+}
