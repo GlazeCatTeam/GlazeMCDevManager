@@ -5,6 +5,13 @@ import styles from "./Sidebar.module.css";
 
 const accountRoute = "glaze.account/account";
 
+const navigationSections = [
+  { label: "首页", routes: ["glaze.home/home"] },
+  { label: "作品与玩家", routes: ["glaze.works/works", "glaze.community/feedback", "glaze.community/comments"] },
+  { label: "数据与收益", routes: ["glaze.analytics/analytics", "glaze.income/income"] },
+];
+const sectionRoutes = new Set(navigationSections.flatMap((section) => section.routes));
+
 const statusLabels: Record<SessionStatus, string> = {
   active: "会话有效",
   offline: "离线 · 网络异常",
@@ -18,10 +25,17 @@ export interface SidebarProps {
   onNavigate: (route: string) => void;
 }
 
-/** Side navigation with the current account card as the account management entry */
+/** Group workbench navigation by task, with account management anchored below */
 export function Sidebar({ entries, activeRoute, account, onNavigate }: SidebarProps) {
   const accountActive = activeRoute === accountRoute;
+  const topEntries = entries.filter((entry) => entry.group === "top");
+  const sections = navigationSections.map((section) => ({
+    label: section.label,
+    entries: section.routes.flatMap((route) => topEntries.filter((entry) => entry.route === route)),
+  }));
+  sections.push({ label: "其他功能", entries: topEntries.filter((entry) => !sectionRoutes.has(entry.route)) });
 
+  /** Render a route button with its current-page state */
   const renderItem = (entry: NavEntry) => {
     const active = entry.route === activeRoute;
     return (
@@ -40,9 +54,17 @@ export function Sidebar({ entries, activeRoute, account, onNavigate }: SidebarPr
 
   return (
     <nav className={styles.sidebar} aria-label="功能导航">
-      {entries.filter((e) => e.group === "top").map(renderItem)}
+      <div className={styles.sections}>
+        {sections
+          .filter((section) => section.entries.length > 0)
+          .map((section) => (
+            <section key={section.label} className={styles.section} aria-label={section.label}>
+              {section.entries.map(renderItem)}
+            </section>
+          ))}
+      </div>
       <div className={styles.spacer} />
-      {entries.filter((e) => e.group === "bottom").map(renderItem)}
+      <div className={styles.utilities}>{entries.filter((e) => e.group === "bottom").map(renderItem)}</div>
       {account && (
         <button
           type="button"
