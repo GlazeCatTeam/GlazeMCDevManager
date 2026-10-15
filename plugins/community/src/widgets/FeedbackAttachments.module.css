@@ -1,0 +1,92 @@
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.group h3 {
+  margin: 0;
+  color: var(--g-text-muted);
+  font-size: 12px;
+}
+
+.count {
+  font-weight: 400;
+}
+
+.images,
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tags {
+  gap: 6px;
+}
+
+.thumbnail {
+  width: 120px;
+  height: 80px;
+  display: flex;
+  overflow: hidden;
+  border: var(--g-border-width) solid var(--g-panel-borderColor);
+}
+
+.thumbnail:hover {
+  border-color: var(--g-text-link);
+}
+
+.thumbnail svg {
+  width: 100%;
+  height: 100%;
+}
+
+.logFile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  margin-bottom: 18px;
+  background: var(--g-surface-app);
+  border: var(--g-border-width) solid var(--g-panel-borderColor);
+  font-size: 12px;
+}
+
+.logFile > strong {
+  flex: none;
+}
+
+.logFile > span {
+  flex: 1;
+  min-width: 0;
+  color: var(--g-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.imagePreview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--g-text-muted);
+  font-size: 12px;
+}
+
+.imagePreview svg {
+  width: 100%;
+  border: var(--g-border-width) solid var(--g-panel-borderColor);
+}
+
+.logPreview {
+  max-height: 320px;
+  overflow: auto;
+  margin: 0;
+  padding: 14px;
+  background: var(--g-surface-sunken);
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}

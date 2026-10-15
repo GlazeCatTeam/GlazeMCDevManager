@@ -1,0 +1,92 @@
+/* Every panel keeps its height as filters and data change; content scrolls inside */
+.filters {
+  height: 128px;
+  flex: none;
+  gap: 16px;
+  padding: 20px 24px;
+  overflow: auto;
+}
+
+.compactFilters {
+  height: 80px;
+  flex: none;
+  justify-content: center;
+  overflow: auto;
+}
+
+.filterRow {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.filterLabel {
+  width: 34px;
+  flex: none;
+  color: var(--g-text-muted);
+  font-size: 12px;
+}
+
+.chips {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dateRange,
+.muted {
+  color: var(--g-text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.pushRight {
+  margin-left: auto;
+}
+
+.trendPanel {
+  height: 394px;
+  flex: none;
+  gap: 10px;
+  overflow: auto;
+}
+
+.chartToolbar {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tablePanel {
+  height: 280px;
+  flex: none;
+  gap: 12px;
+}
+
+.resourcePanel {
+  height: 310px;
+  flex: none;
+}
+
+.realtimeResourcePanel {
+  height: 252px;
+  flex: none;
+}
+
+.ordersPanel {
+  height: 400px;
+  flex: none;
+}
+
+.orderFilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}

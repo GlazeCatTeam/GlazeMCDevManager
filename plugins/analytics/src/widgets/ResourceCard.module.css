@@ -1,0 +1,60 @@
+.grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 14px;
+  overflow: auto;
+}
+
+.card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+  padding: 16px;
+  background: var(--g-surface-app);
+  border: var(--g-border-width) solid var(--g-border-subtle);
+  border-radius: var(--g-radius-panel);
+  font-size: 13px;
+  text-align: left;
+}
+
+button.card:hover {
+  background: var(--g-panel-hoverBg);
+}
+
+.selected {
+  border-color: var(--g-tab-indicator);
+}
+
+.caption {
+  color: var(--g-text-muted);
+  font-size: 12px;
+}
+
+.metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: auto 0 0;
+  font-size: 12px;
+}
+
+.metrics div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.metrics dt {
+  color: var(--g-text-muted);
+}
+
+.metrics dd {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}

@@ -1,4 +1,4 @@
-import { Button, Dialog, Icon, useNavigation } from "@glaze/plugin-sdk";
+import { Button, Dialog, Icon, PageHeader, useNavigation } from "@glaze/plugin-sdk";
 import { useCallback, useState } from "react";
 import styles from "./AccountPage.module.css";
 import {
@@ -50,16 +50,16 @@ export function AccountPage() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.header}>
-        <div className={styles.heading}>
-          <h1 className={styles.title}>账号管理</h1>
-          <span className={styles.subtitle}>切换账号后，所有模块都会使用该账号的会话</span>
-        </div>
-        <Button variant="primary" onClick={() => navigate(routes.login)}>
-          <Icon name="action.add" size={14} />
-          添加账号
-        </Button>
-      </div>
+      <PageHeader
+        title="账号管理"
+        subtitle="切换账号后，所有模块都会使用该账号的会话"
+        actions={
+          <Button variant="primary" onClick={() => navigate(routes.login)}>
+            <Icon name="action.add" size={14} />
+            添加账号
+          </Button>
+        }
+      />
 
       <div className={styles.columns}>
         <div className={styles.column}>

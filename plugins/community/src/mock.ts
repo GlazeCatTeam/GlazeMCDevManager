@@ -24,10 +24,15 @@ export interface FeedbackImage {
   color: string;
 }
 
+export interface FeedbackLog {
+  name: string;
+  content: string;
+}
+
 export interface PlayerFeedback extends CommunityEntry {
   type: FeedbackType;
   images: FeedbackImage[];
-  log?: { name: string; content: string };
+  log?: FeedbackLog;
   conflicts: string[];
 }
 
@@ -37,6 +42,7 @@ export interface PlayerComment extends CommunityEntry {
 }
 
 export const mockToday = "2026-10-15";
+export const MAX_REPLY_LENGTH = 500;
 export const commentTags = ["生存", "冒险", "资源", "建筑", "工具", "趣味"] as const;
 export const dateRanges = ["今天", "近 7 天", "近 30 天", "近 90 天", "全部"] as const;
 export type DateRange = (typeof dateRanges)[number];
@@ -265,7 +271,9 @@ export function filterComments(
 /** Record a local demo reply, leaving blocked or already answered entries unchanged */
 export function replyToEntry<T extends CommunityEntry>(entries: T[], id: string, content: string): T[] {
   const trimmed = content.trim();
-  if (!trimmed || trimmed.length > 500) return entries;
+  if (!trimmed || trimmed.length > MAX_REPLY_LENGTH) {
+    return entries;
+  }
   return entries.map((entry) =>
     entry.id === id && entry.canReply && !entry.reply
       ? { ...entry, canReply: false, reply: { content: trimmed, createdAt: "刚刚 · 本地模拟" } }

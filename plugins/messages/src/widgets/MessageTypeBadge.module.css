@@ -1,0 +1,28 @@
+.badge {
+  flex: none;
+  padding: 2px 5px;
+  border: 1px solid currentColor;
+  font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.system {
+  color: var(--g-chart-series-2);
+}
+
+.important {
+  color: var(--g-status-warning);
+}
+
+.review {
+  color: var(--g-text-danger);
+}
+
+.feedback {
+  color: var(--g-chart-series-3);
+}
+
+.reminder {
+  color: var(--g-text-muted);
+}

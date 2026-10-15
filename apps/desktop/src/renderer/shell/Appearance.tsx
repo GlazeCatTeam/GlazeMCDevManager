@@ -11,6 +11,17 @@ interface AppearanceContextValue {
 
 const AppearanceContext = createContext<AppearanceContextValue | null>(null);
 
+/** Theme variant to apply; Fluent only ships a dark variant, "system" follows the OS */
+function resolveVariant(appearance: AppearanceSettings, systemDark: boolean): "dark" | "light" {
+  if (appearance.themeId === "fluent-dark") {
+    return "dark";
+  }
+  if (appearance.colorMode === "system") {
+    return systemDark ? "dark" : "light";
+  }
+  return appearance.colorMode;
+}
+
 /** Apply session-only appearance preferences across page navigation */
 export function AppearanceProvider({ children }: { children: ReactNode }) {
   const [appearance, setAppearance] = useState<AppearanceSettings>({
@@ -24,14 +35,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     // Resolve system mode whenever the OS preference changes
     const update = () => {
       const theme = appearance.themeId === "fluent-dark" ? fluentDark : oreUi;
-      const variant =
-        appearance.themeId === "fluent-dark"
-          ? "dark"
-          : appearance.colorMode === "system"
-            ? media.matches
-              ? "dark"
-              : "light"
-            : appearance.colorMode;
+      const variant = resolveVariant(appearance, media.matches);
       applyTheme(theme, variant);
       document.documentElement.style.zoom = String(appearance.scale / 100);
       document.documentElement.style.colorScheme = variant;

@@ -1,0 +1,44 @@
+/* Fixed-height log box; records scroll inside */
+.list {
+  height: 350px;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  padding: 14px;
+  background: var(--g-surface-sunken);
+  border: var(--g-border-width) solid var(--g-panel-borderColor);
+  border-radius: var(--g-radius-control);
+}
+
+.entry {
+  display: grid;
+  grid-template-columns: 144px 32px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--g-border-subtle);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.time {
+  color: var(--g-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.level {
+  font-weight: 700;
+}
+
+.info {
+  color: var(--g-status-success);
+}
+
+.warn {
+  color: var(--g-status-warning);
+}
+
+.error {
+  color: var(--g-text-danger);
+}

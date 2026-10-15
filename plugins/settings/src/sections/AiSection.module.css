@@ -1,0 +1,18 @@
+.permissions {
+  padding: 18px;
+  background: var(--g-surface-app);
+  border-radius: var(--g-radius-panel);
+}
+
+.permissions h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.permissions ul {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  color: var(--g-text-muted);
+  font-size: 12px;
+  line-height: 1.9;
+}

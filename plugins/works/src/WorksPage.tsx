@@ -1,4 +1,4 @@
-import { Button, Icon, Pagination } from "@glaze/plugin-sdk";
+import { Button, Icon, PageHeader, Pagination } from "@glaze/plugin-sdk";
 import { useState } from "react";
 import { type Work, works } from "./mock";
 import type { WorkAction, WorkStatus } from "./status";
@@ -29,19 +29,19 @@ export function WorksPage() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.header}>
-        <div className={styles.heading}>
-          <h1 className={styles.title}>作品管理</h1>
-          <span className={styles.subtitle}>{summary(works)}</span>
-        </div>
-        <div className={styles.toolbar}>
-          <Button onClick={noop}>刷新</Button>
-          <Button variant="primary" onClick={noop}>
-            <Icon name="action.add" size={14} />
-            新增作品
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="作品管理"
+        subtitle={summary(works)}
+        actions={
+          <>
+            <Button onClick={noop}>刷新</Button>
+            <Button variant="primary" onClick={noop}>
+              <Icon name="action.add" size={14} />
+              新增作品
+            </Button>
+          </>
+        }
+      />
 
       {works.length > 0 ? (
         <>
@@ -56,7 +56,7 @@ export function WorksPage() {
         <div className={styles.empty}>
           <Icon name="nav.works" size={48} className={styles.emptyIcon} />
           <span className={styles.emptyTitle}>暂无作品</span>
-          <span className={styles.subtitle}>在开发者平台创建作品后，会显示在这里</span>
+          <span className={styles.emptyHint}>在开发者平台创建作品后，会显示在这里</span>
         </div>
       )}
     </div>

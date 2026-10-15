@@ -7,35 +7,6 @@
   gap: 28px;
 }
 
-.header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.heading {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.title {
-  margin: 0;
-  font-size: 28px;
-  font-weight: 900;
-}
-
-.subtitle {
-  color: var(--g-text-muted);
-}
-
-.toolbar {
-  display: flex;
-  gap: 10px;
-}
-
 /* Fixed tile size: three columns, always three 196px rows so the pager stays put */
 .grid {
   margin: 0;
@@ -66,4 +37,8 @@
 .emptyTitle {
   font-size: 16px;
   font-weight: 700;
+}
+
+.emptyHint {
+  color: var(--g-text-muted);
 }

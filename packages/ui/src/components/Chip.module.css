@@ -1,0 +1,40 @@
+.chip {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: none;
+  padding: 0 9px;
+  border: var(--g-border-width) solid var(--g-tag-borderColor);
+  border-radius: var(--g-radius-control);
+  color: var(--g-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.chip:hover {
+  background: var(--g-panel-hoverBg);
+  color: var(--g-text-primary);
+}
+
+.selected,
+.selected:hover {
+  background: var(--g-action-primary-bg);
+  border-color: var(--g-action-primary-edge);
+  color: var(--g-action-primary-text);
+}
+
+.count {
+  min-width: 16px;
+  height: 16px;
+  margin-left: 2px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--g-status-danger);
+  color: var(--g-action-primary-text);
+  font-size: 10px;
+}

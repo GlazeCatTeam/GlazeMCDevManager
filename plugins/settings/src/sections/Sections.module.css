@@ -1,0 +1,26 @@
+/* Layout shared by every settings category */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.muted {
+  color: var(--g-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}

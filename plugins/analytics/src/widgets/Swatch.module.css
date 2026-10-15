@@ -1,0 +1,21 @@
+.swatch {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  display: inline-block;
+  background: currentColor;
+}
+
+.dashed {
+  width: 18px;
+  height: 0;
+  flex: none;
+  display: inline-block;
+  border-top: 2px dashed currentColor;
+}
+
+.name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}

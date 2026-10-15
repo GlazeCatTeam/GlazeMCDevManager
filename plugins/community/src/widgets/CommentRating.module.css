@@ -1,0 +1,13 @@
+.rating {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.drumstick {
+  display: block;
+  flex: none;
+  width: 18px;
+  height: 18px;
+}

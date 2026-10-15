@@ -7,30 +7,6 @@
   gap: 28px;
 }
 
-.header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.heading {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.title {
-  margin: 0;
-  font-size: 28px;
-  font-weight: 900;
-}
-
-.subtitle {
-  color: var(--g-text-muted);
-}
-
 .columns {
   display: flex;
   flex-wrap: wrap;

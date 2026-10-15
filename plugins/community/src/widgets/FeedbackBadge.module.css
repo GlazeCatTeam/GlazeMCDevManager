@@ -1,0 +1,24 @@
+.badge {
+  flex: none;
+  padding: 2px 5px;
+  border: 1px solid currentColor;
+  border-radius: var(--g-radius-control);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.danger {
+  color: var(--g-text-danger);
+}
+
+.warning {
+  color: var(--g-status-warning);
+}
+
+.success {
+  color: var(--g-status-success);
+}
+
+.muted {
+  color: var(--g-text-muted);
+}
