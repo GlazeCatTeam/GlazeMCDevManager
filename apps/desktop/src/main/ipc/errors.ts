@@ -4,7 +4,7 @@ import { describeError, type NeteaseError } from "@glaze/netease";
 /** A capability failure with a kind the renderer can branch on; message is shown to the user */
 export class CapabilityError extends Error {
   constructor(
-    readonly kind: AccountErrorKind | "internal",
+    readonly kind: AccountErrorKind | "internal" | "validation" | "account_changed",
     message: string,
   ) {
     super(message);

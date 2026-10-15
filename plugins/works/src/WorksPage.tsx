@@ -6,19 +6,18 @@ import {
   Pagination,
   TextButton,
   useHostQuery,
+  useSession,
   type WorkStatus,
   type WorkSummary,
 } from "@glaze/plugin-sdk";
 import { useCallback, useState } from "react";
+import { WorkDetailPage } from "./editor/WorkDetailPage";
 import type { WorkAction } from "./status";
 import styles from "./WorksPage.module.css";
 import { ReviewFeedbackDialog } from "./widgets/ReviewFeedbackDialog";
 import { WorkTile } from "./widgets/WorkTile";
 
 const PER_PAGE = 9;
-
-// The detail page does not exist yet
-const noop = () => {};
 
 /** One-line summary under the title */
 function summary(list: WorkSummary[]): string {
@@ -31,22 +30,38 @@ function summary(list: WorkSummary[]): string {
 
 /** Works management: the account's works as fixed-size tiles, nine per page, like MCDevManager's 上架管理 */
 export function WorksPage() {
+  const { current: account } = useSession();
   const works = useHostQuery("works.list");
   const [page, setPage] = useState(0);
   const [feedbackFor, setFeedbackFor] = useState<WorkSummary | null>(null);
+  const [viewing, setViewing] = useState<{ work: WorkSummary; account: string } | null>(null);
   const closeFeedback = useCallback(() => setFeedbackFor(null), []);
+  const closeView = useCallback(() => setViewing(null), []);
 
   const list = works.data ?? [];
   const pageCount = Math.max(1, Math.ceil(list.length / PER_PAGE));
   const current = Math.min(page, pageCount - 1);
   const visible = list.slice(current * PER_PAGE, (current + 1) * PER_PAGE);
 
-  /** Only read actions are connected; write buttons are disabled in the tiles */
+  /** Editing and review actions open the detail page; other writes remain disabled */
   const onAction = (work: WorkSummary, action: WorkAction) => {
     if (action === "viewFeedback") {
       setFeedbackFor(work);
     }
+    if ((action === "update" || action === "submitReview") && account) setViewing({ work, account: account.id });
   };
+
+  if (viewing && viewing.account === account?.id)
+    return (
+      <WorkDetailPage
+        key={`${viewing.account}:${viewing.work.itemId}`}
+        work={viewing.work}
+        account={viewing.account}
+        works={list}
+        onClose={closeView}
+        onSaved={works.reload}
+      />
+    );
 
   return (
     <div className={styles.page}>
@@ -82,7 +97,12 @@ export function WorksPage() {
         <>
           <ul className={styles.grid} aria-label="作品" aria-busy={works.loading}>
             {visible.map((work) => (
-              <WorkTile key={work.itemId} work={work} onAction={onAction} onOpenDetail={noop} />
+              <WorkTile
+                key={work.itemId}
+                work={work}
+                onAction={onAction}
+                onOpenDetail={(work) => account && setViewing({ work, account: account.id })}
+              />
             ))}
           </ul>
           <Pagination page={current} pageCount={pageCount} onChange={setPage} note={`每页 ${PER_PAGE} 个`} />

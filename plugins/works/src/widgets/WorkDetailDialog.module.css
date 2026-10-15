@@ -1,0 +1,50 @@
+/* The platform's banner is about 2:1; keep the box fixed so the dialog does not jump when it loads */
+.banner {
+  display: block;
+  width: 100%;
+  aspect-ratio: 940 / 450;
+  object-fit: cover;
+  margin-bottom: 14px;
+  background: var(--g-surface-sunken);
+  border: var(--g-border-width) solid var(--g-panel-borderColor);
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.rows {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  border-top: var(--g-border-width) solid var(--g-border-divider);
+}
+
+.row dt {
+  flex: none;
+}
+
+.row dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--g-text-primary);
+  font-weight: 700;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.muted {
+  display: block;
+  margin-top: 8px;
+  font-size: 13px;
+}

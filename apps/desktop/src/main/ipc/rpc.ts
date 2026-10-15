@@ -3,6 +3,7 @@ import {
   type EventMessage,
   type EventName,
   type EventPayloads,
+  isWorkSaveParams,
   type RankBoard,
   type RankCategory,
   RPC_CHANNEL,
@@ -17,14 +18,20 @@ import {
   getRankList,
   getReviewFeedback,
   getWork,
+  getWorkEditorOptions,
   listWorks,
   monthOf,
   parseMonth,
+  readWorkEditor,
+  saveWorkEditor,
+  submitWorkReview,
 } from "@glaze/netease";
 import { BrowserWindow, type IpcMainInvokeEvent, ipcMain } from "electron";
 import type { SessionManager } from "../session/session-manager";
 import { closeLoginWindow, loginWithOfficialWindow } from "../windows/login-window";
+import { appWindows } from "../windows/main-window";
 import { CapabilityError } from "./errors";
+import { pickAndUploadWorkFile } from "./work-files";
 
 type Handler<M extends RpcMethod> = (
   params: RpcMethods[M]["params"],
@@ -95,6 +102,49 @@ const rankCategories: readonly RankCategory[] = ["mod", "map", "texture", "lobby
 /** Handlers for every RPC method, backed by the session manager */
 function createHandlers(sessions: SessionManager): HandlerTable {
   return {
+    "works.editor": (params) => {
+      const itemId = requireItemId(params);
+      return sessions.request(optionalString(params, "account"), (session) => readWorkEditor(session, itemId));
+    },
+    "works.options": (params) => sessions.request(optionalString(params, "account"), getWorkEditorOptions),
+    "works.save": (params) => {
+      if (!isWorkSaveParams(params)) throw new CapabilityError("validation", "作品保存参数无效");
+      const account = requireString(params, "account");
+      if (sessions.current()?.id !== account)
+        throw new CapabilityError("account_changed", "账号已切换，请重新打开作品");
+      return sessions.request(account, (session) => saveWorkEditor(session, params));
+    },
+    "works.submitReview": (params) => {
+      const itemId = requireItemId(params);
+      const account = requireString(params, "account");
+      if (sessions.current()?.id !== account)
+        throw new CapabilityError("account_changed", "账号已切换，请重新打开作品");
+      return sessions.request(account, (session) => submitWorkReview(session, itemId));
+    },
+    "works.upload": (params, event) => {
+      const itemId = requireItemId(params);
+      const account = requireString(params, "account");
+      const kind = optionalOneOf(params, "kind", [
+        "resource",
+        "image",
+        "banner",
+        "video",
+        "videoCover",
+        "richImage",
+      ] as const);
+      const platform = optionalOneOf(params, "platform", ["pe", "pc"] as const) ?? "pe";
+      const channelId = optionalInteger(params, "channelId", 0, 10000);
+      const window = senderWindow(event);
+      if (!kind || !window || (kind === "image" && channelId === undefined))
+        throw new CapabilityError("validation", "上传参数无效");
+      return pickAndUploadWorkFile(sessions, window, {
+        itemId,
+        account,
+        kind,
+        platform,
+        ...(channelId === undefined ? {} : { channelId }),
+      });
+    },
     "window.minimize": (_params, event) => {
       senderWindow(event)?.minimize();
       return undefined;
@@ -177,6 +227,13 @@ export function registerRpc(sessions: SessionManager): void {
       return { ok: false, error: { kind: "unknown-method", message: `Unknown RPC method: ${String(method)}` } };
     }
     try {
+      if (
+        method.startsWith("works.") &&
+        (!appWindows().some((window) => window.webContents === event.sender) ||
+          event.senderFrame !== event.sender.mainFrame)
+      ) {
+        throw new CapabilityError("internal", "作品接口只允许主界面调用");
+      }
       const handler = handlers[method] as Handler<RpcMethod>;
       const value = await handler((request as { params?: unknown }).params as undefined, event);
       return { ok: true, value };

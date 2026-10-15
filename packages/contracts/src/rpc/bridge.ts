@@ -3,6 +3,14 @@ import type { AccountChanged, AccountSummary, InitialRoute, LoginStep } from "./
 import type { AccountParams, AnalyticsOverview, DeveloperLevel } from "./developer";
 import type { IncomeEstimate, IncomeEstimateParams } from "./income";
 import type { RankEntry, RankListParams } from "./rank";
+import type {
+  WorkEditorDocument,
+  WorkEditorOptions,
+  WorkReviewResult,
+  WorkSaveParams,
+  WorkUpload,
+  WorkUploadParams,
+} from "./work-editor";
 import type { WorkDetail, WorkParams, WorkReviewFeedback, WorkSummary } from "./works";
 
 export const RPC_CHANNEL = "glaze:rpc";
@@ -37,6 +45,11 @@ export interface RpcMethods {
   "works.list": { params: AccountParams | undefined; result: WorkSummary[] };
   "works.get": { params: WorkParams; result: WorkDetail };
   "works.reviewFeedback": { params: WorkParams; result: WorkReviewFeedback | null };
+  "works.editor": { params: WorkParams; result: WorkEditorDocument };
+  "works.options": { params: AccountParams | undefined; result: WorkEditorOptions };
+  "works.save": { params: WorkSaveParams; result: undefined };
+  "works.submitReview": { params: WorkParams; result: WorkReviewResult };
+  "works.upload": { params: WorkUploadParams; result: WorkUpload | null };
 }
 
 export interface EventPayloads {

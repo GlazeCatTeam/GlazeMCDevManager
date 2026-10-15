@@ -4,6 +4,8 @@ export { passportFromCookie, sessionCookieFromInput } from "./auth/cookie";
 export { getAnalyticsOverview, getDeveloperLevel } from "./endpoints/developer";
 export { getRankList } from "./endpoints/rank";
 export { getUserInfo, type UserInfo } from "./endpoints/user";
+export { getWorkEditorOptions, readWorkEditor, saveWorkEditor, submitWorkReview } from "./endpoints/work-editor";
+export { uploadWorkFile } from "./endpoints/work-upload";
 export { getReviewFeedback, getWork, listWorks } from "./endpoints/works";
 export { describeError, fail, type NeteaseError, ok, type Result } from "./errors";
 export type { McDevResponse, NeteaseSession } from "./http/client";

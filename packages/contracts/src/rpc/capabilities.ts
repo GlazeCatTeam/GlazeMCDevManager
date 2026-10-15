@@ -23,6 +23,11 @@ export interface Capability {
 const shellOnly = (permission: string | null, risk: Risk): Capability => ({ caller: "shell", permission, risk });
 
 export const capabilities: Record<RpcMethod, Capability> = {
+  "works.editor": shellOnly("netease:works.read", "read"),
+  "works.options": shellOnly("netease:works.read", "read"),
+  "works.save": shellOnly("netease:works.write", "write"),
+  "works.submitReview": shellOnly("netease:works.write", "write"),
+  "works.upload": shellOnly("netease:works.write", "write"),
   "window.minimize": shellOnly(null, "read"),
   "window.toggleMaximize": shellOnly(null, "read"),
   "window.close": shellOnly(null, "read"),

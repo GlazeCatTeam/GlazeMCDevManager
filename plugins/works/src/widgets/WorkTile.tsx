@@ -8,27 +8,19 @@ import {
   type WorkSummary,
 } from "@glaze/plugin-sdk";
 import { useState } from "react";
-import { formatDate } from "../format";
+import { formatDate, priceText } from "../format";
 import { actionLabels, actionsFor, readActions, statusLabels, statusTones, type WorkAction } from "../status";
 import styles from "./WorkTile.module.css";
 
 export interface WorkTileProps {
   work: WorkSummary;
-  /** Called for read-only actions; write actions are not connected yet */
+  /** Read actions and the editor/review entry point; unsupported writes stay disabled */
   onAction: (work: WorkSummary, action: WorkAction) => void;
   onOpenDetail: (work: WorkSummary) => void;
 }
 
 /** Shown on write actions until they are connected to the platform */
 const WRITE_PENDING = "暂未接入，请在开发者平台操作";
-
-/** Price as shown to players, e.g. "300 钻石" or "免费" */
-function priceText(work: WorkSummary): string {
-  if (work.priceType === "free" || work.price <= 0) {
-    return "免费";
-  }
-  return `${work.price} ${work.priceType === "point" ? "绿宝石" : "钻石"}`;
-}
 
 const toneClass = {
   online: styles.online,
@@ -56,8 +48,7 @@ function Cover({ iconUrl, seed }: { iconUrl: string | null; seed: string }) {
 /** Fixed-size tile for one work: status, price, dates and the actions its status allows */
 export function WorkTile({ work, onAction, onOpenDetail }: WorkTileProps) {
   const detail = useHostQuery("works.get", { itemId: work.itemId });
-  const isFree = work.priceType === "free" || work.price <= 0;
-  const actions = actionsFor(work.status, isFree);
+  const actions = actionsFor(work.status);
   const onlineTime = detail.data?.onlineTime ?? null;
   const dates = onlineTime
     ? `创建 ${formatDate(work.createTime)}  ·  上线 ${formatDate(onlineTime)}`
@@ -87,7 +78,7 @@ export function WorkTile({ work, onAction, onOpenDetail }: WorkTileProps) {
 
       <div className={styles.actions}>
         {actions.map((action) => {
-          const pending = !readActions.has(action);
+          const pending = !readActions.has(action) && action !== "update" && action !== "submitReview";
           return action === "delete" ? (
             <TextButton
               key={action}

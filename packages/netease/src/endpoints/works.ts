@@ -26,7 +26,7 @@ const knownStatuses = new Set<WorkStatus>([
 const priceTypes = new Set<WorkPriceType>(["diamond", "point", "free"]);
 
 /** Platform status string to a known status */
-function readStatus(value: unknown): WorkStatus {
+export function readWorkStatus(value: unknown): WorkStatus {
   const status = readString(value);
   return status !== null && knownStatuses.has(status as WorkStatus) ? (status as WorkStatus) : "unknown";
 }
@@ -43,7 +43,7 @@ function readWork(row: Record<string, unknown>): WorkSummary | null {
   return {
     itemId,
     name,
-    status: readStatus(row.status),
+    status: readWorkStatus(row.status),
     price: readNumber(row.price) ?? 0,
     priceType: priceType !== null && priceTypes.has(priceType as WorkPriceType) ? (priceType as WorkPriceType) : "free",
     isOriginal: row.is_original === true,

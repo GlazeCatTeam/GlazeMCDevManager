@@ -8,7 +8,6 @@ export type WorkAction =
   | "cancelReview"
   | "publish"
   | "update"
-  | "adjustPrice"
   | "cancelTest"
   | "viewFeedback"
   | "appointOnline"
@@ -53,7 +52,6 @@ export const actionLabels: Record<WorkAction, string> = {
   cancelReview: "取消审核",
   publish: "上架",
   update: "更新",
-  adjustPrice: "调整定价",
   cancelTest: "取消自测",
   viewFeedback: "查看反馈",
   appointOnline: "定时上架",
@@ -64,19 +62,18 @@ export const actionLabels: Record<WorkAction, string> = {
 export const readActions: ReadonlySet<WorkAction> = new Set<WorkAction>(["viewFeedback"]);
 
 /** Actions available for a work in this status; viewing details is always available separately */
-export function actionsFor(status: WorkStatus, isFree: boolean): WorkAction[] {
+export function actionsFor(status: WorkStatus): WorkAction[] {
   switch (status) {
     case "online":
-      return isFree ? ["update", "viewFeedback"] : ["update", "adjustPrice", "viewFeedback"];
+    case "reject":
+    case "offline":
+    case "system_offline":
+      return ["update", "viewFeedback"];
     case "init":
       return ["submitReview", "submitSelfTest", "update", "delete"];
     case "preparing":
     case "reviewing":
       return ["cancelReview"];
-    case "reject":
-    case "offline":
-    case "system_offline":
-      return ["update", "viewFeedback"];
     case "accept":
       return ["publish", "appointOnline"];
     case "self_test":

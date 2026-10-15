@@ -15,12 +15,21 @@ export type {
   RpcResult,
   SessionStatus,
   WorkDetail,
+  WorkEditorDocument,
+  WorkEditorOptions,
+  WorkImageSlot,
+  WorkOption,
   WorkPriceType,
+  WorkRecord,
   WorkReviewFeedback,
+  WorkSection,
   WorkStatus,
   WorkSummary,
+  WorkUpload,
+  WorkUploadKind,
+  WorkValue,
 } from "@glaze/contracts";
-export { remoteImageUrl } from "@glaze/contracts";
+export { isWorkRecord, remoteImageUrl, workSections } from "@glaze/contracts";
 export * from "@glaze/ui";
 export { type Navigation, NavigationProvider, type RouteParams, useNavigation } from "./context/navigation";
 export {
