@@ -74,6 +74,7 @@ export function useCommentReplies(account: string) {
   };
 
   return {
+    confirmedReplies: replies,
     draftOf: (id: string) => drafts.get(id) ?? "",
     replyOf: (id: string) => replies.get(id),
     statusOf: (id: string) => statuses.get(id) ?? "",

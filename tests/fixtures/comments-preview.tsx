@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   type AccountSummary,
@@ -27,6 +27,7 @@ const account: AccountSummary = {
 let failure = false;
 let delay = 100;
 let replyRequests = 0;
+let listRequests = 0;
 const sentReplies = new Map<string, string>();
 
 /** Fixture bridge supports pagination, filtering, failures and intentionally late responses */
@@ -44,6 +45,9 @@ const rpc: GlazeBridge["rpc"] = async (method, input) => {
   }
   if (method !== "comments.list") throw new Error(`Unexpected method: ${method}`);
   const params = input as CommentListParams;
+  listRequests++;
+  const listCount = document.getElementById("list-count");
+  if (listCount) listCount.textContent = `列表请求数：${listRequests}`;
   const output = document.getElementById("query");
   if (output) output.textContent = JSON.stringify(params);
   const failed = failure;
@@ -116,6 +120,7 @@ function Preview() {
           {slow ? "正常延迟" : "慢速请求"}
         </button>
         <output id="query" />
+        <output id="list-count">列表请求数：0</output>
         <output id="reply-count">回复请求数：0</output>
       </div>
       <CommentsPage />
@@ -125,4 +130,8 @@ function Preview() {
 
 const container = document.getElementById("root");
 if (!container) throw new Error("Missing preview root");
-createRoot(container).render(<Preview />);
+createRoot(container).render(
+  <StrictMode>
+    <Preview />
+  </StrictMode>,
+);

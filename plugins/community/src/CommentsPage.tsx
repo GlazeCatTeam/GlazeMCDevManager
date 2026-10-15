@@ -13,8 +13,9 @@ import {
   TextButton,
   useSession,
 } from "@glaze/plugin-sdk";
-import { useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import styles from "./CommunityPage.module.css";
+import { CommentPageCache } from "./comment-cache";
 import {
   COMMENTS_PER_PAGE,
   type CommentDateRange,
@@ -31,6 +32,7 @@ import { EntryList } from "./widgets/EntryList";
 import { DeveloperResponse, EntryIdentity } from "./widgets/EntryMeta";
 
 const ratings = [5, 4, 3, 2, 1];
+const MemoEntryList = memo(EntryList);
 
 /** Reset filters and selected records whenever the current account changes */
 export function CommentsPage() {
@@ -47,6 +49,7 @@ export function CommentsPage() {
 
 /** Keep server filters separate from the current page's local rating filter */
 function AccountComments({ account }: { account: string }) {
+  const [cache] = useState(() => new CommentPageCache());
   const replies = useCommentReplies(account);
   const [search, setSearch] = useState("");
   const [keyword, setKeyword] = useState("");
@@ -63,6 +66,7 @@ function AccountComments({ account }: { account: string }) {
     ...(keyword ? { keyword } : {}),
     ...(tag ? { tag } : {}),
   };
+  const query = useComments(params, revision, cache);
 
   useEffect(() => {
     if (search.trim() === keyword) return;
@@ -74,14 +78,27 @@ function AccountComments({ account }: { account: string }) {
   }, [search, keyword]);
 
   /** Refresh the current query without discarding the last successful page */
-  const refresh = () => setRevision((value) => value + 1);
+  const refresh = () => {
+    cache.expire();
+    setRevision((value) => value + 1);
+  };
+
+  /** Reply confirmation must not reuse a read started before the write */
+  const refreshAfterReply = () => {
+    cache.clear();
+    setRevision((value) => value + 1);
+  };
 
   return (
     <div className={styles.page}>
       <PageHeader
         title="玩家评论"
         subtitle="网易平台评论 · 每页 20 条"
-        actions={<Button onClick={refresh}>刷新</Button>}
+        actions={
+          <Button onClick={refresh} disabled={query.loading}>
+            {query.loading ? "刷新中…" : "刷新"}
+          </Button>
+        }
       />
       <section className={styles.filters} aria-label="评论筛选">
         <div className={styles.filterRow}>
@@ -149,12 +166,12 @@ function AccountComments({ account }: { account: string }) {
       </section>
       <CommentResults
         key={JSON.stringify(params)}
-        params={params}
+        query={query}
         stars={stars}
         page={page}
         onPage={setPage}
-        revision={revision}
         onRefresh={refresh}
+        onReplySent={refreshAfterReply}
         replies={replies}
       />
     </div>
@@ -162,25 +179,31 @@ function AccountComments({ account }: { account: string }) {
 }
 
 interface CommentResultsProps {
-  params: CommentListParams;
+  query: ReturnType<typeof useComments>;
   stars: number[];
   page: number;
   onPage: (page: number) => void;
-  revision: number;
   onRefresh: () => void;
+  onReplySent: () => void;
   replies: ReturnType<typeof useCommentReplies>;
 }
 
 /** A query-keyed panel prevents previous filters or accounts from leaking into a new result */
-function CommentResults({ params, stars, page, onPage, revision, onRefresh, replies }: CommentResultsProps) {
-  const query = useComments(params, revision);
+function CommentResults({ query, stars, page, onPage, onRefresh, onReplySent, replies }: CommentResultsProps) {
   const [selectedId, setSelectedId] = useState<string>();
-  const entries = (query.data?.items ?? []).map((item) => {
-    const entry = commentEntry(item);
-    const content = replies.replyOf(entry.id);
-    return content ? { ...entry, canReply: false, reply: entry.reply ?? { content, createdAt: "" } } : entry;
-  });
-  const visible = entries.filter((entry) => stars.length === 0 || stars.includes(entry.stars));
+  const entries = useMemo(
+    () =>
+      (query.data?.items ?? []).map((item) => {
+        const entry = commentEntry(item);
+        const content = replies.confirmedReplies.get(entry.id);
+        return content ? { ...entry, canReply: false, reply: entry.reply ?? { content, createdAt: "" } } : entry;
+      }),
+    [query.data, replies.confirmedReplies],
+  );
+  const visible = useMemo(
+    () => entries.filter((entry) => stars.length === 0 || stars.includes(entry.stars)),
+    [entries, stars],
+  );
   const selected = visible.find((entry) => entry.id === selectedId) ?? visible[0];
   const pageCount = Math.max(1, Math.ceil((query.data?.total ?? 0) / COMMENTS_PER_PAGE));
 
@@ -206,7 +229,9 @@ function CommentResults({ params, stars, page, onPage, revision, onRefresh, repl
       )}
       <div role="status">
         {query.loading
-          ? "正在加载评论…"
+          ? query.data
+            ? "正在更新评论，当前显示上次加载结果…"
+            : "正在加载评论…"
           : query.data
             ? `共 ${query.data.total} 条评论 · 当前页 ${entries.length} 条 · 筛选后 ${visible.length} 条`
             : "评论暂未加载"}
@@ -220,7 +245,7 @@ function CommentResults({ params, stars, page, onPage, revision, onRefresh, repl
             />
           </section>
         ) : (
-          <EntryList
+          <MemoEntryList
             title="评论列表"
             entries={visible}
             selectedId={selected?.id}
@@ -250,7 +275,7 @@ function CommentResults({ params, stars, page, onPage, revision, onRefresh, repl
                 sending={replies.sending}
                 onChange={(content) => replies.setDraft(selected.id, content)}
                 onSend={() => {
-                  void replies.sendReply(selected, onRefresh);
+                  void replies.sendReply(selected, onReplySent);
                 }}
               />
             </>

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
+import type { CommentPage, RpcResult } from "../packages/contracts/src";
 import { capabilities } from "../packages/contracts/src/rpc/capabilities";
 import {
   commentTypes,
@@ -8,11 +9,21 @@ import {
   MAX_COMMENT_REPLY_LENGTH,
 } from "../packages/contracts/src/rpc/comments";
 import { listComments, readCommentPage, replyComment } from "../packages/netease/src/endpoints/comments";
+import { CommentPageCache } from "../plugins/community/src/comment-cache";
 import { commentDates, commentEntry } from "../plugins/community/src/comments-data";
 
 const originalFetch = globalThis.fetch;
 const session = { sessionCookie: "comment-test-session" };
 const params = { start: 0, span: 20 };
+
+/** Controlled requests expose duplicate loads and responses arriving after invalidation */
+function deferredPage() {
+  let resolve!: (result: RpcResult<CommentPage>) => void;
+  const promise = new Promise<RpcResult<CommentPage>>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
 const row = {
   _id: "67cc0123abc",
   iid: "4686664860310207622",
@@ -268,4 +279,100 @@ test("official reply arrays display existing content and prevent duplicate repli
   const result = readCommentPage({ count: 1, data: [{ ...row, developer_reply: [], commented_num: 0 }] });
   assert.ok(result.ok);
   assert.equal(result.value.items[0]?.canReply, true);
+});
+
+test("identical in-flight reads share one request, including effect replay", async () => {
+  const cache = new CommentPageCache();
+  const deferred = deferredPage();
+  let calls = 0;
+  const load = () => {
+    calls++;
+    return deferred.promise;
+  };
+  const first = cache.read("page-1", load);
+  const repeated = cache.read("page-1", load);
+  assert.equal(first, repeated);
+  await Promise.resolve();
+  assert.equal(calls, 1);
+  deferred.resolve({ ok: true, value: { total: 0, items: [] } });
+  await first;
+});
+
+test("revisiting a page within 30 seconds avoids a request; expired rows remain available", async () => {
+  let time = 1000;
+  let calls = 0;
+  const cache = new CommentPageCache(() => time);
+  const data = { total: 0, items: [] };
+  const load = async (): Promise<RpcResult<CommentPage>> => {
+    calls++;
+    return { ok: true, value: data };
+  };
+  await cache.read("page-1", load);
+  time += 29_999;
+  assert.equal(cache.fresh("page-1"), true);
+  await cache.read("page-1", load);
+  assert.equal(calls, 1);
+  time++;
+  assert.equal(cache.fresh("page-1"), false);
+  assert.equal(cache.peek("page-1"), data);
+  await cache.read("page-1", load);
+  assert.equal(calls, 2);
+});
+
+test("manual refresh requests fresh data while repeated refreshes share the pending read", async () => {
+  const cache = new CommentPageCache();
+  await cache.read("page-1", async () => ({ ok: true, value: { total: 0, items: [] } }));
+  cache.expire();
+  assert.equal(cache.fresh("page-1"), false);
+  const deferred = deferredPage();
+  const pending = cache.read("page-1", () => deferred.promise);
+  cache.expire();
+  assert.equal(
+    cache.read("page-1", () => {
+      throw new Error("Duplicate request");
+    }),
+    pending,
+  );
+  deferred.resolve({ ok: true, value: { total: 1, items: [] } });
+  await pending;
+  assert.equal(cache.peek("page-1")?.total, 1);
+});
+
+test("reply invalidation prevents an old pending read from repopulating cached replies", async () => {
+  const cache = new CommentPageCache();
+  const old = deferredPage();
+  const pending = cache.read("page-1", () => old.promise);
+  cache.clear();
+  await cache.read("page-1", async () => ({ ok: true, value: { total: 2, items: [] } }));
+  old.resolve({ ok: true, value: { total: 1, items: [] } });
+  await pending;
+  assert.equal(cache.peek("page-1")?.total, 2);
+});
+
+test("failures preserve rows but never become fresh cache entries or block retry", async () => {
+  const cache = new CommentPageCache();
+  await cache.read("page-1", async () => ({ ok: true, value: { total: 4, items: [] } }));
+  cache.expire();
+  const failed = await cache.read("page-1", () => {
+    throw new Error("offline");
+  });
+  assert.equal(failed.ok, false);
+  assert.equal(cache.peek("page-1")?.total, 4);
+  assert.equal(cache.fresh("page-1"), false);
+  const retry = await cache.read("page-1", async () => ({ ok: true, value: { total: 5, items: [] } }));
+  assert.equal(retry.ok, true);
+  assert.equal(cache.peek("page-1")?.total, 5);
+});
+
+test("query keys and account cache instances are isolated and least recently used pages are evicted", async () => {
+  const cache = new CommentPageCache(Date.now, 30_000, 2);
+  const otherAccount = new CommentPageCache();
+  const load = async (): Promise<RpcResult<CommentPage>> => ({ ok: true, value: { total: 0, items: [] } });
+  await cache.read("page-1", load);
+  await cache.read("page-2", load);
+  await cache.read("page-1", load);
+  await cache.read("filtered-page", load);
+  assert.equal(cache.peek("page-2"), null);
+  assert.notEqual(cache.peek("page-1"), null);
+  assert.equal(otherAccount.peek("page-1"), null);
 });
