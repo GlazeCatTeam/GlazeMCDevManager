@@ -1,8 +1,39 @@
 .pagination {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 8px;
+}
+
+.pageItem,
+.jump {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ellipsis,
+.jump {
+  font-size: 13px;
+  color: var(--g-text-muted);
+}
+
+.input {
+  width: 64px;
+  height: 32px;
+  padding: 0 8px;
+  border: var(--g-border-width) solid var(--g-field-borderColor);
+  border-radius: var(--g-radius-control);
+  background: var(--g-surface-sunken);
+  color: var(--g-text-primary);
+  font: inherit;
+  user-select: text;
+}
+
+.input:focus {
+  outline: 2px solid var(--g-focus-ring);
+  outline-offset: 2px;
 }
 
 .button {
