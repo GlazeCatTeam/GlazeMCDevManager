@@ -41,6 +41,7 @@ import {
   getMessage,
   getMessageUnreadCount,
   getRankList,
+  getRankPage,
   getReviewFeedback,
   getWork,
   getWorkEditorOptions,
@@ -463,6 +464,16 @@ function createHandlers(
       const limit = optionalInteger(params, "limit", 1, 50) ?? 10;
       return sessions.request(optionalString(params, "account"), (session) =>
         getRankList(session, board, category, limit),
+      );
+    },
+    "rank.page": (params) => {
+      const board = optionalOneOf(params, "board", rankBoards);
+      if (!board) throw new CapabilityError("internal", "参数 board 无效");
+      const category = optionalOneOf(params, "category", rankCategories) ?? "mod";
+      const start = optionalInteger(params, "start", 0, 1_000_000) ?? 0;
+      const limit = optionalInteger(params, "limit", 1, 50) ?? 50;
+      return sessions.request(optionalString(params, "account"), (session) =>
+        getRankPage(session, board, category, start, limit),
       );
     },
     "works.list": (params) => {

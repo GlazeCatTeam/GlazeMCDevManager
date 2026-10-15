@@ -49,6 +49,8 @@ export type {
   RankCategory,
   RankChange,
   RankEntry,
+  RankPage,
+  RankPageParams,
   RpcError,
   RpcMethods,
   RpcResult,

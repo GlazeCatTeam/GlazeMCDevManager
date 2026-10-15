@@ -60,10 +60,9 @@ try {
   await page.getByRole("checkbox", { name: "模拟写入失败" }).uncheck();
   await select("110%");
   await select("切换页面");
-  await select("调整默认显示的榜单");
-  const pc = page.getByRole("checkbox", { name: "端游点赞榜" });
-  await pc.click();
-  await page.waitForFunction(() => JSON.parse(localStorage.getItem("fixture.layout") ?? "[]").includes("pc_like"));
+  assert.equal(await page.getByRole("tab").count(), 6);
+  assert.equal(await page.getByRole("button", { name: "调整默认显示的榜单" }).count(), 0);
+  await page.evaluate(() => localStorage.setItem("fixture.layout", JSON.stringify(["pc_like"])));
   await select("切换页面");
   await select("恢复默认");
   await page.getByRole("dialog").getByRole("button", { name: "取消" }).click();
@@ -75,12 +74,9 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), "glaze.theme.fluent-dark");
   await page.screenshot({ path: `${root}/node_modules/.cache/appearance-tests/appearance.png`, fullPage: true });
   await select("切换页面");
-  await select("调整默认显示的榜单");
-  assert.equal(await pc.isChecked(), false);
+  assert.equal(await page.getByRole("tab").count(), 6);
   assert.deepEqual(errors, []);
-  console.log(
-    "PASS: theme, OS mode, zoom, reload, failure/retry, ranking persistence, reset/cancel and reset isolation",
-  );
+  console.log("PASS: theme, OS mode, zoom, reload, failure/retry, all ranking tabs, reset/cancel and reset isolation");
 } finally {
   await browser?.close();
   await server.close();

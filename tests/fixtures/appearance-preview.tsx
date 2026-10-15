@@ -30,7 +30,7 @@ const rpc: GlazeBridge["rpc"] = async (method, params) => {
     value = method === "layout.reset" ? [...defaultRankingBoards] : params;
     localStorage.setItem("fixture.layout", JSON.stringify(value));
     event = "layout.rankingChanged";
-  } else if (method === "rank.list") value = [];
+  } else if (method === "rank.page") value = { items: [], total: 0, nextStart: null };
   else return { ok: false, error: { kind: "fixture", message: `未模拟 ${method}` } };
   if (event) for (const listener of listeners.get(event) ?? []) listener(value as never);
   return { ok: true, value } as Awaited<ReturnType<GlazeBridge["rpc"]>>;
@@ -78,7 +78,7 @@ function Preview() {
             themePreviewStyles={themePreviewStyles}
           />
         ) : (
-          <RankingCard onOpenAll={() => {}} />
+          <RankingCard />
         )}
       </SessionProvider>
     </NavigationProvider>

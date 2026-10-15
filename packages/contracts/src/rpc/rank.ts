@@ -27,3 +27,15 @@ export interface RankListParams extends AccountParams {
   /** 1 to 50, defaults to 10 */
   limit?: number | undefined;
 }
+
+export interface RankPageParams extends RankListParams {
+  /** Zero-based offset in the selected leaderboard */
+  start?: number | undefined;
+}
+
+export interface RankPage {
+  items: RankEntry[];
+  total: number;
+  /** null when the platform has no further rows */
+  nextStart: number | null;
+}

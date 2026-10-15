@@ -2,23 +2,22 @@
   gap: 14px;
 }
 
-.toolbar {
+.tabs {
   position: relative;
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  border-bottom: var(--g-border-width) solid var(--g-border-divider);
-}
-
-.tabs {
-  flex: 1;
+  flex: none;
   min-width: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 2px;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  border-bottom: var(--g-border-width) solid var(--g-border-divider);
+  padding-bottom: 4px;
 }
 
 .tab {
+  flex: none;
+  white-space: nowrap;
   height: 36px;
   padding: 0 10px;
   margin-bottom: calc(-1 * var(--g-border-width));
@@ -41,6 +40,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  min-height: 28px;
 }
 
 .chip {
@@ -67,123 +67,28 @@
   color: var(--g-action-primary-text);
 }
 
-.layoutButton {
-  flex: none;
-  height: 30px;
-  margin-bottom: 4px;
-}
-
-.popover {
-  position: absolute;
-  top: calc(100% + 6px);
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  background: var(--g-surface-panel);
-  border: var(--g-border-width) solid var(--g-border-strong);
-  border-radius: var(--g-radius-panel);
-  box-shadow: var(--g-menu-shadow);
-}
-
-.menu {
-  right: 88px;
-  min-width: 160px;
-  padding: 6px;
-}
-
-.menuItem {
-  height: 32px;
-  padding: 0 10px;
-  font-size: 13px;
-  font-weight: 700;
-  text-align: left;
-}
-
-.menuItem:hover {
-  background: var(--g-nav-hover-bg);
-}
-
-.menuItemActive,
-.menuItemActive:hover {
-  background: var(--g-action-primary-bg);
-  color: var(--g-action-primary-text);
-}
-
-.layout {
-  right: 0;
-  z-index: 3;
-  width: 248px;
-  gap: 10px;
-  padding: 14px;
-}
-
-.layoutTitle {
-  font-weight: 700;
-}
-
-.layoutHint {
-  font-size: 12.5px;
-  color: var(--g-text-muted);
-}
-
-.options {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.option {
+.listArea {
   position: relative;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 32px;
-  padding: 0 6px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
+  flex: 1;
+  min-height: 0;
 }
 
-.option:hover {
-  background: var(--g-nav-hover-bg);
-}
-
-/* The native checkbox stays focusable and announced; the box next to it draws it */
-.nativeCheck {
+.status {
   position: absolute;
-  opacity: 0;
-  width: 1px;
-  height: 1px;
-  margin: 0;
-}
-
-.box {
-  width: 18px;
-  height: 18px;
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: var(--g-border-width) solid var(--g-tag-borderColor);
-  border-radius: var(--g-radius-control);
-  background: var(--g-surface-sunken);
-}
-
-.boxChecked {
-  border-color: var(--g-action-primary-edge);
-  background: var(--g-action-primary-bg);
-  color: var(--g-action-primary-text);
-}
-
-.nativeCheck:focus-visible + .box {
-  outline: var(--g-border-width) solid var(--g-focus-ring);
-  outline-offset: 2px;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: var(--g-surface-panel);
+  color: var(--g-text-muted);
+  font-size: 12px;
 }
 
 .list {
-  flex: 1;
-  min-height: 0;
+  height: 100%;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -196,6 +101,17 @@
   align-items: center;
   gap: 12px;
   padding: 6px 0;
+  min-height: 42px;
+  flex-shrink: 0;
+}
+
+.skeleton {
+  background: var(--g-surface-sunken);
+}
+
+.skeletonTitle {
+  width: 55%;
+  height: 16px;
 }
 
 .item + .item {
@@ -276,11 +192,41 @@
   color: var(--g-trend-flat);
 }
 
-.all {
-  align-self: center;
+.listEnd {
+  flex: none;
+  padding: 12px 0;
+  color: var(--g-text-muted);
+  text-align: center;
+  font-size: 12px;
 }
 
 img.cover {
   object-fit: cover;
+  background: var(--g-surface-sunken);
+}
+
+.coverButton {
+  display: block;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  cursor: zoom-in;
+}
+
+.coverButton img {
+  display: block;
+}
+
+.coverDialog {
+  width: 680px;
+  overflow-wrap: anywhere;
+}
+
+.coverPreview {
+  display: block;
+  width: 100%;
+  height: min(560px, 60vh);
+  object-fit: contain;
   background: var(--g-surface-sunken);
 }

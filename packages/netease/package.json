@@ -12,5 +12,8 @@
   },
   "dependencies": {
     "@glaze/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5"
   }
 }

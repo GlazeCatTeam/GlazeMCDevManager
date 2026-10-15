@@ -17,7 +17,7 @@ export {
   listMessages,
   markAllMessagesRead,
 } from "./endpoints/messages";
-export { getRankList } from "./endpoints/rank";
+export { getRankList, getRankPage } from "./endpoints/rank";
 export { getUserInfo, type UserInfo } from "./endpoints/user";
 export { createWork } from "./endpoints/work-create";
 export { getWorkEditorOptions, readWorkEditor, saveWorkEditor, submitWorkReview } from "./endpoints/work-editor";

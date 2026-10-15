@@ -1,24 +1,14 @@
-import {
-  avatarColorsFor,
-  Button,
-  EmptyState,
-  Icon,
-  Notice,
-  Panel,
-  type RankChange,
-  type RankEntry,
-  remoteImageUrl,
-  TextButton,
-  useHostQuery,
-} from "@glaze/plugin-sdk";
+import { EmptyState, Notice, Panel, type RankChange, TextButton } from "@glaze/plugin-sdk";
 import { useEffect, useRef, useState } from "react";
 import { RANK_LIMIT, rankBoards, rankCategories } from "../boards";
-import { useRankingLayout } from "../useRankingLayout";
+import { useRankingQuery } from "../useRankingQuery";
 import styles from "./RankingCard.module.css";
+import { RankingCover } from "./RankingCover";
+
+const skeletonRanks = Array.from({ length: 8 }, (_, index) => index + 1);
 
 export interface RankingCardProps {
   className?: string | undefined;
-  onOpenAll: () => void;
 }
 
 /** Text and style class for a rank change cell */
@@ -35,80 +25,56 @@ function describeChange(change: RankChange): { text: string; className: string |
   }
 }
 
-/** Work icon from the platform; boards that send no icon, or a failed load, show a generated block */
-function Cover({ item }: { item: RankEntry }) {
-  const [failed, setFailed] = useState(false);
-  const src = remoteImageUrl(item.iconUrl);
-  if (src && !failed) {
-    return <img className={styles.cover} src={src} alt="" draggable={false} onError={() => setFailed(true)} />;
-  }
-  const colors = avatarColorsFor(item.itemId ?? item.title);
-  return (
-    <span className={styles.cover} style={{ background: colors.face }} aria-hidden="true">
-      <span className={styles.coverTop} style={{ background: colors.hair }} />
-      <span className={styles.coverMark} style={{ background: colors.eyes }} />
-    </span>
-  );
-}
-
-/** Close a popover when the user clicks outside it or presses Escape */
-function useDismiss(open: boolean, close: () => void) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    const onPointer = (event: PointerEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) {
-        close();
-      }
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        close();
-      }
-    };
-    document.addEventListener("pointerdown", onPointer);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onPointer);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open, close]);
-  return ref;
-}
-
-/** Platform leaderboards with category tabs, sub-category chips and a tab layout picker */
-export function RankingCard({ className, onOpenAll }: RankingCardProps) {
+/** All leaderboard tabs scroll horizontally; real ranking pages append inside the fixed-height list */
+export function RankingCard({ className }: RankingCardProps) {
   const [category, setCategory] = useState(0);
   const [subCategory, setSubCategory] = useState(0);
-  const layout = useRankingLayout();
-  const shown = rankBoards.map(({ board }) => layout.boards.includes(board));
-  const [popover, setPopover] = useState<"none" | "more" | "layout">("none");
-  const toolbarRef = useDismiss(popover !== "none", () => setPopover("none"));
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLOListElement>(null);
+  const endRef = useRef<HTMLLIElement>(null);
 
   const board = rankBoards[category]?.board ?? "pe_hot";
   const hasCategories = board !== "hot_search";
-  const ranking = useHostQuery("rank.list", {
-    board,
-    category: rankCategories[subCategory]?.category ?? "mod",
-    limit: RANK_LIMIT,
-  });
-  const items = ranking.data ?? [];
-  const tabs = rankBoards.map(({ label }, index) => ({ label, index }));
-  const visibleTabs = tabs.filter((tab) => shown[tab.index]);
-  const hiddenTabs = tabs.filter((tab) => !shown[tab.index]);
-  const activeHidden = !shown[category];
+  const ranking = useRankingQuery(board, hasCategories ? (rankCategories[subCategory]?.category ?? "mod") : "mod");
+  const items = ranking.items;
 
-  const pickCategory = (index: number) => {
-    setCategory(index);
-    setPopover("none");
-  };
+  // Use a non-passive wheel listener so a mouse wheel can pan the tab strip without moving the page
+  useEffect(() => {
+    const tabs = tabsRef.current;
+    if (!tabs) return;
+    const onWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY) || tabs.scrollWidth <= tabs.clientWidth)
+        return;
+      event.preventDefault();
+      tabs.scrollLeft += event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? tabs.clientWidth : 1);
+    };
+    tabs.addEventListener("wheel", onWheel, { passive: false });
+    return () => tabs.removeEventListener("wheel", onWheel);
+  }, []);
 
-  /** Keep one tab visible and persist changes through the host */
-  const toggleShown = (index: number) => {
-    if (layout.busy || (shown[index] && layout.boards.length === 1)) return;
-    void layout.save(rankBoards.filter((_, i) => (i === index ? !shown[i] : shown[i])).map(({ board }) => board));
+  // Observe the list's own bottom, not the window, and pause automatic retry after a network failure
+  useEffect(() => {
+    const end = endRef.current;
+    if (!end || ranking.loading || ranking.moreLoading || ranking.moreError || ranking.nextStart === null) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) void ranking.loadMore();
+      },
+      { root: listRef.current, rootMargin: "0px 0px 120px 0px" },
+    );
+    observer.observe(end);
+    return () => observer.disconnect();
+  }, [ranking.loading, ranking.moreLoading, ranking.moreError, ranking.nextStart, ranking.loadMore]);
+
+  /** Warm the user's next tab without requesting every board and category */
+  const preload = (index: number, subIndex = subCategory) => {
+    const nextBoard = rankBoards[index]?.board ?? "pe_hot";
+    ranking.prefetch({
+      board: nextBoard,
+      category: nextBoard === "hot_search" ? "mod" : (rankCategories[subIndex]?.category ?? "mod"),
+      start: 0,
+      limit: RANK_LIMIT,
+    });
   };
 
   return (
@@ -122,122 +88,53 @@ export function RankingCard({ className, onOpenAll }: RankingCardProps) {
         </TextButton>
       }
     >
-      <div className={styles.toolbar} ref={toolbarRef}>
-        <div role="tablist" aria-label="榜单" className={styles.tabs}>
-          {visibleTabs.map((tab) => (
-            <button
-              key={tab.index}
-              type="button"
-              role="tab"
-              aria-selected={tab.index === category}
-              className={tab.index === category ? `${styles.tab} ${styles.tabActive}` : styles.tab}
-              onClick={() => pickCategory(tab.index)}
-            >
-              {tab.label}
-            </button>
-          ))}
-          {hiddenTabs.length > 0 && (
-            <button
-              type="button"
-              aria-haspopup="menu"
-              aria-expanded={popover === "more"}
-              className={activeHidden ? `${styles.tab} ${styles.tabActive}` : styles.tab}
-              onClick={() => setPopover(popover === "more" ? "none" : "more")}
-            >
-              {activeHidden ? `更多：${rankBoards[category]?.label ?? ""} ▾` : "更多 ▾"}
-            </button>
-          )}
-        </div>
-        <button
-          type="button"
-          aria-label="调整默认显示的榜单"
-          aria-haspopup="dialog"
-          aria-expanded={popover === "layout"}
-          className={
-            popover === "layout"
-              ? `${styles.chip} ${styles.chipActive} ${styles.layoutButton}`
-              : `${styles.chip} ${styles.layoutButton}`
-          }
-          onClick={() => setPopover(popover === "layout" ? "none" : "layout")}
-        >
-          <Icon name="action.layout" size={16} />
-          排版
-        </button>
-
-        {popover === "more" && (
-          <div role="menu" aria-label="其他榜单" className={`${styles.popover} ${styles.menu}`}>
-            {hiddenTabs.map((tab) => (
-              <button
-                key={tab.index}
-                type="button"
-                role="menuitem"
-                className={tab.index === category ? `${styles.menuItem} ${styles.menuItemActive}` : styles.menuItem}
-                onClick={() => pickCategory(tab.index)}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {popover === "layout" && (
-          <div role="dialog" aria-label="调整默认显示的榜单" className={`${styles.popover} ${styles.layout}`}>
-            <span className={styles.layoutTitle}>默认显示的榜单</span>
-            <span className={styles.layoutHint}>勾选的直接显示，其余收进「更多」</span>
-            <div className={styles.options}>
-              {tabs.map((tab) => (
-                <label key={tab.index} className={styles.option}>
-                  <input
-                    type="checkbox"
-                    className={styles.nativeCheck}
-                    checked={shown[tab.index] ?? false}
-                    disabled={layout.busy || (shown[tab.index] && layout.boards.length === 1)}
-                    onChange={() => toggleShown(tab.index)}
-                  />
-                  <span
-                    className={shown[tab.index] ? `${styles.box} ${styles.boxChecked}` : styles.box}
-                    aria-hidden="true"
-                  >
-                    {shown[tab.index] && <Icon name="action.check" size={10} />}
-                  </span>
-                  {tab.label}
-                </label>
-              ))}
-            </div>
-            <Button size="sm" onClick={() => setPopover("none")}>
-              完成
-            </Button>
-          </div>
-        )}
+      <div role="tablist" aria-label="榜单" className={styles.tabs} ref={tabsRef}>
+        {rankBoards.map(({ board: tabBoard, label }, index) => (
+          <button
+            key={tabBoard}
+            type="button"
+            role="tab"
+            aria-selected={index === category}
+            className={index === category ? `${styles.tab} ${styles.tabActive}` : styles.tab}
+            onClick={() => setCategory(index)}
+            onPointerEnter={() => preload(index)}
+            onFocus={(event) => {
+              preload(index);
+              const tabs = tabsRef.current;
+              if (tabs) {
+                const left = event.currentTarget.offsetLeft;
+                const right = left + event.currentTarget.offsetWidth;
+                if (left < tabs.scrollLeft) tabs.scrollLeft = left;
+                else if (right > tabs.scrollLeft + tabs.clientWidth) tabs.scrollLeft = right - tabs.clientWidth;
+              }
+            }}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
-      {hasCategories && (
-        <div className={styles.chips}>
-          {rankCategories.map(({ label }, index) => (
-            <button
-              key={label}
-              type="button"
-              aria-pressed={index === subCategory}
-              className={index === subCategory ? `${styles.chip} ${styles.chipActive}` : styles.chip}
-              onClick={() => setSubCategory(index)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
+      <div
+        className={styles.chips}
+        style={{ visibility: hasCategories ? "visible" : "hidden" }}
+        aria-hidden={!hasCategories}
+      >
+        {rankCategories.map(({ label }, index) => (
+          <button
+            key={label}
+            type="button"
+            aria-pressed={index === subCategory}
+            className={index === subCategory ? `${styles.chip} ${styles.chipActive}` : styles.chip}
+            onClick={() => setSubCategory(index)}
+            onPointerEnter={() => preload(category, index)}
+            onFocus={() => preload(category, index)}
+            tabIndex={hasCategories ? 0 : -1}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
-      {layout.error && (
-        <Notice
-          action={
-            <TextButton onClick={layout.retry} disabled={layout.busy}>
-              重试读取排版
-            </TextButton>
-          }
-        >
-          {layout.error}
-        </Notice>
-      )}
       {ranking.error && (
         <Notice
           action={
@@ -249,28 +146,59 @@ export function RankingCard({ className, onOpenAll }: RankingCardProps) {
           榜单加载失败：{ranking.error.message}
         </Notice>
       )}
-      {!ranking.loading && !ranking.error && items.length === 0 && <EmptyState title="这个榜单暂时没有作品" />}
-      <ol
-        className={styles.list}
-        aria-label={`${rankBoards[category]?.label ?? ""}${hasCategories ? ` · ${rankCategories[subCategory]?.label ?? ""}` : ""}`}
-        aria-busy={ranking.loading}
-      >
-        {items.map((item) => {
-          const change = describeChange(item.change);
-          return (
-            <li key={`${item.rank}-${item.title}`} className={styles.item}>
-              <span className={item.rank <= 3 ? `${styles.rank} ${styles.rankTop}` : styles.rank}>{item.rank}</span>
-              {item.itemId !== null && <Cover key={item.iconUrl ?? item.itemId} item={item} />}
-              <span className={styles.itemTitle}>{item.title}</span>
-              <span className={`${styles.change} ${change.className ?? ""}`}>{change.text}</span>
+      <div className={styles.listArea}>
+        <span className={styles.status} role="status">
+          {ranking.loading ? (ranking.data ? "正在更新…" : "正在加载榜单…") : ""}
+        </span>
+        <ol
+          key={ranking.key}
+          ref={listRef}
+          className={styles.list}
+          aria-label={`${rankBoards[category]?.label ?? ""}${hasCategories ? ` · ${rankCategories[subCategory]?.label ?? ""}` : ""}`}
+          aria-busy={ranking.loading}
+        >
+          {!ranking.data &&
+            ranking.loading &&
+            skeletonRanks.map((rank) => (
+              <li key={rank} className={styles.item} aria-hidden="true">
+                <span className={styles.rank}>{rank}</span>
+                {hasCategories && <span className={`${styles.cover} ${styles.skeleton}`} />}
+                <span className={`${styles.skeletonTitle} ${styles.skeleton}`} />
+              </li>
+            ))}
+          {!ranking.loading && !ranking.error && items.length === 0 && (
+            <li>
+              <EmptyState title="这个榜单暂时没有作品" />
             </li>
-          );
-        })}
-      </ol>
-
-      <TextButton className={styles.all} onClick={onOpenAll}>
-        查看全部榜单
-      </TextButton>
+          )}
+          {items.map((item) => {
+            const change = describeChange(item.change);
+            return (
+              <li key={`${item.rank}-${item.itemId ?? item.title}`} className={styles.item}>
+                <span className={item.rank <= 3 ? `${styles.rank} ${styles.rankTop}` : styles.rank}>{item.rank}</span>
+                {item.itemId !== null && <RankingCover key={item.iconUrl ?? item.itemId} item={item} />}
+                <span className={styles.itemTitle}>{item.title}</span>
+                <span className={`${styles.change} ${change.className ?? ""}`}>{change.text}</span>
+              </li>
+            );
+          })}
+          {ranking.data && (
+            <li ref={endRef} className={styles.listEnd}>
+              {ranking.moreError ? (
+                <Notice action={<TextButton onClick={() => void ranking.loadMore()}>重试</TextButton>}>
+                  {ranking.moreError.message}
+                </Notice>
+              ) : ranking.moreLoading ? (
+                "正在加载更多…"
+              ) : ranking.nextStart !== null ? (
+                `已加载 ${items.length} 条，向下滚动继续`
+              ) : (
+                `已显示全部 ${items.length} 条`
+              )}
+            </li>
+          )}
+        </ol>
+      </div>
     </Panel>
   );
 }

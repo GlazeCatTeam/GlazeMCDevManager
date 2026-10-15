@@ -169,6 +169,16 @@ export const capabilities: Record<RpcMethod, Capability> = {
         "返回网易我的世界资源平台的榜单。board：pe_hot 手游热门飙升、hot_search 热搜（返回搜索词，不是作品）、pe_download 手游免费、pe_sell 手游畅销、pc_download 端游下载、pc_like 端游点赞。category：mod 模组、map 地图、texture 材质光影、lobby 联机大厅，默认 mod，热搜忽略此参数。limit 1–50，默认 10。",
     },
   },
+  "rank.page": {
+    caller: "any",
+    permission: "netease:rank.read",
+    risk: "read",
+    mcp: {
+      title: "分页读取平台排行榜",
+      description:
+        "按 rank.list 的 board/category 查询真实榜单。start 为从 0 开始的偏移，默认 0；limit 1–50，默认 50。返回 items、平台 total 和 nextStart；继续使用 nextStart 读取下一批，null 表示结束。account 可选，不切换当前账号。",
+    },
+  },
   "works.list": {
     caller: "any",
     permission: "netease:works.read",

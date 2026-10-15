@@ -1,6 +1,7 @@
-import { avatarColorsFor, Notice, remoteImageUrl, TextButton, useHostQuery, useSession } from "@glaze/plugin-sdk";
+import { avatarColorsFor, Notice, remoteImageUrl, TextButton, useSession } from "@glaze/plugin-sdk";
 import { useMemo, useState } from "react";
 import styles from "./HomePage.module.css";
+import { useHomeQuery } from "./useHomeQuery";
 import { Greeting } from "./widgets/Greeting";
 import { OverviewStrip } from "./widgets/OverviewStrip";
 import { ProfitEstimateCard } from "./widgets/ProfitEstimateCard";
@@ -30,10 +31,10 @@ export function HomePage() {
   const otherMonth: ProfitMonth = month === "this" ? "last" : "this";
   const months = useMemo(() => recentMonths(new Date()), []);
 
-  const level = useHostQuery("developer.level");
-  const overview = useHostQuery("analytics.overview");
-  const thisMonth = useHostQuery("income.estimate", { month: months.this });
-  const lastMonth = useHostQuery("income.estimate", { month: months.last });
+  const level = useHomeQuery("developer.level");
+  const overview = useHomeQuery("analytics.overview");
+  const thisMonth = useHomeQuery("income.estimate", { month: months.this });
+  const lastMonth = useHomeQuery("income.estimate", { month: months.last });
   const estimates = { this: thisMonth, last: lastMonth };
 
   const refreshing = level.loading || overview.loading || thisMonth.loading || lastMonth.loading;
@@ -88,7 +89,7 @@ export function HomePage() {
             onSelect={() => setMonth(otherMonth)}
           />
         </div>
-        <RankingCard className={styles.column} onOpenAll={noop} />
+        <RankingCard key={current.id} className={styles.column} />
       </div>
     </div>
   );

@@ -26,7 +26,7 @@ import type {
 import type { LogPage, LogQuery } from "./logs";
 import type { MessageContent, MessageDeleteParams, MessageListParams, MessagePage, MessageParams } from "./messages";
 import type { PluginInstallPreview, PluginSnapshot } from "./plugins";
-import type { RankBoard, RankEntry, RankListParams } from "./rank";
+import type { RankBoard, RankEntry, RankListParams, RankPage, RankPageParams } from "./rank";
 import type { SessionSettings } from "./session-settings";
 import type { WorkCropParams, WorkImageDraft, WorkImageParams, WorkReference, WorkSearchParams } from "./work-assets";
 import type { WorkCreateParams } from "./work-create";
@@ -107,6 +107,7 @@ export interface RpcMethods {
   "income.list": { params: IncomeListParams; result: IncomeList };
   "income.detail": { params: IncomeDetailParams; result: IncomeDetail };
   "rank.list": { params: RankListParams; result: RankEntry[] };
+  "rank.page": { params: RankPageParams; result: RankPage };
   "works.list": { params: (AccountParams & { platform?: IncomePlatform }) | undefined; result: WorkSummary[] };
   "works.page": { params: WorkPageParams; result: WorkPage };
   "works.create": { params: WorkCreateParams; result: undefined };

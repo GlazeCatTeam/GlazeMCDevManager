@@ -18,5 +18,5 @@ export const rankCategories: readonly { category: RankCategory; label: string }[
   { category: "lobby", label: "联机大厅" },
 ];
 
-/** Entries shown per board */
-export const RANK_LIMIT = 8;
+/** Real entries fetched per scroll batch; subsequent batches are loaded at the end of the list */
+export const RANK_LIMIT = 50;
