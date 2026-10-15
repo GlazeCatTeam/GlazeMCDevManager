@@ -98,7 +98,7 @@ export interface ProfitBreakdown {
   afterTaxYuan: number;
 }
 
-/** Estimate a month's payout from each work's diamond sales in its settlement window */
+/** Estimate a month's payout from each work's diamond sales in the selected window */
 export function estimateProfit(salesByWork: number[]): ProfitBreakdown {
   const sales = salesByWork.filter((amount) => amount > 0);
   const diamonds = sales.reduce((sum, amount) => sum + amount, 0);

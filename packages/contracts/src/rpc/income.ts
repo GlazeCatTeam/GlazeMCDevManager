@@ -3,7 +3,7 @@ import type { AccountParams } from "./developer";
 // Income estimate capability. The estimate is computed in the main process; the UI only displays it
 
 export interface IncomeEstimateParams extends AccountParams {
-  /** Settlement month as "YYYY-MM"; omit for the current month */
+  /** Calendar month as "YYYY-MM"; omit for the current month */
   month?: string | undefined;
 }
 

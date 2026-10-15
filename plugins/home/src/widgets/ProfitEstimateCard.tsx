@@ -83,7 +83,7 @@ export function ProfitEstimateCard({
 
       <span className={styles.note}>
         {loading && !data ? "正在统计各作品的销售，可能需要几秒…" : ""}
-        {data ? `统计 ${formatDay(data.startDate)}–${formatDay(data.endDate)}的销售，` : ""}
+        {data ? `按自然月统计 ${formatDay(data.startDate)}–${formatDay(data.endDate)}的销售，` : ""}
         {loading && !data ? "" : "按当前分成与激励规则估算，以平台结算记录为准"}
       </span>
     </Panel>

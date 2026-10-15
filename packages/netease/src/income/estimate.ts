@@ -39,12 +39,9 @@ function isoDate(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-/**
- * Sales window counted for a settlement month: from 9 days before its first day to 10 days before
- * the next month's first day, e.g. 2026-10 covers 2026-09-22 to 2026-10-22
- */
-export function settlementWindow(year: number, month: number): { start: Date; end: Date } {
-  return { start: new Date(year, month, 1 - 9), end: new Date(year, month + 1, 1 - 10) };
+/** Inclusive sales window for a calendar month, from its first day through its last day */
+export function calendarMonthWindow(year: number, month: number): { start: Date; end: Date } {
+  return { start: new Date(year, month, 1), end: new Date(year, month + 1, 0) };
 }
 
 /** Round a yuan amount to cents */
@@ -163,7 +160,7 @@ async function lobbySales(session: NeteaseSession, start: string, end: string): 
 }
 
 /**
- * Estimate a settlement month's income from every work's sales in its window. Failed batches are
+ * Estimate a calendar month's income from every work's sales in its window. Failed batches are
  * reported by work name instead of being counted as zero; listing works must succeed
  */
 export async function estimateIncome(session: NeteaseSession, month: string): Promise<Result<IncomeEstimate>> {
@@ -171,7 +168,7 @@ export async function estimateIncome(session: NeteaseSession, month: string): Pr
   if (!parsed) {
     return fail({ kind: "business", code: "invalid_month", message: "月份格式应为 YYYY-MM" });
   }
-  const window = settlementWindow(parsed.year, parsed.month);
+  const window = calendarMonthWindow(parsed.year, parsed.month);
   const start = compactDate(window.start);
   const end = compactDate(window.end);
 
