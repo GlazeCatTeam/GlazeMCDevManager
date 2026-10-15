@@ -1,7 +1,8 @@
 import { Button, Notice, Pagination, Panel, SearchField, SegmentedControl, TextButton } from "@glaze/plugin-sdk";
-import { useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { formatValue, type RealtimeDay, type Resource, shiftDay, todayKey } from "../data";
 import { QueryState, useRefresh } from "../QueryState";
+import { scrollWithinView } from "../scroll";
 import { useRealtimeIncome } from "../useRealtimeIncome";
 import { DataTable, mutedClass } from "../widgets/DataTable";
 import { InlineSelect } from "../widgets/InlineSelect";
@@ -60,6 +61,13 @@ export function RealtimeView({ resources, refreshVersion }: { resources: Resourc
   const [orderPage, setOrderPage] = useState(0);
   const resourcePanel = useRef<HTMLDivElement>(null);
   const orderPanel = useRef<HTMLDivElement>(null);
+  const [scrollTarget, setScrollTarget] = useState<"orders" | "resources" | null>(null);
+  // Measure after filtering has updated the panels, never against the previous order list height
+  useLayoutEffect(() => {
+    if (!scrollTarget) return;
+    scrollWithinView(scrollTarget === "orders" ? orderPanel.current : resourcePanel.current, "start", "smooth");
+    setScrollTarget(null);
+  }, [scrollTarget]);
   const date = shiftDay(todayKey(), day === "today" ? 0 : -1);
   const result = useRealtimeIncome(date, resources.map((resource) => resource.id));
   useRefresh(result.reload, refreshVersion);
@@ -150,7 +158,7 @@ export function RealtimeView({ resources, refreshVersion }: { resources: Resourc
     setFilter("failed");
     setSearch("");
     setResourcePage(0);
-    resourcePanel.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setScrollTarget("resources");
   };
 
   /** Open a resource's order list with its first page visible */
@@ -158,7 +166,7 @@ export function RealtimeView({ resources, refreshVersion }: { resources: Resourc
     setResourceId(id);
     setCurrency("all");
     setOrderPage(0);
-    orderPanel.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setScrollTarget("orders");
   };
 
   return (

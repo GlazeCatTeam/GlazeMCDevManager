@@ -7,6 +7,8 @@ import { applyTheme } from "../../packages/theme/src";
 import { AnalyticsPage } from "../../plugins/analytics/src/AnalyticsPage";
 import oreUi from "../../themes/ore-ui/theme.json";
 import "../../apps/desktop/src/renderer/global.css";
+import shellStyles from "../../apps/desktop/src/renderer/shell/AppShell.module.css";
+import titleStyles from "../../apps/desktop/src/renderer/shell/TitleBar.module.css";
 
 const account: AccountSummary = {
   id: "analytics-a",
@@ -210,6 +212,14 @@ const container = document.getElementById("root");
 if (!container) throw new Error("Missing preview root");
 createRoot(container).render(
   <StrictMode>
-    <Preview />
+    {new URLSearchParams(location.search).has("shell") ? (
+      <div className={shellStyles.shell}>
+        <header className={titleStyles.bar} data-testid="titlebar">Glaze MC Dev Manager</header>
+        <div className={shellStyles.body}>
+          <aside data-testid="sidebar" style={{ width: 216, flex: "none", background: "var(--g-surface-sidebar)" }}>数据分析</aside>
+          <main className={shellStyles.main}><Preview /></main>
+        </div>
+      </div>
+    ) : <Preview />}
   </StrictMode>,
 );

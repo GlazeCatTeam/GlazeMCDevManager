@@ -75,8 +75,45 @@ try {
   await page.getByText(/当前账号暂无可分析的手游资源/).waitFor();
   await page.waitForTimeout(600);
   assert.equal(await page.getByText("110 成功 · 0 失败").count(), 0);
+  await page.setViewportSize({ width: 1280, height: 802 });
+  await page.goto(`${server.resolvedUrls.local[0]}tests/fixtures/analytics.html?realtime&shell`);
+  await page.getByRole("tab", { name: "实时收益", exact: true }).click();
+  await page.getByText("85 成功 · 25 失败").waitFor();
+  // Exercise programmatic navigation in the actual desktop flex/scroll layout, including CSS zoom
+  for (const zoom of [1, 1.25, 1.5]) {
+    await page.evaluate((value) => {
+      document.documentElement.style.zoom = String(value);
+      document.querySelector("main").scrollTop = 0;
+      window.scrollTo(0, 0);
+    }, zoom);
+    const before = await page.getByTestId("sidebar").boundingBox();
+    await page.getByRole("button", { name: "查看订单", exact: true }).first().evaluate((button) => button.click());
+    await page.waitForTimeout(800);
+    assert.equal(await page.evaluate(() => window.scrollY), 0, "opening orders must not scroll the document");
+    const after = await page.getByTestId("sidebar").boundingBox();
+    assert.equal(after.y, before.y, "sidebar stays anchored");
+    assert.equal((await page.getByTestId("titlebar").boundingBox()).y, 0, "titlebar stays visible");
+    const main = await page.locator("main").boundingBox();
+    const orders = await page.getByText("订单明细", { exact: true }).boundingBox();
+    assert.ok(orders.y >= main.y && orders.y < Math.min(main.y + main.height, 802), "order heading is visible inside the content area");
+    const contentScroll = await page.locator("main").evaluate((element) => element.scrollTop);
+    await page.getByRole("button", { name: /^资源 测试资源/ }).evaluate((button) => button.click());
+    await page.getByRole("combobox", { name: "搜索资源", exact: true }).press("ArrowDown");
+    assert.equal(await page.locator("main").evaluate((element) => element.scrollTop), contentScroll, "resource options scroll only their own list");
+    await page.getByRole("combobox", { name: "搜索资源", exact: true }).press("Escape");
+    await page.getByRole("button", { name: "查看订单", exact: true }).last().evaluate((button) => button.click());
+    await page.waitForTimeout(800);
+    const emptyOrders = await page.getByText("订单明细", { exact: true }).boundingBox();
+    assert.ok(emptyOrders.y >= main.y && emptyOrders.y < Math.min(main.y + main.height, 802), "shorter or empty order lists are positioned after layout updates");
+    assert.equal(await page.evaluate(() => window.scrollY), 0);
+    await page.getByRole("button", { name: "查看失败资源", exact: true }).evaluate((button) => button.click());
+    await page.waitForTimeout(800);
+    assert.equal(await page.evaluate(() => window.scrollY), 0, "failure navigation must not scroll the document");
+    await page.getByRole("button", { name: "全部 110", exact: true }).evaluate((button) => button.click());
+  }
+  await page.screenshot({ path: `${output}/realtime-shell-scroll.png` });
   assert.deepEqual(errors, []);
-  console.log("PASS: 110 resources, visible failure reasons, targeted retry, unknown currency, resource search, retained totals on refresh failure, date/account isolation and narrow layout");
+  console.log("PASS: 110 resources, failure recovery, currency/resource filters, date/account isolation, narrow layout, stationary desktop shell and nested scrolling at 100/125/150% zoom");
 } finally {
   await browser?.close();
   await server.close();

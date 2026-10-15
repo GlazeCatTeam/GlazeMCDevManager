@@ -1,4 +1,5 @@
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
+import { scrollWithinView } from "../scroll";
 import type { InlineSelectProps } from "./InlineSelect";
 import styles from "./SearchableSelect.module.css";
 
@@ -28,7 +29,7 @@ export function SearchableSelect({ label, value, options, onChange }: InlineSele
   }, [open]);
 
   useEffect(() => {
-    if (open) list.current?.children[activeIndex]?.scrollIntoView({ block: "nearest" });
+    if (open) scrollWithinView(list.current?.children[activeIndex], "nearest");
   }, [open, activeIndex]);
 
   /** Opening always starts with the full list and the current selection in view */
