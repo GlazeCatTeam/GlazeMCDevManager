@@ -153,7 +153,7 @@ function createHandlers(
   /** Pin mailbox writes and detail reads to the account that initiated them */
   const messageAccount = (params: unknown): string => {
     const account = requireString(params, "account");
-    if (sessions.current()?.id !== account) throw new CapabilityError("account_changed", "账号已切换，请刷新消息中心");
+    if (sessions.current()?.id !== account) throw new CapabilityError("account_changed", "账号已切换，请刷新系统消息");
     return account;
   };
   return {

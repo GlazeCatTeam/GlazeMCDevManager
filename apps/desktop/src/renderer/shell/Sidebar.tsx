@@ -6,7 +6,7 @@ import styles from "./Sidebar.module.css";
 const accountRoute = "glaze.account/account";
 
 const navigationSections = [
-  { label: "首页", routes: ["glaze.home/home"] },
+  { label: "首页", routes: ["glaze.home/home", "glaze.messages/messages"] },
   { label: "作品与玩家", routes: ["glaze.works/works", "glaze.community/feedback", "glaze.community/comments"] },
   { label: "数据与收益", routes: ["glaze.analytics/analytics", "glaze.income/income"] },
 ];

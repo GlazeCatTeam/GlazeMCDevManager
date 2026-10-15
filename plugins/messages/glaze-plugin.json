@@ -1,6 +1,6 @@
 {
   "id": "glaze.messages",
-  "name": "消息中心",
+  "name": "系统消息",
   "version": "0.0.0",
   "publisher": "glaze",
   "description": "站内消息、未读数、全部已读",
@@ -8,8 +8,8 @@
   "entries": { "ui": "src/index.ts" },
   "activationEvents": ["onPage:messages"],
   "contributes": {
-    "pages": [{ "id": "messages", "title": "消息中心" }],
-    "navItems": [{ "page": "messages", "icon": "nav.messages", "group": "top", "order": 60 }],
+    "pages": [{ "id": "messages", "title": "系统消息" }],
+    "navItems": [{ "page": "messages", "icon": "nav.messages", "group": "top", "order": 15 }],
     "widgets": []
   },
   "permissions": ["netease:messages.read", "netease:messages.write"]

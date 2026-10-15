@@ -29,7 +29,7 @@ export function MessagesPage() {
   if (!current)
     return (
       <div className={styles.page}>
-        <PageHeader title="消息中心" />
+        <PageHeader title="系统消息" />
         <EmptyState title="请先登录账号" hint="登录后查看网易开发者平台消息" />
       </div>
     );
@@ -64,7 +64,7 @@ function AccountMessages({ account }: { account: string }) {
   return (
     <div className={styles.page}>
       <PageHeader
-        title="消息中心"
+        title="系统消息"
         subtitle={
           mailbox.page
             ? `符合筛选 ${mailbox.page.total} 条 · 未读 ${mailbox.page.unread ?? "—"} 条`
