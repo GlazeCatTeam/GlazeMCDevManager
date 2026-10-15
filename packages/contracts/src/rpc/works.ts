@@ -60,3 +60,14 @@ export interface WorkReviewFeedback {
 export interface WorkParams extends AccountParams {
   itemId: string;
 }
+
+export interface WorkPageParams extends AccountParams {
+  /** Zero-based page; the workbench fetches nine rows at a time */
+  page: number;
+  pageSize: number;
+}
+
+export interface WorkPage {
+  items: WorkSummary[];
+  total: number;
+}

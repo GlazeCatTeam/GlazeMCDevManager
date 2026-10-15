@@ -29,6 +29,7 @@ import {
   getReviewFeedback,
   getWork,
   getWorkEditorOptions,
+  getWorksPage,
   listComments,
   listMessages,
   listWorks,
@@ -256,6 +257,12 @@ function createHandlers(sessions: SessionManager): HandlerTable {
       );
     },
     "works.list": (params) => sessions.request(optionalString(params, "account"), listWorks),
+    "works.page": (params) => {
+      const page = optionalInteger(params, "page", 0, 100_000_000);
+      const pageSize = optionalInteger(params, "pageSize", 1, 50);
+      if (page === undefined || pageSize === undefined) throw new CapabilityError("validation", "作品分页参数无效");
+      return sessions.request(optionalString(params, "account"), (session) => getWorksPage(session, page, pageSize));
+    },
     "works.get": (params) => {
       const itemId = requireItemId(params);
       return sessions.request(optionalString(params, "account"), (session) => getWork(session, itemId));

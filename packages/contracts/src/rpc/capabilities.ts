@@ -31,6 +31,7 @@ export const capabilities: Record<RpcMethod, Capability> = {
   "messages.markAllRead": shellOnly("netease:messages.write", "write"),
   "messages.delete": shellOnly("netease:messages.write", "write"),
   "works.create": shellOnly("netease:works.write", "write"),
+  "works.page": shellOnly("netease:works.read", "read"),
   "works.editor": shellOnly("netease:works.read", "read"),
   "works.options": shellOnly("netease:works.read", "read"),
   "works.save": shellOnly("netease:works.write", "write"),

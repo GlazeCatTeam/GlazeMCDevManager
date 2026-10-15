@@ -114,6 +114,48 @@ export function WorkDetailPage(props: DetailProps) {
   );
 }
 
+/** Fetch the complete selector only when related-work configuration is actually visible */
+function RelatedWorkPicker({
+  account,
+  itemId,
+  value,
+  disabled,
+  onChange,
+}: {
+  account: string;
+  itemId: string;
+  value: string;
+  disabled: boolean;
+  onChange: (id: string) => void;
+}) {
+  const works = useHostQuery("works.list", { account });
+  const list = works.data ?? [];
+  return (
+    <Field label="关联模组">
+      <select
+        aria-label="关联模组"
+        className={styles.input}
+        value={value}
+        disabled={disabled || works.loading || !!works.error}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="">{works.loading ? "正在加载关联作品…" : "请选择"}</option>
+        {value && !list.some((work) => work.itemId === value) && <option value={value}>{value}</option>}
+        {list
+          .filter((work) => work.itemId !== itemId)
+          .map((work) => (
+            <option key={work.itemId} value={work.itemId}>
+              {work.name}
+            </option>
+          ))}
+      </select>
+      {works.error && (
+        <Notice action={<TextButton onClick={works.reload}>重试</TextButton>}>{works.error.message}</Notice>
+      )}
+    </Field>
+  );
+}
+
 /** An update action always names the independently saved section */
 function Section({
   section,
@@ -586,28 +628,13 @@ function Editor({
                         <option value="slave">副包</option>
                       </select>
                     </Field>
-                    <Field label="关联模组">
-                      <select
-                        aria-label="关联模组"
-                        className={styles.input}
-                        value={text(value.relate_item_id)}
-                        disabled={disabled}
-                        onChange={(e) => change("relate_item_id", e.target.value)}
-                      >
-                        <option value="">请选择</option>
-                        {text(value.relate_item_id) &&
-                          !props.works.some((w) => w.itemId === text(value.relate_item_id)) && (
-                            <option value={text(value.relate_item_id)}>{text(value.relate_item_id)}</option>
-                          )}
-                        {props.works
-                          .filter((w) => w.itemId !== props.work.itemId)
-                          .map((w) => (
-                            <option key={w.itemId} value={w.itemId}>
-                              {w.name}
-                            </option>
-                          ))}
-                      </select>
-                    </Field>
+                    <RelatedWorkPicker
+                      account={props.account}
+                      itemId={props.work.itemId}
+                      value={text(value.relate_item_id)}
+                      disabled={disabled}
+                      onChange={(id) => change("relate_item_id", id)}
+                    />
                   </div>
                 )}
                 {value.sync_pc_flag === true && (

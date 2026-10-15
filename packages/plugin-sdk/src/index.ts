@@ -29,6 +29,7 @@ export type {
   WorkEditorOptions,
   WorkImageSlot,
   WorkOption,
+  WorkPage,
   WorkPriceType,
   WorkRecord,
   WorkReviewFeedback,

@@ -14,7 +14,7 @@ import type {
   WorkUpload,
   WorkUploadParams,
 } from "./work-editor";
-import type { WorkDetail, WorkParams, WorkReviewFeedback, WorkSummary } from "./works";
+import type { WorkDetail, WorkPage, WorkPageParams, WorkParams, WorkReviewFeedback, WorkSummary } from "./works";
 
 export const RPC_CHANNEL = "glaze:rpc";
 export const EVENT_CHANNEL = "glaze:event";
@@ -53,6 +53,7 @@ export interface RpcMethods {
   "income.estimate": { params: IncomeEstimateParams | undefined; result: IncomeEstimate };
   "rank.list": { params: RankListParams; result: RankEntry[] };
   "works.list": { params: AccountParams | undefined; result: WorkSummary[] };
+  "works.page": { params: WorkPageParams; result: WorkPage };
   "works.create": { params: WorkCreateParams; result: undefined };
   "works.get": { params: WorkParams; result: WorkDetail };
   "works.reviewFeedback": { params: WorkParams; result: WorkReviewFeedback | null };

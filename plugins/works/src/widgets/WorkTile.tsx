@@ -1,19 +1,13 @@
-import {
-  avatarColorsFor,
-  Button,
-  remoteImageUrl,
-  Tag,
-  TextButton,
-  useHostQuery,
-  type WorkSummary,
-} from "@glaze/plugin-sdk";
+import { avatarColorsFor, Button, remoteImageUrl, Tag, TextButton, type WorkSummary } from "@glaze/plugin-sdk";
 import { useState } from "react";
 import { formatDate, priceText } from "../format";
 import { actionLabels, actionsFor, readActions, statusLabels, statusTones, type WorkAction } from "../status";
+import { useWorkCover } from "../useWorkQuery";
 import styles from "./WorkTile.module.css";
 
 export interface WorkTileProps {
   work: WorkSummary;
+  account: string;
   /** Read actions and the editor/review entry point; unsupported writes stay disabled */
   onAction: (work: WorkSummary, action: WorkAction) => void;
   onOpenDetail: (work: WorkSummary) => void;
@@ -46,13 +40,14 @@ function Cover({ iconUrl, seed }: { iconUrl: string | null; seed: string }) {
 }
 
 /** Fixed-size tile for one work: status, price, dates and the actions its status allows */
-export function WorkTile({ work, onAction, onOpenDetail }: WorkTileProps) {
-  const detail = useHostQuery("works.get", { itemId: work.itemId });
+export function WorkTile({ work, account, onAction, onOpenDetail }: WorkTileProps) {
+  const detail = useWorkCover(account, work.itemId);
   const actions = actionsFor(work.status);
   const onlineTime = detail.data?.onlineTime ?? null;
-  const dates = onlineTime
-    ? `创建 ${formatDate(work.createTime)}  ·  上线 ${formatDate(onlineTime)}`
-    : `创建 ${formatDate(work.createTime)}`;
+  const dates =
+    onlineTime && onlineTime !== "UNKNOWN"
+      ? `创建 ${formatDate(work.createTime)}  ·  上线 ${formatDate(onlineTime)}`
+      : `创建 ${formatDate(work.createTime)}`;
 
   return (
     <li className={styles.tile}>

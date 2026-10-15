@@ -113,12 +113,43 @@ const options: WorkEditorOptions = {
   ],
 };
 const requests: { method: string; params: unknown }[] = [];
-const workList = [work];
-const documents = new Map([[work.itemId, document]]);
+const performancePreview = new URLSearchParams(location.search).has("performance");
+const workList = performancePreview
+  ? Array.from({ length: 90 }, (_, i) => ({ ...work, itemId: String(1000 + i), name: `性能测试作品 ${i + 1}` }))
+  : [work];
+const documents = new Map(
+  performancePreview
+    ? workList.map(
+        (entry) =>
+          [
+            entry.itemId,
+            { ...document, itemId: entry.itemId, fields: { ...document.fields, item_name: entry.name } },
+          ] as const,
+      )
+    : [[work.itemId, document]],
+);
 const creationResult = new URLSearchParams(location.search).get("creation");
+const metrics = window.document.createElement("output");
+if (performancePreview) {
+  metrics.setAttribute("aria-label", "请求统计");
+  metrics.style.cssText =
+    "position:fixed;bottom:8px;right:16px;z-index:1000;padding:8px;background:#111;color:#fff;font-size:12px";
+  window.document.body.append(metrics);
+}
 /** Model the preload contract locally; this fixture has no network implementation */
 const rpc = async (method: string, params?: unknown) => {
   requests.push({ method, params: structuredClone(params) });
+  if (performancePreview)
+    metrics.textContent = `分页 ${requests.filter((r) => r.method === "works.page").length} · 全量 ${requests.filter((r) => r.method === "works.list").length} · 封面 ${requests.filter((r) => r.method === "works.get").length}`;
+  if (method === "works.page") {
+    if (performancePreview) await new Promise((resolve) => setTimeout(resolve, 250));
+    const { page, pageSize } = params as { page: number; pageSize: number };
+    return {
+      ok: true,
+      value: { items: structuredClone(workList.slice(page * pageSize, (page + 1) * pageSize)), total: workList.length },
+    };
+  }
+  if (performancePreview && method === "works.get") await new Promise((resolve) => setTimeout(resolve, 400));
   const values: Record<string, unknown> = {
     "app.getInitialRoute": { route: "glaze.works/works", params: {} },
     "window.getState": { maximized: false },

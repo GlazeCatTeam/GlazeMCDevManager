@@ -1,4 +1,11 @@
-import type { WorkDetail, WorkPriceType, WorkReviewFeedback, WorkStatus, WorkSummary } from "@glaze/contracts";
+import type {
+  WorkDetail,
+  WorkPage,
+  WorkPriceType,
+  WorkReviewFeedback,
+  WorkStatus,
+  WorkSummary,
+} from "@glaze/contracts";
 import { fail, ok, type Result } from "../errors";
 import { getMcDevData, type NeteaseSession, withQuery } from "../http/client";
 import { readArray, readNumber, readRecord, readString } from "../http/parse";
@@ -75,6 +82,37 @@ export async function listWorks(session: NeteaseSession): Promise<Result<WorkSum
     works.push(work);
   }
   return ok(works);
+}
+
+/** Fetch only the requested visible rows; keep the full-list API for reports and selectors */
+export async function getWorksPage(session: NeteaseSession, page: number, pageSize: number): Promise<Result<WorkPage>> {
+  if (
+    !Number.isSafeInteger(page) ||
+    page < 0 ||
+    !Number.isInteger(pageSize) ||
+    pageSize < 1 ||
+    pageSize > 50 ||
+    !Number.isSafeInteger(page * pageSize)
+  )
+    return fail({ kind: "business", code: "validation", message: "作品分页参数无效" });
+  const result = await getMcDevData(
+    "items.pe.page",
+    withQuery("/items/categories/pe/", { start: page * pageSize, span: pageSize }),
+    session,
+  );
+  if (!result.ok) return result;
+  const raw = readRecord(result.value);
+  const total = readNumber(raw.count);
+  const rows = readArray(raw.item);
+  if (total === null || !Number.isSafeInteger(total) || total < 0 || rows === null || rows.length > pageSize)
+    return fail({ kind: "parse", endpoint: "items.pe.page" });
+  const items: WorkSummary[] = [];
+  for (const row of rows) {
+    const work = readWork(row);
+    if (!work) return fail({ kind: "parse", endpoint: "items.pe.page" });
+    items.push(work);
+  }
+  return ok({ items, total });
 }
 
 /** Icon, banner and go-live times of one of the account's works, from GET /items/categories/pe/{id} */

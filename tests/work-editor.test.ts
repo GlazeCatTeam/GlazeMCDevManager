@@ -19,7 +19,9 @@ import {
   resolveWorkUploadUrl,
   uploadWorkFile,
 } from "../packages/netease/src/endpoints/work-upload";
+import { getWorksPage } from "../packages/netease/src/endpoints/works";
 import { getMcDevData, parsePlatformJson, writeMcDevData } from "../packages/netease/src/http/client";
+import { WorkQueryCache } from "../plugins/works/src/query-cache";
 
 const originalFetch = globalThis.fetch;
 const session = { sessionCookie: "unit-test-session" };
@@ -81,6 +83,92 @@ function response(data?: unknown, status = "ok") {
 }
 afterEach(() => {
   globalThis.fetch = originalFetch;
+});
+
+test("workbench requests only nine rows and uses the platform count for pagination", async () => {
+  const calls = mockFetch(() => response({ count: 90, item: [{ ...fixture, create_time: "2026-10-01" }] }));
+  const result = await getWorksPage(session, 2, 9);
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.value.total, 90);
+    assert.equal(result.value.items.length, 1);
+  }
+  const url = new URL(calls[0]?.url ?? "");
+  assert.equal(url.searchParams.get("start"), "18");
+  assert.equal(url.searchParams.get("span"), "9");
+  for (const [page, size] of [
+    [-1, 9],
+    [0, 0],
+    [0, 51],
+    [1.5, 9],
+  ] as const)
+    assert.equal((await getWorksPage(session, page, size)).ok, false);
+  assert.equal(calls.length, 1);
+  mockFetch(() => response({ item: [] }));
+  assert.equal((await getWorksPage(session, 0, 9)).ok, false);
+});
+
+test("work cache coalesces pending reads and returns warm data without a request", async () => {
+  let now = 100;
+  let calls = 0;
+  const cache = new WorkQueryCache<number>(30, 2, () => now);
+  const load = async () => ({ ok: true as const, value: ++calls });
+  const first = cache.read('["a",0,9]', load);
+  assert.equal(cache.read('["a",0,9]', load), first);
+  await first;
+  assert.equal(cache.peek('["a",0,9]'), 1);
+  await cache.read('["a",0,9]', load);
+  assert.equal(calls, 1);
+  now = 131;
+  assert.equal(cache.peek('["a",0,9]'), 1);
+  assert.equal(cache.fresh('["a",0,9]'), false);
+  await cache.read('["a",0,9]', load);
+  assert.equal(calls, 2);
+});
+
+test("work cache isolates accounts and bounds recent page and cover entries", async () => {
+  const cache = new WorkQueryCache<string>(1000, 2);
+  await cache.read('["a",0]', async () => ({ ok: true, value: "account-a" }));
+  assert.equal(cache.peek('["b",0]'), null);
+  await cache.read('["b",0]', async () => ({ ok: true, value: "account-b" }));
+  await cache.read('["a",1]', async () => ({ ok: true, value: "page-2" }));
+  assert.equal(cache.peek('["a",0]'), null);
+  cache.invalidate('["a",');
+  assert.equal(cache.peek('["a",1]'), null);
+  assert.equal(cache.peek('["b",0]'), "account-b");
+});
+
+test("invalidating work data prevents a late read from replacing a newer result", async () => {
+  const cache = new WorkQueryCache<string>(1000, 2);
+  let finish: (value: { ok: true; value: string }) => void = () => {};
+  const pending = cache.read(
+    "page",
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await Promise.resolve();
+  cache.invalidate();
+  await cache.read("page", async () => ({ ok: true, value: "new" }));
+  finish({ ok: true, value: "old" });
+  await pending;
+  assert.equal(cache.peek("page"), "new");
+});
+
+test("work cache keeps stale rows on failure and retries instead of caching an empty success", async () => {
+  let now = 0;
+  const cache = new WorkQueryCache<number>(1, 2, () => now);
+  await cache.read("page", async () => ({ ok: true, value: 9 }));
+  now = 2;
+  const result = await cache.read("page", async () => {
+    throw new Error("offline");
+  });
+  assert.equal(result.ok, false);
+  assert.equal(cache.peek("page"), 9);
+  assert.equal(cache.fresh("page"), false);
+  await cache.read("page", async () => ({ ok: true, value: 10 }));
+  assert.equal(cache.peek("page"), 10);
 });
 
 const createConstants = {

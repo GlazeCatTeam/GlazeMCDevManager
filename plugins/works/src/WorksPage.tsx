@@ -1,18 +1,19 @@
 import {
+  type AccountSummary,
   Button,
   Icon,
   Notice,
   PageHeader,
   Pagination,
   TextButton,
-  useHostQuery,
   useSession,
   type WorkStatus,
   type WorkSummary,
 } from "@glaze/plugin-sdk";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { WorkCreatePage, WorkDetailPage } from "./editor/WorkDetailPage";
 import type { WorkAction } from "./status";
+import { invalidateWorks, useWorksPage } from "./useWorkQuery";
 import styles from "./WorksPage.module.css";
 import { ReviewFeedbackDialog } from "./widgets/ReviewFeedbackDialog";
 import { WorkTile } from "./widgets/WorkTile";
@@ -20,19 +21,26 @@ import { WorkTile } from "./widgets/WorkTile";
 const PER_PAGE = 9;
 
 /** One-line summary under the title */
-function summary(list: WorkSummary[]): string {
-  if (list.length === 0) {
+function summary(list: WorkSummary[], total: number): string {
+  if (total === 0) {
     return "还没有作品";
   }
   const count = (status: WorkStatus) => list.filter((w) => w.status === status).length;
-  return `共 ${list.length} 个作品 · 已上架 ${count("online")} · 审核中 ${count("reviewing")} · 未通过 ${count("reject")}`;
+  return `共 ${total} 个作品 · 本页已上架 ${count("online")} · 审核中 ${count("reviewing")} · 未通过 ${count("reject")}`;
 }
 
 /** Works management: the account's works as fixed-size tiles, nine per page, like MCDevManager's 上架管理 */
 export function WorksPage() {
   const { current: account } = useSession();
-  const works = useHostQuery("works.list");
+  return account ? <WorksForAccount key={account.id} account={account} /> : <Notice>请先登录账号。</Notice>;
+}
+
+/** Account changes remount pagination and selection before any old rows can be painted */
+function WorksForAccount({ account }: { account: AccountSummary }) {
   const [page, setPage] = useState(0);
+  const works = useWorksPage(account.id, page, PER_PAGE);
+  const [knownTotal, setKnownTotal] = useState(0);
+  const [coverRevision, setCoverRevision] = useState(0);
   const [feedbackFor, setFeedbackFor] = useState<WorkSummary | null>(null);
   const [viewing, setViewing] = useState<{ work: WorkSummary; account: string } | null>(null);
   const [creatingFor, setCreatingFor] = useState<string | null>(null);
@@ -41,10 +49,22 @@ export function WorksPage() {
   const closeView = useCallback(() => setViewing(null), []);
   const closeCreate = useCallback(() => setCreatingFor(null), []);
 
-  const list = works.data ?? [];
-  const pageCount = Math.max(1, Math.ceil(list.length / PER_PAGE));
-  const current = Math.min(page, pageCount - 1);
-  const visible = list.slice(current * PER_PAGE, (current + 1) * PER_PAGE);
+  const list = works.data?.items ?? [];
+  const pageCount = Math.max(1, Math.ceil((works.data?.total ?? knownTotal) / PER_PAGE));
+
+  useEffect(() => {
+    if (!works.data) return;
+    const total = works.data.total;
+    setKnownTotal(total);
+    setPage((old) => Math.min(old, Math.max(0, Math.ceil(total / PER_PAGE) - 1)));
+  }, [works.data]);
+
+  /** Explicit refresh and successful writes bypass both list and cover caches */
+  const refresh = () => {
+    invalidateWorks(account.id);
+    setCoverRevision((v) => v + 1);
+    works.reload();
+  };
 
   /** Editing and review actions open the detail page; other writes remain disabled */
   const onAction = (work: WorkSummary, action: WorkAction) => {
@@ -65,7 +85,7 @@ export function WorksPage() {
           setCreatingFor(null);
           setCreatedFor(creatingFor);
           setPage(0);
-          works.reload();
+          refresh();
         }}
       />
     );
@@ -78,7 +98,7 @@ export function WorksPage() {
         account={viewing.account}
         works={list}
         onClose={closeView}
-        onSaved={works.reload}
+        onSaved={refresh}
       />
     );
 
@@ -86,10 +106,10 @@ export function WorksPage() {
     <div className={styles.page}>
       <PageHeader
         title="作品管理"
-        subtitle={works.data ? summary(works.data) : "正在加载作品…"}
+        subtitle={works.data ? summary(list, works.data.total) : "正在加载本页作品…"}
         actions={
           <>
-            <Button onClick={works.reload} disabled={works.loading}>
+            <Button onClick={refresh} disabled={works.loading}>
               {works.loading ? "刷新中…" : "刷新"}
             </Button>
             <Button
@@ -111,7 +131,7 @@ export function WorksPage() {
       {works.error && (
         <Notice
           action={
-            <TextButton tone="warning" onClick={works.reload}>
+            <TextButton tone="warning" onClick={refresh}>
               重试
             </TextButton>
           }
@@ -121,19 +141,17 @@ export function WorksPage() {
       )}
 
       {list.length > 0 ? (
-        <>
-          <ul className={styles.grid} aria-label="作品" aria-busy={works.loading}>
-            {visible.map((work) => (
-              <WorkTile
-                key={work.itemId}
-                work={work}
-                onAction={onAction}
-                onOpenDetail={(work) => account && setViewing({ work, account: account.id })}
-              />
-            ))}
-          </ul>
-          <Pagination page={current} pageCount={pageCount} onChange={setPage} note={`每页 ${PER_PAGE} 个`} />
-        </>
+        <ul className={styles.grid} aria-label="作品" aria-busy={works.loading}>
+          {list.map((work) => (
+            <WorkTile
+              key={`${work.itemId}:${coverRevision}`}
+              account={account.id}
+              work={work}
+              onAction={onAction}
+              onOpenDetail={(work) => account && setViewing({ work, account: account.id })}
+            />
+          ))}
+        </ul>
       ) : (
         <div className={styles.empty}>
           <Icon name="nav.works" size={48} className={styles.emptyIcon} />
@@ -149,6 +167,8 @@ export function WorksPage() {
           )}
         </div>
       )}
+
+      <Pagination page={page} pageCount={pageCount} onChange={setPage} note={`每页 ${PER_PAGE} 个`} />
 
       {feedbackFor && <ReviewFeedbackDialog work={feedbackFor} onClose={closeFeedback} />}
     </div>
