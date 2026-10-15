@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
-import type { AccountChanged, AccountSummary, InitialRoute, LoginMethod, LoginStep } from "@glaze/contracts";
+import {
+  type AccountChanged,
+  type AccountSummary,
+  defaultSessionSettings,
+  type InitialRoute,
+  type LoginMethod,
+  type LoginStep,
+  type SessionSettings,
+} from "@glaze/contracts";
 import { getUserInfo, type NeteaseSession, type Result, sessionCookieFromInput, type UserInfo } from "@glaze/netease";
 import type { AccountRecord, AccountStore, Vault } from "@glaze/storage";
 import { CapabilityError, fromNeteaseError } from "../ipc/errors";
@@ -13,6 +21,7 @@ const routes = {
 export interface SessionEvents {
   changed: (payload: AccountChanged) => void;
   progress: (step: LoginStep) => void;
+  expired?: () => void;
 }
 
 /**
@@ -22,21 +31,27 @@ export interface SessionEvents {
 export class SessionManager {
   private readonly sessions = new Map<string, string>();
   private busy = false;
+  private useSavedCurrent: boolean;
 
   constructor(
     private readonly accounts: AccountStore,
     private readonly vault: Vault,
     private readonly events: SessionEvents,
-  ) {}
+    private readonly settings: () => SessionSettings = () => defaultSessionSettings,
+  ) {
+    this.useSavedCurrent = settings().autoLogin;
+  }
 
   /** All saved accounts for the UI; never includes credentials */
   list(): AccountSummary[] {
-    return this.accounts.list().map(toSummary);
+    return this.accounts
+      .list()
+      .map((record) => ({ ...toSummary(record), current: this.useSavedCurrent && record.current }));
   }
 
   /** The current account, or null when none is selected */
   current(): AccountSummary | null {
-    const record = this.accounts.list().find((account) => account.current);
+    const record = this.useSavedCurrent ? this.accounts.list().find((account) => account.current) : undefined;
     return record ? toSummary(record) : null;
   }
 
@@ -105,6 +120,7 @@ export class SessionManager {
     return this.exclusive(async () => {
       const summary = await this.check(id);
       this.accounts.setCurrent(id);
+      this.useSavedCurrent = true;
       this.emit();
       return { ...summary, current: true };
     });
@@ -229,6 +245,7 @@ export class SessionManager {
     this.accounts.save(record);
     this.storeSession(record.id, result.value.renewedSessionCookie ?? sessionCookie);
     this.accounts.setCurrent(record.id);
+    this.useSavedCurrent = true;
     this.emit();
     return toSummary(record);
   }
@@ -251,11 +268,15 @@ export class SessionManager {
     this.vault.saveSession(id, sessionCookie);
   }
 
-  /** Record a status change and notify the UI only when it changed */
+  /** Read the latest status so concurrent expiry responses notify only once per active session */
   private markStatus(record: AccountRecord, status: AccountRecord["status"]): void {
-    if (record.status !== status) {
+    const latest = this.accounts.get(record.id);
+    if (latest && latest.status !== status && !(latest.status === "expired" && status === "offline")) {
       this.accounts.setStatus(record.id, status);
       this.emit();
+      if (status === "expired" && this.current()?.id === record.id && this.settings().notifyOnExpire) {
+        this.events.expired?.();
+      }
     }
   }
 

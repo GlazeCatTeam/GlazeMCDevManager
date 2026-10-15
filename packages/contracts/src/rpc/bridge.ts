@@ -27,6 +27,7 @@ import type { LogPage, LogQuery } from "./logs";
 import type { MessageContent, MessageDeleteParams, MessageListParams, MessagePage, MessageParams } from "./messages";
 import type { PluginInstallPreview, PluginSnapshot } from "./plugins";
 import type { RankBoard, RankEntry, RankListParams } from "./rank";
+import type { SessionSettings } from "./session-settings";
 import type { WorkCreateParams } from "./work-create";
 import type {
   WorkEditorDocument,
@@ -50,6 +51,8 @@ export interface WindowState {
 }
 
 export interface RpcMethods {
+  "sessionSettings.get": { params: undefined; result: SessionSettings };
+  "sessionSettings.set": { params: SessionSettings; result: SessionSettings };
   "app.reportRendererError": { params: { kind: "error" | "unhandled-rejection" }; result: undefined };
   "plugins.list": { params: undefined; result: PluginSnapshot };
   "plugins.setEnabled": { params: { id: string; enabled: boolean }; result: PluginSnapshot };
@@ -123,6 +126,7 @@ export interface RpcMethods {
 }
 
 export interface EventPayloads {
+  "sessionSettings.changed": SessionSettings;
   "plugins.changed": PluginSnapshot;
   "logs.changed": undefined;
   "general.changed": GeneralState;

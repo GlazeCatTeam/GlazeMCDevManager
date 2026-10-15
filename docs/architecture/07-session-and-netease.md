@@ -42,6 +42,16 @@ stateDiagram-v2
 
 ## 登录协议
 
+### 会话偏好
+
+- `sessionSettings.get/set` 读写 `settings` 表的应用级 `sessionSettings` 项，字段为 `autoLogin`、`notifyOnExpire`，首次安装均为 `true`。严格校验两个布尔值，保存成功后广播 `sessionSettings.changed`；卡片确认保存成功才更新开关，失败保留原值并支持重新读取。
+- `autoLogin` 只在主进程创建 `SessionManager` 时生效。关闭后该次启动的 `account.current` 为 null、列表不标当前账号、初始路由为登录页且 `restore()` 不读取凭据或请求平台。已保存账号与加密会话不删除，用户可从登录页的“选择已保存账号”进入账号管理并手动验证切换。运行中修改开关不退出当前账号；重新开启也不立即触发登录。
+- `notifyOnExpire` 在检测到当前账号由非过期变为过期时读取最新值；开启时发送 Electron 原生系统通知，点击恢复主窗口。并发响应按数据库最新状态去重；延迟的网络错误不能把已过期改回离线。其他账号过期、网络/解析/业务错误和主动退出不弹通知。重新验证或登录成功后，下次过期可再次提醒。
+- 关闭提醒仍保留真实状态广播、侧边栏状态与受保护页面的重登引导。过期是在启动验证或业务请求中检测，不新增后台定时轮询。通知失败只记录不含账号信息的警告日志，不阻断状态更新。
+- Windows 设置应用标识；原生通知的 `show/click/failed` 处理依据 [Electron Notification](https://www.electronjs.org/docs/latest/api/notification)。安装包须保持 AppUserModelID 与快捷方式身份一致，详见 [Windows 通知说明](https://www.electronjs.org/docs/latest/tutorial/notifications#Windows)。
+
+### 登录方式
+
 从原项目迁移（行为参考，代码重写）：
 
 | 登录方式 | 流程 |
@@ -120,6 +130,12 @@ type NeteaseError =
 | `works.list` | `GET /items/categories/pe/` | 只含手机版作品；列表没有封面和上线时间。收益速算也复用它（跳过 `pri_type` 为 9 的前置模组） |
 | `works.get` | `GET /items/categories/pe/{id}` | 图标取 `channel` 里 `channel_id` 为 5 的图（1000×1000 正方形），`banner_pic` 是横幅图；另有上线、首次上线、定时上架时间；只能查本账号的作品 |
 | `works.reviewFeedback` | `GET /items/categories/pe/{id}/feedback` | 反馈可能是 HTML，主进程转成纯文本；没有反馈时返回 null |
+
+### 账号管理页等级卡片
+
+账号管理页的等级卡片与首页复用 `developer.level`，显式传递当前账号 ID；按账号重建查询组件，旧账号的延迟响应不进入新账号卡片。请求失败显示错误和重试，不显示固定示例；贡献缺失显示“暂无贡献数据”。经验按 `(totalExp - expFloor) / (expCeiling - expFloor)` 显示当前等级内进度，零宽区间不做除法。
+
+阶级称号和贡献等级文案依据 [MCDevManager LevelName.kt](https://github.com/BitterLemonn/MCDevManager/blob/mp-master/shared/src/commonMain/kotlin/com/lemon/mcdevmanagermp/data/consts/LevelName.kt) 的映射语义实现（核对日期 2026-10-16）；只参考行为，不复制 Kotlin 实现。未知阶或贡献等级保留原始数字，不套用已知称号；分数保留平台原始字符串，排名非正数显示“未上榜”，并展示接口返回的贡献月份。
 
 ## 两个独立的 HTTP 客户端
 

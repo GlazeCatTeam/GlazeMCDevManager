@@ -52,6 +52,7 @@ export type {
   RpcError,
   RpcMethods,
   RpcResult,
+  SessionSettings,
   SessionStatus,
   WorkDetail,
   WorkEditorDocument,

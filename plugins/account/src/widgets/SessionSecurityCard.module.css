@@ -3,6 +3,11 @@
   flex-direction: column;
 }
 
+.content {
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .row {
   display: flex;
   align-items: center;

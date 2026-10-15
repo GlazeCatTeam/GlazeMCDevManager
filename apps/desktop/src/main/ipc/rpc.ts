@@ -64,6 +64,7 @@ import type { PluginRegistry } from "../plugins/registry";
 import type { AppearanceService } from "../preferences/appearance";
 import type { CacheService } from "../preferences/cache";
 import type { GeneralService } from "../preferences/general";
+import type { SessionSettingsService } from "../preferences/session-settings";
 import type { SessionManager } from "../session/session-manager";
 import { closeLoginWindow, loginWithOfficialWindow } from "../windows/login-window";
 import { appWindows } from "../windows/main-window";
@@ -146,6 +147,7 @@ function createHandlers(
   cache: CacheService,
   plugins: PluginRegistry,
   logs: LogService,
+  sessionSettings: SessionSettingsService,
 ): HandlerTable {
   let lastRendererError = 0;
   /** Pin mailbox writes and detail reads to the account that initiated them */
@@ -155,6 +157,12 @@ function createHandlers(
     return account;
   };
   return {
+    "sessionSettings.get": () => sessionSettings.get(),
+    "sessionSettings.set": (params) => {
+      const saved = sessionSettings.set(params);
+      for (const win of appWindows()) sendEvent(win, "sessionSettings.changed", saved);
+      return saved;
+    },
     ...createWorkOperationHandlers(sessions),
     "app.reportRendererError": (params) => {
       if (!params || (params.kind !== "error" && params.kind !== "unhandled-rejection"))
@@ -436,8 +444,9 @@ export function registerRpc(
   cache: CacheService,
   plugins: PluginRegistry,
   logs: LogService,
+  sessionSettings: SessionSettingsService,
 ): void {
-  const handlers = createHandlers(sessions, appearance, general, cache, plugins, logs);
+  const handlers = createHandlers(sessions, appearance, general, cache, plugins, logs, sessionSettings);
   const isRpcMethod = (method: unknown): method is RpcMethod =>
     typeof method === "string" && Object.hasOwn(handlers, method);
 
@@ -449,6 +458,7 @@ export function registerRpc(
     try {
       if (
         (method.startsWith("plugins.") ||
+          method.startsWith("sessionSettings.") ||
           method.startsWith("logs.") ||
           method.startsWith("general.") ||
           method === "app.rememberRoute" ||
@@ -471,6 +481,7 @@ export function registerRpc(
         [
           "appearance.set",
           "general.set",
+          "sessionSettings.set",
           "general.clearCache",
           "layout.reset",
           "works.save",

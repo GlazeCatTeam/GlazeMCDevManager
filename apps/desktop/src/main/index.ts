@@ -16,11 +16,16 @@ if (!app.requestSingleInstanceLock()) {
   app.on("second-instance", () => lifecycle?.show());
   app.on("activate", () => lifecycle?.show());
   app.whenReady().then(() => {
+    if (process.platform === "win32")
+      app.setAppUserModelId(app.isPackaged ? "com.glaze.mcdevmanager" : process.execPath);
     handleRemoteImages();
-    const services = createServices(() => {
-      if (!lifecycle) throw new Error("窗口服务尚未就绪");
-      lifecycle.ensureTray();
-    });
+    const services = createServices(
+      () => {
+        if (!lifecycle) throw new Error("窗口服务尚未就绪");
+        lifecycle.ensureTray();
+      },
+      () => lifecycle?.show(),
+    );
     lifecycle = new WindowLifecycle(() => services.general.preferences(), createMainWindow);
     registerRpc(
       services.sessions,
@@ -29,6 +34,7 @@ if (!app.requestSingleInstanceLock()) {
       services.cache,
       services.plugins,
       services.logs,
+      services.sessionSettings,
     );
     lifecycle.attach(createMainWindow());
     // Check the saved session in the background; the window opens from saved state right away

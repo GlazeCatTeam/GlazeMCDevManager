@@ -12,7 +12,6 @@ import {
 } from "@glaze/plugin-sdk";
 import { useCallback, useState } from "react";
 import styles from "./AccountPage.module.css";
-import { initialSettings, levelInfo } from "./mock";
 import { routes } from "./routes";
 import { CurrentAccountCard } from "./widgets/CurrentAccountCard";
 import { LevelCard } from "./widgets/LevelCard";
@@ -25,7 +24,6 @@ const DEVELOPER_CONSOLE_URL = "https://mcdev.webapp.163.com/";
 export function AccountPage() {
   const { navigate } = useNavigation();
   const { current, accounts } = useSession();
-  const [settings, setSettings] = useState(initialSettings);
   const [pendingDelete, setPendingDelete] = useState<AccountSummary | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [switchingId, setSwitchingId] = useState<string | null>(null);
@@ -92,7 +90,7 @@ export function AccountPage() {
                 onOpenConsole={() => window.open(DEVELOPER_CONSOLE_URL)}
                 onLogout={() => void callHost("account.logout")}
               />
-              <LevelCard className={styles.level} info={levelInfo} />
+              <LevelCard key={current.id} className={styles.level} accountId={current.id} />
             </>
           ) : (
             <EmptyState title="尚未登录账号" hint="添加新账号，或从已保存账号中选择一个登录" />
@@ -108,7 +106,7 @@ export function AccountPage() {
             onDelete={setPendingDelete}
             onAdd={() => navigate(routes.login)}
           />
-          <SessionSecurityCard className={styles.security} settings={settings} onChange={setSettings} />
+          <SessionSecurityCard className={styles.security} />
         </div>
       </div>
 

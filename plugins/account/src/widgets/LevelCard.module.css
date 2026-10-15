@@ -9,6 +9,12 @@
   gap: 12px;
 }
 
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .lv {
   font-size: 32px;
   font-weight: 900;
@@ -31,7 +37,7 @@
   margin-top: auto;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
+  gap: 8px 24px;
   padding-top: 18px;
   border-top: var(--g-border-width) solid var(--g-border-divider);
 }
@@ -40,6 +46,12 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.month {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--g-text-muted);
 }
 
 .contributionTitle {

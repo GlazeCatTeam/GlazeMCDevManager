@@ -10,7 +10,9 @@ import { AppearanceService } from "../preferences/appearance";
 import { CacheService } from "../preferences/cache";
 import { GeneralService } from "../preferences/general";
 import { readLoginItem, setLoginItem } from "../preferences/login-item";
+import { SessionSettingsService } from "../preferences/session-settings";
 import { clearRemoteImageCache } from "../protocols/remote-image";
+import { ExpiryNotification } from "../session/expiry-notification";
 import { SessionManager } from "../session/session-manager";
 import { appWindows } from "../windows/main-window";
 
@@ -35,18 +37,26 @@ function broadcast<E extends EventName>(event: E, payload: EventPayloads[E]): vo
 }
 
 /** Open the database and create the main-process services; call after app is ready */
-export function createServices(ensureTray: () => void) {
+export function createServices(ensureTray: () => void, showWindow: () => void) {
   const logs = new LogService(join(app.getPath("userData"), "logs"), () => broadcast("logs.changed", undefined));
   const db = openDatabase(join(app.getPath("userData"), "glaze.db"));
-  const sessions = new SessionManager(new AccountStore(db), new Vault(db, dpapiCipher), {
-    changed: (payload) => {
-      logs.write("info", "account", "账号会话状态已更新");
-      broadcast("account.changed", payload);
-    },
-    progress: (step) => broadcast("login.progress", { step }),
-  });
-  app.on("will-quit", () => db.close());
   const preferences = new PreferenceStore(db);
+  const sessionSettings = new SessionSettingsService(preferences);
+  const expiryNotification = new ExpiryNotification(showWindow, (message) => logs.write("warn", "account", message));
+  const sessions = new SessionManager(
+    new AccountStore(db),
+    new Vault(db, dpapiCipher),
+    {
+      changed: (payload) => {
+        logs.write("info", "account", "账号会话状态已更新");
+        broadcast("account.changed", payload);
+      },
+      progress: (step) => broadcast("login.progress", { step }),
+      expired: () => expiryNotification.show(),
+    },
+    () => sessionSettings.get(),
+  );
+  app.on("will-quit", () => db.close());
   const plugins = new PluginRegistry(
     preferences,
     join(app.getPath("userData"), "plugins"),
@@ -60,6 +70,7 @@ export function createServices(ensureTray: () => void) {
   app.on("render-process-gone", () => logs.write("error", "renderer", "界面进程意外退出"));
   return {
     sessions,
+    sessionSettings,
     logs,
     plugins,
     appearance: new AppearanceService(preferences, () => plugins.snapshot().themes),

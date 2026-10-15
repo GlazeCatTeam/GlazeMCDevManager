@@ -22,7 +22,7 @@ type Mode = "window" | "cookie";
 /** Sign in through NetEase's official login window, or with a pasted cookie */
 export function LoginPage() {
   const { params, navigate } = useNavigation();
-  const { current } = useSession();
+  const { current, accounts } = useSession();
   const [mode, setMode] = useState<Mode>(params.mode === "cookie" ? "cookie" : "window");
   const [cookie, setCookie] = useState("");
   const { phase, error, loginWithWindow, loginWithCookie, cancel } = useLogin();
@@ -90,6 +90,11 @@ export function LoginPage() {
                 返回工作台
               </TextButton>
             )}
+            {!current && accounts.length > 0 && (
+              <TextButton tone="subtle" className={styles.switchMode} onClick={() => navigate(routes.account)}>
+                选择已保存账号
+              </TextButton>
+            )}
           </>
         )}
 
@@ -114,7 +119,7 @@ export function LoginPage() {
               />
               <span className={styles.welcomeText}>
                 <span className={styles.welcomeName}>欢迎，{phase.account.nickname}</span>
-                <span className={styles.muted}>账号已加密保存，下次启动会自动登录</span>
+                <span className={styles.muted}>账号已加密保存，自动登录可在「会话与安全」中设置</span>
               </span>
             </div>
             <Button variant="primary" size="lg" onClick={() => navigate(routes.home)}>

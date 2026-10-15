@@ -13,6 +13,7 @@ export * from "./rpc/logs";
 export * from "./rpc/messages";
 export * from "./rpc/plugins";
 export * from "./rpc/rank";
+export * from "./rpc/session-settings";
 export * from "./rpc/work-create";
 export * from "./rpc/work-editor";
 export * from "./rpc/work-operations";
