@@ -15,6 +15,7 @@ export {
   type TextFieldProps,
 } from "./components/Form";
 export { Icon, type IconProps } from "./components/Icon";
+export { Pagination, type PaginationProps } from "./components/Pagination";
 export { Panel, type PanelProps } from "./components/Panel";
 export { type AvatarColors, PixelAvatar, type PixelAvatarProps } from "./components/PixelAvatar";
 export { Switch, type SwitchProps } from "./components/Switch";

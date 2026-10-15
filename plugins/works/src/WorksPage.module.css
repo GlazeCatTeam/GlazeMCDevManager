@@ -1,0 +1,69 @@
+.page {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 36px 40px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.subtitle {
+  color: var(--g-text-muted);
+}
+
+.toolbar {
+  display: flex;
+  gap: 10px;
+}
+
+/* Fixed tile size: three columns, always three 196px rows so the pager stays put */
+.grid {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(3, 196px);
+  gap: 20px;
+}
+
+.empty {
+  height: 412px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: var(--g-surface-panel);
+  border: var(--g-border-width) solid var(--g-panel-borderColor);
+  border-radius: var(--g-radius-panel);
+}
+
+.emptyIcon {
+  color: var(--g-action-secondary-bg);
+}
+
+.emptyTitle {
+  font-size: 16px;
+  font-weight: 700;
+}

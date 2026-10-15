@@ -2,9 +2,9 @@ import type { ReactNode } from "react";
 import styles from "./Feedback.module.css";
 import { Icon } from "./Icon";
 
-/** Small outlined label, e.g. "估算" */
-export function Tag({ children }: { children: ReactNode }) {
-  return <span className={styles.tag}>{children}</span>;
+/** Small outlined label, e.g. "估算"; the warning tone marks a state that needs attention */
+export function Tag({ children, tone = "default" }: { children: ReactNode; tone?: "default" | "warning" }) {
+  return <span className={tone === "warning" ? `${styles.tag} ${styles.tagWarning}` : styles.tag}>{children}</span>;
 }
 
 export interface NoticeProps {

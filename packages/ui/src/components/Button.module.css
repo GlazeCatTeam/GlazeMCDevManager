@@ -25,6 +25,13 @@
   padding-inline: 14px;
 }
 
+.xs {
+  --edge: min(var(--g-button-edgeBottom), 3px);
+  height: 30px;
+  padding-inline: 10px;
+  font-size: 12.5px;
+}
+
 .lg {
   height: var(--g-button-heightLarge);
   font-size: 16px;

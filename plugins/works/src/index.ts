@@ -1,1 +1,1 @@
-export {};
+export { WorksPage } from "./WorksPage";

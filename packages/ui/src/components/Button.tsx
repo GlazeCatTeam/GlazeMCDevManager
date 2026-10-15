@@ -3,7 +3,8 @@ import styles from "./Button.module.css";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "primary" | "secondary" | "danger";
-  size?: "md" | "sm" | "lg";
+  /** xs is for compact per-item actions inside tiles */
+  size?: "md" | "sm" | "lg" | "xs";
 }
 
 /** Block-style button; one primary button per page, the rest secondary */

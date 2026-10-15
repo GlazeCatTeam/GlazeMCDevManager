@@ -11,6 +11,11 @@
   font-weight: 700;
 }
 
+.tagWarning {
+  border-color: var(--g-status-warning-border);
+  color: var(--g-status-warning);
+}
+
 .notice {
   display: flex;
   align-items: center;

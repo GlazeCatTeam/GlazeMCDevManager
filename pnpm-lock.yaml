@@ -190,6 +190,9 @@ importers:
       '@glaze/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
+      '@glaze/plugin-works':
+        specifier: workspace:*
+        version: link:../../plugins/works
       '@glaze/theme':
         specifier: workspace:*
         version: link:../../packages/theme
@@ -302,7 +305,18 @@ importers:
 
   plugins/settings: {}
 
-  plugins/works: {}
+  plugins/works:
+    dependencies:
+      '@glaze/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
+    devDependencies:
+      '@types/react':
+        specifier: ^19.3.0
+        version: 19.3.0
+      react:
+        specifier: ^19.3.0
+        version: 19.3.0
 
   themes/fluent-dark: {}
 
