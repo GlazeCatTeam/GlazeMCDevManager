@@ -14,6 +14,7 @@
 | [0008](0008-capabilities-and-mcp.md) | 每个功能先定义能力，并通过 MCP 对外部 AI 工具开放 | 已接受 |
 | [0009](0009-official-login-window.md) | 登录使用网易官方登录窗口 | 已接受 |
 | [0010](0010-node-sqlite.md) | SQLite 驱动改用 Electron 内置的 node:sqlite | 已接受 |
+| [0011](0011-remote-image-proxy.md) | 远程图片经主进程代理加载 | 已接受 |
 
 新增 ADR 时复制下面的模板，编号顺延。
 

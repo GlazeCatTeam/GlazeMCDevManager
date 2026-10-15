@@ -116,7 +116,7 @@ type NeteaseError =
 | `developer.level` | `GET /new_level/` | 等级、阶、经验区间、升阶任务、本月贡献 |
 | `analytics.overview` | `GET /data_analysis/overview/` | 字段缺失视为解析错误，不填零 |
 | `income.estimate` | `GET /items/categories/pe/`、`/data_analysis/day_detail/`、`/goods/pe/summary`、`/goods/pe/{iid}/`、`/data_analysis/goods/day_detail/` | 作品每 20 个一批查询日明细（必须带 `sort`、`order`，否则平台返回"查询日明细数据失败"），跳过前置模组；某批失败时列出这些作品名，不当作零 |
-| `rank.list` | `GET /square/us_rank_list/`、`/square/rank_list/` | 手游与端游的分类编号不同；`rank_change` 是上次名次减本次名次，上次名次超出前 50 视为新上榜 |
+| `rank.list` | `GET /square/us_rank_list/`、`/square/rank_list/` | 手游与端游的分类编号不同；`rank_change` 是上次名次减本次名次，上次名次超出前 50 视为新上榜。只有热门飙升榜返回作品图标（`icon_url`），其余榜单只有作品 ID 和名称，`/items/categories/pe/{id}` 也查不到别人的作品，这些榜单用生成色块 |
 
 ## 两个独立的 HTTP 客户端
 

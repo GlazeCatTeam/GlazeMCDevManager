@@ -1,9 +1,11 @@
-import { type AvatarColors, Button, type DeveloperLevel, PixelAvatar, ProgressBar } from "@glaze/plugin-sdk";
+import { Avatar, type AvatarColors, Button, type DeveloperLevel, ProgressBar } from "@glaze/plugin-sdk";
 import { formatCompact, MISSING } from "../format";
 import styles from "./Greeting.module.css";
 
 export interface GreetingProps {
   nickname: string;
+  /** Proxied avatar image; null shows the pixel face */
+  avatarSrc: string | null;
   avatar: AvatarColors;
   /** null until the level has loaded */
   level: DeveloperLevel | null;
@@ -12,7 +14,7 @@ export interface GreetingProps {
 }
 
 /** Page header: greeting, developer class and level, experience progress within the level */
-export function Greeting({ nickname, avatar, level, refreshing, onRefresh }: GreetingProps) {
+export function Greeting({ nickname, avatarSrc, avatar, level, refreshing, onRefresh }: GreetingProps) {
   const gained = level ? level.totalExp - level.expFloor : 0;
   const needed = level ? level.expCeiling - level.expFloor : 0;
   const progress = needed > 0 ? gained / needed : 0;
@@ -20,7 +22,7 @@ export function Greeting({ nickname, avatar, level, refreshing, onRefresh }: Gre
 
   return (
     <section className={styles.greeting} aria-label="问候与等级">
-      <PixelAvatar colors={avatar} size={64} />
+      <Avatar src={avatarSrc} colors={avatar} size={64} />
       <div className={styles.text}>
         <h1 className={styles.title}>Hi，{nickname}！</h1>
         <div className={styles.level}>

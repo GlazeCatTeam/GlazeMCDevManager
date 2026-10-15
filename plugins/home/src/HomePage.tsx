@@ -1,4 +1,4 @@
-import { avatarColorsFor, Notice, TextButton, useHostQuery, useSession } from "@glaze/plugin-sdk";
+import { avatarColorsFor, Notice, remoteImageUrl, TextButton, useHostQuery, useSession } from "@glaze/plugin-sdk";
 import { useMemo, useState } from "react";
 import styles from "./HomePage.module.css";
 import { Greeting } from "./widgets/Greeting";
@@ -53,6 +53,7 @@ export function HomePage() {
     <div className={styles.page}>
       <Greeting
         nickname={current.nickname}
+        avatarSrc={remoteImageUrl(current.avatarUrl)}
         avatar={avatarColorsFor(current.id)}
         level={level.data}
         refreshing={refreshing}

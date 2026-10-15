@@ -2,3 +2,8 @@
   display: block;
   flex: none;
 }
+
+.image {
+  object-fit: cover;
+  background: var(--g-surface-sunken);
+}

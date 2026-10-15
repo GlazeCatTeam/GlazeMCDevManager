@@ -1,4 +1,12 @@
-import { type AccountSummary, avatarColorsFor, Button, Panel, PixelAvatar, TextButton } from "@glaze/plugin-sdk";
+import {
+  type AccountSummary,
+  Avatar,
+  avatarColorsFor,
+  Button,
+  Panel,
+  remoteImageUrl,
+  TextButton,
+} from "@glaze/plugin-sdk";
 import { monthDay } from "../format";
 import { loginMethodLabels } from "../mock";
 import styles from "./SavedAccountsCard.module.css";
@@ -37,7 +45,7 @@ export function SavedAccountsCard({
           const expired = account.status === "expired";
           return (
             <li key={account.id} className={styles.row}>
-              <PixelAvatar colors={avatarColorsFor(account.id)} size={40} />
+              <Avatar src={remoteImageUrl(account.avatarUrl)} colors={avatarColorsFor(account.id)} size={40} />
               <span className={styles.text}>
                 <span className={styles.nickname}>{account.nickname}</span>
                 {expired ? (

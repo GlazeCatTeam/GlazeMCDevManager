@@ -1,10 +1,11 @@
 import {
+  Avatar,
   avatarColorsFor,
   Button,
   callHost,
   Icon,
   Notice,
-  PixelAvatar,
+  remoteImageUrl,
   TextArea,
   TextButton,
   useNavigation,
@@ -66,7 +67,7 @@ export function LoginExpiredPage() {
     <LoginLayout>
       <div className={expiredStyles.heading}>
         <span className={expiredStyles.avatar}>
-          <PixelAvatar colors={avatarColorsFor(account.id)} size={56} />
+          <Avatar src={remoteImageUrl(account.avatarUrl)} colors={avatarColorsFor(account.id)} size={56} />
           <span className={expiredStyles.badge} aria-hidden="true" />
         </span>
         <div className={styles.titles}>
@@ -126,7 +127,7 @@ export function LoginExpiredPage() {
           <span className={expiredStyles.othersTitle}>其他已保存的账号</span>
           {others.map((other) => (
             <button key={other.id} type="button" className={expiredStyles.other} onClick={() => switchTo(other.id)}>
-              <PixelAvatar colors={avatarColorsFor(other.id)} size={36} />
+              <Avatar src={remoteImageUrl(other.avatarUrl)} colors={avatarColorsFor(other.id)} size={36} />
               <span className={expiredStyles.otherText}>
                 <span className={expiredStyles.otherName}>{other.nickname}</span>
                 <span className={expiredStyles.valid}>

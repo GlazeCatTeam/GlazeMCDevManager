@@ -1,4 +1,12 @@
-import { type AccountSummary, avatarColorsFor, Button, Panel, PixelAvatar, TextButton } from "@glaze/plugin-sdk";
+import {
+  type AccountSummary,
+  Avatar,
+  avatarColorsFor,
+  Button,
+  Panel,
+  remoteImageUrl,
+  TextButton,
+} from "@glaze/plugin-sdk";
 import { timeOfDay } from "../format";
 import { loginMethodLabels } from "../mock";
 import styles from "./CurrentAccountCard.module.css";
@@ -34,7 +42,7 @@ export function CurrentAccountCard({
   return (
     <Panel aria-label="当前账号" title="当前账号" className={className}>
       <div className={styles.identity}>
-        <PixelAvatar colors={avatarColorsFor(account.id)} size={72} />
+        <Avatar src={remoteImageUrl(account.avatarUrl)} colors={avatarColorsFor(account.id)} size={72} />
         <div className={styles.text}>
           <span className={styles.nickname}>{account.nickname}</span>
           <span className={styles.muted}>{account.passport ?? "通行证账号未知（Cookie 导入）"}</span>

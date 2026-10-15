@@ -30,3 +30,16 @@ export function isLoginWindowUrl(url: string): boolean {
     return false;
   }
 }
+
+// Image CDNs the platform returns for avatars and work icons, e.g. x19.fp.ps.netease.com
+const imageHostSuffixes = [".netease.com", ".126.net", ".127.net", ".163.com"];
+
+/** Whether the image proxy may fetch this URL; only https NetEase hosts are allowed */
+export function isNeteaseImageUrl(url: string): boolean {
+  try {
+    const { protocol, hostname } = new URL(url);
+    return protocol === "https:" && imageHostSuffixes.some((suffix) => hostname.endsWith(suffix));
+  } catch {
+    return false;
+  }
+}

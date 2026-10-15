@@ -8,6 +8,7 @@ export { describeError, fail, type NeteaseError, ok, type Result } from "./error
 export type { McDevResponse, NeteaseSession } from "./http/client";
 export {
   isLoginWindowUrl,
+  isNeteaseImageUrl,
   MC_DEV_API,
   OFFICIAL_HOME_URL,
   OFFICIAL_LOGIN_URL,

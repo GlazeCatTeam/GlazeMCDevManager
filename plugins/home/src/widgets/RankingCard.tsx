@@ -7,6 +7,7 @@ import {
   Panel,
   type RankChange,
   type RankEntry,
+  remoteImageUrl,
   TextButton,
   useHostQuery,
 } from "@glaze/plugin-sdk";
@@ -33,8 +34,13 @@ function describeChange(change: RankChange): { text: string; className: string |
   }
 }
 
-/** Generated cover block; platform cover images are not loaded yet */
+/** Work icon from the platform; boards that send no icon, or a failed load, show a generated block */
 function Cover({ item }: { item: RankEntry }) {
+  const [failed, setFailed] = useState(false);
+  const src = remoteImageUrl(item.iconUrl);
+  if (src && !failed) {
+    return <img className={styles.cover} src={src} alt="" draggable={false} onError={() => setFailed(true)} />;
+  }
   const colors = avatarColorsFor(item.itemId ?? item.title);
   return (
     <span className={styles.cover} style={{ background: colors.face }} aria-hidden="true">
@@ -245,7 +251,7 @@ export function RankingCard({ className, onOpenAll }: RankingCardProps) {
           return (
             <li key={`${item.rank}-${item.title}`} className={styles.item}>
               <span className={item.rank <= 3 ? `${styles.rank} ${styles.rankTop}` : styles.rank}>{item.rank}</span>
-              {item.itemId !== null && <Cover item={item} />}
+              {item.itemId !== null && <Cover key={item.iconUrl ?? item.itemId} item={item} />}
               <span className={styles.itemTitle}>{item.title}</span>
               <span className={`${styles.change} ${change.className ?? ""}`}>{change.text}</span>
             </li>

@@ -10,8 +10,8 @@
 | `sandbox` | `true` |
 | `nodeIntegration` | `false` |
 | `webSecurity` | `true` |
-| 远程内容 | 不加载任何远程页面；外部链接用系统浏览器打开 |
-| CSP | `default-src 'self' glaze-asset:`，禁止内联脚本和 `eval` |
+| 远程内容 | 不加载任何远程页面；外部链接用系统浏览器打开；远程图片只经主进程的 `glaze-image:` 代理加载（[ADR-0011](../adr/0011-remote-image-proxy.md)） |
+| CSP | `default-src 'self' glaze-asset:`，图片另允许 `glaze-image:`，禁止内联脚本和 `eval` |
 | 导航 | 拦截 `will-navigate` 和 `window.open`，只允许应用内路由 |
 | 权限请求 | 默认拒绝摄像头、麦克风、地理位置等 Web 权限 |
 

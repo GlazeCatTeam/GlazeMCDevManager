@@ -279,3 +279,8 @@
 .all {
   align-self: center;
 }
+
+img.cover {
+  object-fit: cover;
+  background: var(--g-surface-sunken);
+}

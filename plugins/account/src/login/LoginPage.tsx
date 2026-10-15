@@ -1,9 +1,10 @@
 import {
   AppLogo,
+  Avatar,
   avatarColorsFor,
   Button,
   Notice,
-  PixelAvatar,
+  remoteImageUrl,
   TextArea,
   TextButton,
   useNavigation,
@@ -106,7 +107,11 @@ export function LoginPage() {
         {phase.kind === "done" && (
           <div role="status" className={styles.done}>
             <div className={styles.welcome}>
-              <PixelAvatar colors={avatarColorsFor(phase.account.id)} size={44} />
+              <Avatar
+                src={remoteImageUrl(phase.account.avatarUrl)}
+                colors={avatarColorsFor(phase.account.id)}
+                size={44}
+              />
               <span className={styles.welcomeText}>
                 <span className={styles.welcomeName}>欢迎，{phase.account.nickname}</span>
                 <span className={styles.muted}>账号已加密保存，下次启动会自动登录</span>

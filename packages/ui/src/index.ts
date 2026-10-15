@@ -20,7 +20,14 @@ export { Icon, type IconProps } from "./components/Icon";
 export { PageHeader, type PageHeaderProps } from "./components/PageHeader";
 export { Pagination, type PaginationProps } from "./components/Pagination";
 export { Panel, type PanelProps } from "./components/Panel";
-export { type AvatarColors, avatarColorsFor, PixelAvatar, type PixelAvatarProps } from "./components/PixelAvatar";
+export {
+  Avatar,
+  type AvatarColors,
+  type AvatarProps,
+  avatarColorsFor,
+  PixelAvatar,
+  type PixelAvatarProps,
+} from "./components/PixelAvatar";
 export { SearchField, type SearchFieldProps } from "./components/SearchField";
 export { SegmentedControl, type SegmentedControlProps, type SegmentedOption } from "./components/SegmentedControl";
 export { Switch, type SwitchProps } from "./components/Switch";

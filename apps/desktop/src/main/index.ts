@@ -1,9 +1,13 @@
 import { app, BrowserWindow } from "electron";
 import { createServices } from "./bootstrap/services";
 import { registerRpc } from "./ipc/rpc";
+import { handleRemoteImages, registerRemoteImageScheme } from "./protocols/remote-image";
 import { createMainWindow } from "./windows/main-window";
 
+registerRemoteImageScheme();
+
 app.whenReady().then(() => {
+  handleRemoteImages();
   const { sessions } = createServices();
   registerRpc(sessions);
   createMainWindow();

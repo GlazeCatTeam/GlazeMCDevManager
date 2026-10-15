@@ -15,6 +15,7 @@ export type {
   RpcResult,
   SessionStatus,
 } from "@glaze/contracts";
+export { remoteImageUrl } from "@glaze/contracts";
 export * from "@glaze/ui";
 export { type Navigation, NavigationProvider, type RouteParams, useNavigation } from "./context/navigation";
 export {

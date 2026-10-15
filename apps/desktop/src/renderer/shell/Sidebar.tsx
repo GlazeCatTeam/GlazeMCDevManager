@@ -1,5 +1,5 @@
-import type { AccountSummary, SessionStatus } from "@glaze/contracts";
-import { avatarColorsFor, Icon, PixelAvatar } from "@glaze/ui";
+import { type AccountSummary, remoteImageUrl, type SessionStatus } from "@glaze/contracts";
+import { Avatar, avatarColorsFor, Icon } from "@glaze/ui";
 import type { NavEntry } from "./nav";
 import styles from "./Sidebar.module.css";
 
@@ -52,7 +52,7 @@ export function Sidebar({ entries, activeRoute, account, onNavigate }: SidebarPr
           title="账号管理"
           onClick={() => onNavigate(accountRoute)}
         >
-          <PixelAvatar colors={avatarColorsFor(account.id)} size={28} />
+          <Avatar src={remoteImageUrl(account.avatarUrl)} colors={avatarColorsFor(account.id)} size={28} />
           <span className={styles.accountText}>
             <span className={styles.nickname}>{account.nickname}</span>
             <span className={account.status === "active" ? styles.valid : styles.expired}>

@@ -31,7 +31,7 @@ function yuan(value: number | undefined): string {
   return value === undefined ? MISSING : formatYuan(value);
 }
 
-/** A month's estimated income with its diamond income and developer share; the total includes subsidies */
+/** A month's estimated income: diamond income, then developer share plus incentives, which make up the total */
 export function ProfitEstimateCard({
   title,
   data,
@@ -74,6 +74,10 @@ export function ProfitEstimateCard({
         <div className={styles.row}>
           <RowLabel icon="income.share">开发者分成（元）</RowLabel>
           <span className={styles.rowValue}>{yuan(data?.developerShareYuan)}</span>
+        </div>
+        <div className={styles.row}>
+          <RowLabel icon="income.coin">激励金额（元）</RowLabel>
+          <span className={styles.rowValue}>{yuan(data?.subsidyYuan)}</span>
         </div>
       </div>
 

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import styles from "./PixelAvatar.module.css";
 
 /** Identity colors of a generated avatar; these are account data, not theme tokens */
@@ -48,5 +49,32 @@ export function PixelAvatar({ colors, size }: PixelAvatarProps) {
       <rect x="2" y="4" width="1" height="1" fill={colors.eyes} />
       <rect x="5" y="4" width="1" height="1" fill={colors.eyes} />
     </svg>
+  );
+}
+
+export interface AvatarProps {
+  /** Image URL usable by the page (e.g. the remote image proxy); null shows the pixel face */
+  src: string | null;
+  /** Pixel face used when there is no image or it fails to load */
+  colors: AvatarColors;
+  size: number;
+}
+
+/** Account or work image with the pixel face as fallback */
+export function Avatar({ src, colors, size }: AvatarProps) {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  if (!src || failedSrc === src) {
+    return <PixelAvatar colors={colors} size={size} />;
+  }
+  return (
+    <img
+      className={`${styles.avatar} ${styles.image}`}
+      src={src}
+      width={size}
+      height={size}
+      alt=""
+      draggable={false}
+      onError={() => setFailedSrc(src)}
+    />
   );
 }
