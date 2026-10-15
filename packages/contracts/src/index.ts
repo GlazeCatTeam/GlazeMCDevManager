@@ -4,6 +4,7 @@ export * from "./rpc/capabilities";
 export * from "./rpc/developer";
 export * from "./rpc/images";
 export * from "./rpc/income";
+export * from "./rpc/messages";
 export * from "./rpc/rank";
 export * from "./rpc/work-create";
 export * from "./rpc/work-editor";

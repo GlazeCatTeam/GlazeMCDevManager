@@ -3,6 +3,9 @@ import {
   type EventMessage,
   type EventName,
   type EventPayloads,
+  isMessageId,
+  isMessageIds,
+  isMessageListParams,
   isWorkCreateParams,
   isWorkSaveParams,
   type RankBoard,
@@ -14,14 +17,19 @@ import {
 } from "@glaze/contracts";
 import {
   createWork,
+  deleteMessages,
   estimateIncome,
   getAnalyticsOverview,
   getDeveloperLevel,
+  getMessage,
+  getMessageUnreadCount,
   getRankList,
   getReviewFeedback,
   getWork,
   getWorkEditorOptions,
+  listMessages,
   listWorks,
+  markAllMessagesRead,
   monthOf,
   parseMonth,
   readWorkEditor,
@@ -103,7 +111,29 @@ const rankCategories: readonly RankCategory[] = ["mod", "map", "texture", "lobby
 
 /** Handlers for every RPC method, backed by the session manager */
 function createHandlers(sessions: SessionManager): HandlerTable {
+  /** Pin mailbox writes and detail reads to the account that initiated them */
+  const messageAccount = (params: unknown): string => {
+    const account = requireString(params, "account");
+    if (sessions.current()?.id !== account) throw new CapabilityError("account_changed", "账号已切换，请刷新消息中心");
+    return account;
+  };
   return {
+    "messages.list": (params) => {
+      if (!isMessageListParams(params)) throw new CapabilityError("validation", "消息筛选参数无效");
+      return sessions.request(optionalString(params, "account"), (session) => listMessages(session, params));
+    },
+    "messages.unreadCount": (params) => sessions.request(optionalString(params, "account"), getMessageUnreadCount),
+    "messages.get": (params) => {
+      const account = messageAccount(params);
+      if (!isMessageId(params.id)) throw new CapabilityError("validation", "消息 ID 无效");
+      return sessions.request(account, (session) => getMessage(session, params.id));
+    },
+    "messages.markAllRead": (params) => sessions.request(messageAccount(params), markAllMessagesRead),
+    "messages.delete": (params) => {
+      const account = messageAccount(params);
+      if (!isMessageIds(params.ids)) throw new CapabilityError("validation", "待删除的消息列表无效");
+      return sessions.request(account, (session) => deleteMessages(session, params.ids));
+    },
     "works.create": (params) => {
       if (!isWorkCreateParams(params)) throw new CapabilityError("validation", "新建作品参数无效");
       if (sessions.current()?.id !== params.account)
@@ -236,11 +266,11 @@ export function registerRpc(sessions: SessionManager): void {
     }
     try {
       if (
-        method.startsWith("works.") &&
+        (method.startsWith("works.") || method.startsWith("messages.")) &&
         (!appWindows().some((window) => window.webContents === event.sender) ||
           event.senderFrame !== event.sender.mainFrame)
       ) {
-        throw new CapabilityError("internal", "作品接口只允许主界面调用");
+        throw new CapabilityError("internal", "业务接口只允许主界面调用");
       }
       const handler = handlers[method] as Handler<RpcMethod>;
       const value = await handler((request as { params?: unknown }).params as undefined, event);

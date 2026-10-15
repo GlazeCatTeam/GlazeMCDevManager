@@ -1,15 +1,19 @@
-import { Button, Chip, Dialog, PageHeader, SearchField, SegmentedControl } from "@glaze/plugin-sdk";
-import { useState } from "react";
-import styles from "./MessagesPage.module.css";
 import {
-  createMessages,
-  deleteMessages,
-  filterMessages,
+  Button,
+  Chip,
+  Dialog,
+  EmptyState,
   type MessageType,
-  markMessagesRead,
   messageTypes,
-  type ReadFilter,
-} from "./mock";
+  PageHeader,
+  SearchField,
+  SegmentedControl,
+  useSession,
+} from "@glaze/plugin-sdk";
+import { useState } from "react";
+import { messageLabels } from "./data";
+import styles from "./MessagesPage.module.css";
+import { useMessages } from "./useMessages";
 import { MessageDetail } from "./widgets/MessageDetail";
 import { MessageList } from "./widgets/MessageList";
 
@@ -19,82 +23,73 @@ const readFilters = [
   { value: "已读", label: "已读" },
 ] as const;
 
-/** Current time for the refresh note, e.g. "14:20:05" */
-function nowText(): string {
-  return new Date().toLocaleTimeString("zh-CN", { hour12: false });
+/** Remount on account changes so data, pending confirmations and requests stay isolated */
+export function MessagesPage() {
+  const { current } = useSession();
+  if (!current)
+    return (
+      <div className={styles.page}>
+        <PageHeader title="消息中心" />
+        <EmptyState title="请先登录账号" hint="登录后查看网易开发者平台消息" />
+      </div>
+    );
+  return <AccountMessages key={current.id} account={current.id} />;
 }
 
-/** Message center: filters on top, list on the left, detail on the right; deleting asks first */
-export function MessagesPage() {
-  const [messages, setMessages] = useState(createMessages);
-  const [selectedId, setSelectedId] = useState("notice-01");
+/** Account mailbox with server filters, pagination and explicit deletion confirmation */
+function AccountMessages({ account }: { account: string }) {
   const [query, setQuery] = useState("");
   const [type, setType] = useState<MessageType | "全部">("全部");
-  const [status, setStatus] = useState<ReadFilter>("全部");
+  const [status, setStatus] = useState<"全部" | "未读" | "已读">("全部");
   const [pendingDelete, setPendingDelete] = useState<string[]>([]);
-  const [notice, setNotice] = useState("");
-  const visible = filterMessages(messages, query, type, status);
-  const selected = visible.find((message) => message.id === selectedId);
-  const unread = messages.filter((message) => !message.read);
+  const mailbox = useMessages(account, {
+    title: query,
+    ...(type === "全部" ? {} : { type }),
+    ...(status === "全部" ? {} : { read: status === "已读" }),
+  });
+  const messages = mailbox.page?.messages ?? [];
   const readIds = messages.filter((message) => message.read).map((message) => message.id);
+  const disabled = mailbox.busy || mailbox.loading;
 
-  /** Unread count of one type chip; "全部" counts every type */
-  const unreadOf = (item: MessageType | "全部") =>
-    unread.filter((message) => item === "全部" || message.type === item).length;
-
-  /** Open a message and mark only that one as read; leave the "未读" filter so it stays visible */
-  const openMessage = (id: string) => {
-    setSelectedId(id);
-    setMessages((current) => markMessagesRead(current, [id]));
-    if (status === "未读") {
-      setStatus("全部");
-      setNotice("已标记为已读，切换至全部消息");
-    } else {
-      setNotice("");
-    }
+  /** Keep the captured IDs available for retry until the host confirms deletion */
+  const confirmDelete = async () => {
+    if (await mailbox.mutate(pendingDelete)) setPendingDelete([]);
   };
 
-  /** Mark every message as read */
-  const markAllRead = () => {
-    setMessages((current) =>
-      markMessagesRead(
-        current,
-        current.map((message) => message.id),
-      ),
-    );
-    setNotice("已将全部消息标记为已读");
+  /** Dismiss a confirmation only when no deletion is in flight */
+  const cancelDelete = () => {
+    if (!mailbox.busy) setPendingDelete([]);
   };
-
-  /** Delete the messages captured when the dialog opened */
-  const confirmDelete = () => {
-    setMessages((current) => deleteMessages(current, pendingDelete));
-    setNotice(`已从本地预览移除 ${pendingDelete.length} 条消息`);
-    setPendingDelete([]);
-  };
-
-  const cancelDelete = () => setPendingDelete([]);
 
   return (
     <div className={styles.page}>
       <PageHeader
         title="消息中心"
-        subtitle={`共 ${messages.length} 条消息 · 未读 ${unread.length} 条 · 模拟数据`}
+        subtitle={
+          mailbox.page
+            ? `符合筛选 ${mailbox.page.total} 条 · 未读 ${mailbox.page.unread ?? "—"} 条`
+            : "网易开发者平台消息"
+        }
         actions={
           <>
-            <Button disabled={unread.length === 0} onClick={markAllRead}>
+            <Button
+              disabled={disabled || !mailbox.page || mailbox.page.unread === 0}
+              onClick={() => void mailbox.mutate()}
+            >
               全部已读
             </Button>
-            <Button disabled={readIds.length === 0} onClick={() => setPendingDelete(readIds)}>
+            <Button disabled={disabled || readIds.length === 0} onClick={() => setPendingDelete(readIds)}>
               删除已读
             </Button>
-            <Button onClick={() => setNotice(`预览数据已刷新 · ${nowText()}`)}>刷新</Button>
+            <Button disabled={disabled} onClick={() => void mailbox.load()}>
+              刷新
+            </Button>
           </>
         }
       />
-
-      <section className={styles.filters} aria-label="消息筛选">
+      <fieldset className={styles.filters} aria-label="消息筛选" disabled={mailbox.busy || pendingDelete.length > 0}>
         <div className={styles.filterRow}>
-          <SearchField value={query} onChange={setQuery} placeholder="搜索消息标题…" />
+          <SearchField value={query} onChange={(value) => setQuery(value.slice(0, 200))} placeholder="搜索消息标题…" />
           <div className={styles.filterGroup}>
             <span className={styles.filterLabel}>状态</span>
             <SegmentedControl label="阅读状态" options={readFilters} value={status} onChange={setStatus} />
@@ -102,41 +97,71 @@ export function MessagesPage() {
         </div>
         <div className={styles.filterGroup}>
           <span className={styles.filterLabel}>类型</span>
-          {(["全部", ...messageTypes] as const).map((item) => (
+          <Chip selected={type === "全部"} onClick={() => setType("全部")}>
+            全部
+          </Chip>
+          {messageTypes.map((item) => (
             <Chip
               key={item}
               selected={type === item}
-              count={item === "全部" ? undefined : unreadOf(item)}
+              count={mailbox.page?.unreadByType[item] ?? undefined}
               onClick={() => setType(item)}
             >
-              {item}
+              {messageLabels[item]}
             </Chip>
           ))}
         </div>
-      </section>
-
+      </fieldset>
+      {mailbox.error && (
+        <div role="alert">
+          {mailbox.error}{" "}
+          <Button disabled={disabled} onClick={() => void mailbox.load()}>
+            重新加载
+          </Button>
+        </div>
+      )}
       <div className={styles.columns}>
-        <MessageList messages={visible} selectedId={selected?.id} onOpen={openMessage} />
-        <MessageDetail message={selected} onDelete={(id) => setPendingDelete([id])} />
+        <MessageList
+          messages={messages}
+          selectedId={mailbox.selected?.id}
+          onOpen={(id) => void mailbox.open(id)}
+          loading={mailbox.loading}
+          failed={!!mailbox.error}
+          disabled={disabled}
+          hasMore={mailbox.hasMore}
+          onLoadMore={() => void mailbox.load(true)}
+        />
+        <MessageDetail
+          message={mailbox.selected}
+          content={mailbox.content}
+          loading={mailbox.detailLoading}
+          error={mailbox.detailError}
+          disabled={disabled}
+          onRetry={() => mailbox.selected && void mailbox.open(mailbox.selected.id)}
+          onDelete={(id) => setPendingDelete([id])}
+        />
       </div>
       <div className={styles.notice} role="status">
-        {notice}
+        {mailbox.notice}
       </div>
-
       {pendingDelete.length > 0 && (
         <Dialog
           title="删除消息"
           onClose={cancelDelete}
           actions={
             <>
-              <Button onClick={cancelDelete}>取消</Button>
-              <Button variant="danger" onClick={confirmDelete}>
-                确认删除
+              <Button disabled={mailbox.busy} onClick={cancelDelete}>
+                取消
+              </Button>
+              <Button disabled={disabled} variant="danger" onClick={() => void confirmDelete()}>
+                {mailbox.busy ? "正在删除…" : "确认删除"}
               </Button>
             </>
           }
         >
-          将从当前本地预览中删除 {pendingDelete.length} 条消息，此操作不可撤销。
+          将从网易平台永久删除本次选中的 {pendingDelete.length}{" "}
+          条消息。批量删除仅包含当前已加载列表中的已读消息，此操作不可撤销。
+          {mailbox.error && <p role="alert">{mailbox.error}</p>}
         </Dialog>
       )}
     </div>

@@ -40,6 +40,7 @@
 }
 
 .body {
+  white-space: pre-wrap;
   margin-top: 30px;
   font-size: 13px;
   line-height: 1.9;
@@ -70,6 +71,8 @@
 }
 
 .info dd {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   margin: 0;
   line-height: 1.6;
 }

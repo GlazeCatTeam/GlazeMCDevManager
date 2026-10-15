@@ -2,6 +2,7 @@
 import type { AccountChanged, AccountSummary, InitialRoute, LoginStep } from "./account";
 import type { AccountParams, AnalyticsOverview, DeveloperLevel } from "./developer";
 import type { IncomeEstimate, IncomeEstimateParams } from "./income";
+import type { MessageContent, MessageDeleteParams, MessageListParams, MessagePage, MessageParams } from "./messages";
 import type { RankEntry, RankListParams } from "./rank";
 import type { WorkCreateParams } from "./work-create";
 import type {
@@ -25,6 +26,11 @@ export interface WindowState {
 }
 
 export interface RpcMethods {
+  "messages.list": { params: MessageListParams; result: MessagePage };
+  "messages.unreadCount": { params: AccountParams | undefined; result: number };
+  "messages.get": { params: MessageParams; result: MessageContent };
+  "messages.markAllRead": { params: { account: string }; result: undefined };
+  "messages.delete": { params: MessageDeleteParams; result: undefined };
   "window.minimize": { params: undefined; result: undefined };
   "window.toggleMaximize": { params: undefined; result: undefined };
   "window.close": { params: undefined; result: undefined };

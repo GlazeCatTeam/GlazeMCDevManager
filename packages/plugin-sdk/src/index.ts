@@ -7,6 +7,11 @@ export type {
   IncomeEstimate,
   LoginMethod,
   LoginStep,
+  MessageContent,
+  MessageListParams,
+  MessagePage,
+  MessageSummary,
+  MessageType,
   RankBoard,
   RankCategory,
   RankChange,
@@ -29,7 +34,7 @@ export type {
   WorkUploadKind,
   WorkValue,
 } from "@glaze/contracts";
-export { emptyWorkCreateFields, isWorkRecord, remoteImageUrl, workSections } from "@glaze/contracts";
+export { emptyWorkCreateFields, isWorkRecord, messageTypes, remoteImageUrl, workSections } from "@glaze/contracts";
 export * from "@glaze/ui";
 export { type Navigation, NavigationProvider, type RouteParams, useNavigation } from "./context/navigation";
 export {
