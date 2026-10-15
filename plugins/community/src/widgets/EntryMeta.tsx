@@ -21,15 +21,15 @@ export function EntryIdentity({ entry }: { entry: CommunityEntry }) {
   );
 }
 
-/** Existing developer reply beneath the player message */
-export function DeveloperResponse({ entry }: { entry: CommunityEntry }) {
+/** Existing reply beneath the player message, with an optional account-specific heading */
+export function DeveloperResponse({ entry, title = "开发者回复" }: { entry: CommunityEntry; title?: string }) {
   if (!entry.reply) {
     return null;
   }
   return (
     <section className={styles.reply}>
       <div className={styles.replyHeading}>
-        <strong>开发者回复</strong>
+        <strong>{title}</strong>
         <span>{entry.reply.createdAt}</span>
       </div>
       <p>{entry.reply.content}</p>

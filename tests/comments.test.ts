@@ -10,6 +10,7 @@ import {
 } from "../packages/contracts/src/rpc/comments";
 import { listComments, readCommentPage, replyComment } from "../packages/netease/src/endpoints/comments";
 import { CommentPageCache } from "../plugins/community/src/comment-cache";
+import { commentQueryKey, loadCommentPage } from "../plugins/community/src/comment-query";
 import { commentDates, commentEntry } from "../plugins/community/src/comments-data";
 
 const originalFetch = globalThis.fetch;
@@ -35,6 +36,105 @@ const row = {
   user_comment: "喜欢这个组件",
   comment_tag: "默认类型",
 };
+
+/** Source pages place the only two matching ratings on opposite sides of the server page boundary */
+function ratingRows(length = 30): CommentPage["items"] {
+  return Array.from({ length }, (_, index) => ({
+    id: `comment-${index}`,
+    resourceId: row.iid,
+    nickname: row.nickname,
+    uid: row.uid,
+    work: row.res_name,
+    content: row.user_comment,
+    tag: row.comment_tag,
+    publishTime: row.publish_time,
+    stars: index === 0 || index === 21 ? 1 : 5,
+    canReply: true,
+  }));
+}
+
+test("rating matches across server pages appear together on a single display page", async () => {
+  const cache = new CommentPageCache();
+  const items = ratingRows();
+  const starts: number[] = [];
+  const result = await loadCommentPage(cache, params, [1], async (input) => {
+    starts.push(input.start);
+    assert.equal("stars" in input, false);
+    return { ok: true, value: { total: items.length, items: items.slice(input.start, input.start + input.span) } };
+  });
+  assert.ok(result.ok);
+  assert.deepEqual(starts, [0, 20]);
+  assert.equal(result.value.total, 2);
+  assert.deepEqual(
+    result.value.items.map((item) => item.id),
+    ["comment-0", "comment-21"],
+  );
+});
+
+test("rating pagination slices after filtering and shares the source snapshot between ratings and pages", async () => {
+  const cache = new CommentPageCache();
+  const items = ratingRows();
+  let calls = 0;
+  const load = async (input: typeof params): Promise<RpcResult<CommentPage>> => {
+    calls++;
+    return { ok: true, value: { total: items.length, items: items.slice(input.start, input.start + input.span) } };
+  };
+  const first = await loadCommentPage(cache, params, [5], load);
+  const second = await loadCommentPage(cache, { ...params, start: 20 }, [5], load);
+  const empty = await loadCommentPage(cache, params, [3], load);
+  assert.ok(first.ok && second.ok && empty.ok);
+  assert.equal(first.value.total, 28);
+  assert.equal(first.value.items.length, 20);
+  assert.equal(second.value.items.length, 8);
+  assert.equal(new Set([...first.value.items, ...second.value.items].map((item) => item.id)).size, 28);
+  assert.deepEqual(empty.value, { total: 0, items: [] });
+  assert.equal(calls, 2);
+  cache.expire();
+  await loadCommentPage(cache, params, [1], load);
+  assert.equal(calls, 4);
+});
+
+test("failed later source pages never display partial rating totals and can be retried", async () => {
+  const cache = new CommentPageCache();
+  const items = ratingRows();
+  const failed = await loadCommentPage(cache, params, [1], async (input) =>
+    input.start === 0
+      ? { ok: true, value: { total: 30, items: items.slice(0, 20) } }
+      : { ok: false, error: { kind: "network", message: "offline" } },
+  );
+  assert.equal(failed.ok, false);
+  const retry = await loadCommentPage(cache, params, [1], async (input) => ({
+    ok: true,
+    value: { total: 30, items: items.slice(input.start, input.start + input.span) },
+  }));
+  assert.ok(retry.ok);
+  assert.equal(retry.value.total, 2);
+});
+
+test("rating query keys normalize multiselect order and isolate account and server filters", async () => {
+  assert.equal(commentQueryKey(params, [5, 1]), commentQueryKey(params, [1, 5]));
+  assert.notEqual(commentQueryKey(params, []), commentQueryKey(params, [1]));
+  const cache = new CommentPageCache();
+  const seen: string[] = [];
+  for (const source of [{ account: "a" }, { account: "b" }, { account: "b", keyword: "search" }]) {
+    await loadCommentPage(cache, { ...params, ...source }, [1], async (input) => {
+      seen.push(JSON.stringify(input));
+      return { ok: true, value: { total: 0, items: [] } };
+    });
+  }
+  assert.equal(new Set(seen).size, 3);
+});
+
+test("without ratings only the requested server page is loaded", async () => {
+  const input = { ...params, start: 20 };
+  let calls = 0;
+  await loadCommentPage(new CommentPageCache(), input, [], async (source) => {
+    assert.deepEqual(source, input);
+    calls++;
+    return { ok: true, value: { total: 30, items: ratingRows().slice(20) } };
+  });
+  assert.equal(calls, 1);
+});
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -268,17 +368,55 @@ test("reply failures and redirects are never silently retried or reported as suc
   }
 });
 
-test("official reply arrays display existing content and prevent duplicate replies", () => {
-  for (const fields of [{ developer_reply: [{ comment: "已收到反馈" }] }, { commented_num: 1 }]) {
+test("discussion counts do not mark the current account as replied", () => {
+  for (const developer_reply of [undefined, null, []]) {
+    const result = readCommentPage({ count: 1, data: [{ ...row, developer_reply, commented_num: 3 }] });
+    assert.ok(result.ok);
+    assert.equal(result.value.items[0]?.canReply, true);
+    assert.equal(result.value.items[0]?.reply, undefined);
+  }
+});
+
+test("account reply content is displayed independently of the discussion count", () => {
+  for (const commented_num of [undefined, 0, 3]) {
+    const fields = { developer_reply: [{ comment: "已收到反馈" }], commented_num };
     const result = readCommentPage({ count: 1, data: [{ ...row, ...fields }] });
     assert.ok(result.ok);
     assert.equal(result.value.items[0]?.canReply, false);
-    if ("developer_reply" in fields)
-      assert.deepEqual(result.value.items[0]?.reply, { content: "已收到反馈", createdAt: "" });
+    assert.deepEqual(result.value.items[0]?.reply, { content: "已收到反馈", createdAt: "" });
   }
   const result = readCommentPage({ count: 1, data: [{ ...row, developer_reply: [], commented_num: 0 }] });
   assert.ok(result.ok);
   assert.equal(result.value.items[0]?.canReply, true);
+});
+
+test("missing reply text never invents content or hides later available text", () => {
+  for (const developer_reply of [[{}], [{ comment: " " }], [{ comment: 123 }]]) {
+    const result = readCommentPage({ count: 1, data: [{ ...row, developer_reply }] });
+    assert.ok(result.ok);
+    assert.equal(result.value.items[0]?.canReply, false);
+    assert.equal(result.value.items[0]?.reply, undefined);
+  }
+  const result = readCommentPage({ count: 1, data: [{ ...row, developer_reply: [{}, { comment: "我的回复" }] }] });
+  assert.ok(result.ok);
+  assert.deepEqual(result.value.items[0]?.reply, { content: "我的回复", createdAt: "" });
+});
+
+test("the same comment uses replies from each authenticated account's response", async () => {
+  globalThis.fetch = async (_input, init) => {
+    const cookie = new Headers(init?.headers).get("Cookie");
+    const developer_reply = cookie === "NTES_SESS=account-a" ? [{ comment: "账号 A 的回复" }] : null;
+    return new Response(
+      JSON.stringify({ status: "ok", data: { count: 1, data: [{ ...row, commented_num: 2, developer_reply }] } }),
+    );
+  };
+  const first = await listComments({ sessionCookie: "account-a" }, { ...params, account: "a" });
+  const second = await listComments({ sessionCookie: "account-b" }, { ...params, account: "b" });
+  assert.ok(first.ok && second.ok);
+  assert.equal(first.value.items[0]?.canReply, false);
+  assert.equal(first.value.items[0]?.reply?.content, "账号 A 的回复");
+  assert.equal(second.value.items[0]?.canReply, true);
+  assert.equal(second.value.items[0]?.reply, undefined);
 });
 
 test("identical in-flight reads share one request, including effect replay", async () => {

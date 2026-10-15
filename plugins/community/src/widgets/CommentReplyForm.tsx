@@ -11,12 +11,12 @@ interface CommentReplyFormProps {
   onSend: () => void;
 }
 
-/** Pin the real comment composer below the scrolling detail, with explicit send progress */
+/** Show the account's reply state or a full-width composer with an aligned action footer */
 export function CommentReplyForm({ entry, draft, status, sending, onChange, onSend }: CommentReplyFormProps) {
   if (!entry.canReply || entry.reply)
     return (
       <div className={styles.disabled}>
-        <span role="status">{status || "该评论已回复"}</span>
+        <span role="status">{status || (entry.reply ? "当前账号已回复" : "当前账号已回复，平台未返回回复内容")}</span>
       </div>
     );
   const disabled = sending !== null || !draft.trim() || draft.length > MAX_COMMENT_REPLY_LENGTH;
@@ -38,15 +38,17 @@ export function CommentReplyForm({ entry, draft, status, sending, onChange, onSe
           disabled={sending === entry.id}
           onChange={(event) => onChange(event.target.value)}
         />
+      </div>
+      <div className={styles.footer}>
+        <div className={styles.hint}>
+          <span>发送后将通知玩家</span>
+          <span>
+            {draft.length} / {MAX_COMMENT_REPLY_LENGTH}
+          </span>
+        </div>
         <Button variant="primary" type="submit" size="sm" disabled={disabled}>
           {sending === entry.id ? "发送中…" : "发送回复"}
         </Button>
-      </div>
-      <div className={styles.hint}>
-        <span>发送后将通知玩家</span>
-        <span>
-          {draft.length} / {MAX_COMMENT_REPLY_LENGTH}
-        </span>
       </div>
       {status && <p role="status">{status}</p>}
     </form>

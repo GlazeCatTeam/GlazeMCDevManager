@@ -1,6 +1,7 @@
 import { type CommentListParams, type CommentPage, callHost, type RpcError } from "@glaze/plugin-sdk";
 import { useEffect, useState } from "react";
 import type { CommentPageCache } from "./comment-cache";
+import { commentQueryKey, loadCommentPage } from "./comment-query";
 
 interface CommentQuery {
   data: CommentPage | null;
@@ -8,9 +9,14 @@ interface CommentQuery {
   loading: boolean;
 }
 
-/** Show cached pages immediately, coalesce reads and isolate results by their complete query key */
-export function useComments(params: CommentListParams, revision: number, cache: CommentPageCache): CommentQuery {
-  const paramsKey = JSON.stringify(params);
+/** Cache complete queries and apply rating filters before calculating display pages */
+export function useComments(
+  params: CommentListParams,
+  revision: number,
+  cache: CommentPageCache,
+  stars: number[] = [],
+): CommentQuery {
+  const paramsKey = commentQueryKey(params, stars);
   const [query, setQuery] = useState<CommentQuery & { key: string }>(() => ({
     key: paramsKey,
     data: cache.peek(paramsKey),
@@ -26,8 +32,9 @@ export function useComments(params: CommentListParams, revision: number, cache: 
       error: null,
       loading: !cache.fresh(paramsKey),
     }));
+    const { stars: ratings = [], ...source } = JSON.parse(paramsKey);
     cache
-      .read(paramsKey, () => callHost("comments.list", JSON.parse(paramsKey)))
+      .read(paramsKey, () => loadCommentPage(cache, source, ratings, (input) => callHost("comments.list", input)))
       .then((result) => {
         if (!active) return;
         setQuery((current) => ({

@@ -10,7 +10,7 @@ export interface ReplyEditorProps {
   onSend: () => void;
 }
 
-/** Reply box pinned to the bottom of the detail panel; explains why replying is unavailable */
+/** Pin the shared full-width reply box and action footer below the detail panel */
 export function ReplyEditor({ entry, draft, onDraftChange, onSend }: ReplyEditorProps) {
   if (!entry.canReply || entry.reply) {
     return (
@@ -39,15 +39,17 @@ export function ReplyEditor({ entry, draft, onDraftChange, onSend }: ReplyEditor
           rows={2}
           onChange={(event) => onDraftChange(event.target.value)}
         />
+      </div>
+      <div className={styles.footer}>
+        <div className={styles.hint}>
+          <span>本地演示 · 回复不会发送到平台</span>
+          <span>
+            {draft.length} / {MAX_REPLY_LENGTH}
+          </span>
+        </div>
         <Button variant="primary" size="sm" type="submit" disabled={!draft.trim()}>
           发送
         </Button>
-      </div>
-      <div className={styles.hint}>
-        <span>本地演示 · 回复不会发送到平台</span>
-        <span>
-          {draft.length} / {MAX_REPLY_LENGTH}
-        </span>
       </div>
     </form>
   );

@@ -16,6 +16,7 @@ import {
 import { memo, useEffect, useMemo, useState } from "react";
 import styles from "./CommunityPage.module.css";
 import { CommentPageCache } from "./comment-cache";
+import { commentQueryKey } from "./comment-query";
 import {
   COMMENTS_PER_PAGE,
   type CommentDateRange,
@@ -47,7 +48,7 @@ export function CommentsPage() {
   );
 }
 
-/** Keep server filters separate from the current page's local rating filter */
+/** Reset pagination when filters change and apply ratings to the complete server query */
 function AccountComments({ account }: { account: string }) {
   const [cache] = useState(() => new CommentPageCache());
   const replies = useCommentReplies(account);
@@ -66,7 +67,7 @@ function AccountComments({ account }: { account: string }) {
     ...(keyword ? { keyword } : {}),
     ...(tag ? { tag } : {}),
   };
-  const query = useComments(params, revision, cache);
+  const query = useComments(params, revision, cache, stars);
 
   useEffect(() => {
     if (search.trim() === keyword) return;
@@ -120,23 +121,24 @@ function AccountComments({ account }: { account: string }) {
           </div>
         </div>
         <div className={styles.filterRow}>
-          <fieldset className={styles.filterGroup} aria-label="评分，多选，仅筛选当前页">
+          <fieldset className={styles.filterGroup} aria-label="评分，多选">
             <span className={styles.filterLabel}>评分</span>
             {ratings.map((value) => (
               <Chip
                 key={value}
                 selected={stars.includes(value)}
-                onClick={() =>
+                onClick={() => {
                   setStars((current) =>
                     current.includes(value) ? current.filter((star) => star !== value) : [...current, value],
-                  )
-                }
+                  );
+                  setPage(0);
+                }}
               >
                 {value}
                 <DrumstickIcon />
               </Chip>
             ))}
-            <span className={styles.filterNote}>可多选 · 仅筛选当前页</span>
+            <span className={styles.filterNote}>可多选 · 筛选后分页</span>
           </fieldset>
           <div className={styles.filterGroup}>
             <span className={styles.filterLabel}>评论类型</span>
@@ -165,7 +167,7 @@ function AccountComments({ account }: { account: string }) {
         </div>
       </section>
       <CommentResults
-        key={JSON.stringify(params)}
+        key={commentQueryKey(params, stars)}
         query={query}
         stars={stars}
         page={page}
@@ -188,7 +190,7 @@ interface CommentResultsProps {
   replies: ReturnType<typeof useCommentReplies>;
 }
 
-/** A query-keyed panel prevents previous filters or accounts from leaking into a new result */
+/** Display already filtered pages without leaking results across queries or accounts */
 function CommentResults({ query, stars, page, onPage, onRefresh, onReplySent, replies }: CommentResultsProps) {
   const [selectedId, setSelectedId] = useState<string>();
   const entries = useMemo(
@@ -200,10 +202,7 @@ function CommentResults({ query, stars, page, onPage, onRefresh, onReplySent, re
       }),
     [query.data, replies.confirmedReplies],
   );
-  const visible = useMemo(
-    () => entries.filter((entry) => stars.length === 0 || stars.includes(entry.stars)),
-    [entries, stars],
-  );
+  const visible = entries;
   const selected = visible.find((entry) => entry.id === selectedId) ?? visible[0];
   const pageCount = Math.max(1, Math.ceil((query.data?.total ?? 0) / COMMENTS_PER_PAGE));
 
@@ -231,9 +230,11 @@ function CommentResults({ query, stars, page, onPage, onRefresh, onReplySent, re
         {query.loading
           ? query.data
             ? "正在更新评论，当前显示上次加载结果…"
-            : "正在加载评论…"
+            : stars.length
+              ? "正在加载全部评论并筛选评分…"
+              : "正在加载评论…"
           : query.data
-            ? `共 ${query.data.total} 条评论 · 当前页 ${entries.length} 条 · 筛选后 ${visible.length} 条`
+            ? `${stars.length ? "筛选后共" : "共"} ${query.data.total} 条评论 · 当前页 ${entries.length} 条`
             : "评论暂未加载"}
       </div>
       <div className={styles.columns} aria-busy={query.loading}>
@@ -266,7 +267,7 @@ function CommentResults({ query, stars, page, onPage, onRefresh, onReplySent, re
                 </div>
                 <EntryIdentity entry={selected} />
                 <p className={styles.body}>{selected.content || "（该评论没有文字内容）"}</p>
-                <DeveloperResponse entry={selected} />
+                <DeveloperResponse entry={selected} title="当前账号的回复" />
               </div>
               <CommentReplyForm
                 entry={selected}
@@ -284,7 +285,7 @@ function CommentResults({ query, stars, page, onPage, onRefresh, onReplySent, re
           )}
         </section>
       </div>
-      <Pagination page={page} pageCount={pageCount} onChange={onPage} note="每页 20 条 · 评分仅筛选当前页" />
+      <Pagination page={page} pageCount={pageCount} onChange={onPage} note="每页 20 条 · 按筛选结果分页" />
     </>
   );
 }

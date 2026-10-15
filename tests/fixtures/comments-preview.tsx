@@ -29,6 +29,7 @@ let delay = 100;
 let replyRequests = 0;
 let listRequests = 0;
 const sentReplies = new Map<string, string>();
+const sparseRatings = new URLSearchParams(location.search).has("sparse-ratings");
 
 /** Fixture bridge supports pagination, filtering, failures and intentionally late responses */
 const rpc: GlazeBridge["rpc"] = async (method, input) => {
@@ -53,23 +54,26 @@ const rpc: GlazeBridge["rpc"] = async (method, input) => {
   const failed = failure;
   await new Promise((resolve) => setTimeout(resolve, delay));
   if (failed) return { ok: false, error: { kind: "network", message: "离线测试网络失败" } };
-  const items: PlayerComment[] = Array.from({ length: params.account === account.id ? 43 : 1 }, (_, index) => ({
-    id: `${params.account}-${index}`,
-    resourceId: "4686664860310207622",
-    nickname: `${params.account === account.id ? "玩家甲" : "玩家乙"}${index + 1}`,
-    uid: String(12345 + index),
-    work: "空岛奇境",
-    stars: (index % 5) + 1,
-    publishTime: Math.floor(new Date(2026, 9, 15 - index, 14, 30).getTime() / 1000),
-    content: index === 0 ? "非常喜欢这个组件，希望增加更多冒险地图。" : `评论内容 ${index + 1}`,
-    tag: index % 2 ? "问题求助" : "默认类型",
-    canReply: index !== 2 && !sentReplies.has(`${params.account}-${index}`),
-    ...(sentReplies.has(`${params.account}-${index}`)
-      ? { reply: { content: sentReplies.get(`${params.account}-${index}`) ?? "", createdAt: "" } }
-      : index === 2
-        ? { reply: { content: "谢谢支持，已收到建议", createdAt: "" } }
-        : {}),
-  })).filter(
+  const items: PlayerComment[] = Array.from(
+    { length: params.account === account.id ? (sparseRatings ? 30 : 43) : 1 },
+    (_, index) => ({
+      id: `${params.account}-${index}`,
+      resourceId: "4686664860310207622",
+      nickname: `${params.account === account.id ? "玩家甲" : "玩家乙"}${index + 1}`,
+      uid: String(12345 + index),
+      work: "空岛奇境",
+      stars: sparseRatings ? (index === 0 || index === 21 ? 1 : 5) : (index % 5) + 1,
+      publishTime: Math.floor(new Date(2026, 9, 15 - index, 14, 30).getTime() / 1000),
+      content: index === 0 ? "非常喜欢这个组件，希望增加更多冒险地图。" : `评论内容 ${index + 1}`,
+      tag: index % 2 ? "问题求助" : "默认类型",
+      canReply: index !== 2 && !sentReplies.has(`${params.account}-${index}`),
+      ...(sentReplies.has(`${params.account}-${index}`)
+        ? { reply: { content: sentReplies.get(`${params.account}-${index}`) ?? "", createdAt: "" } }
+        : index === 2
+          ? { reply: { content: "谢谢支持，已收到建议", createdAt: "" } }
+          : {}),
+    }),
+  ).filter(
     (item) =>
       (!params.keyword || `${item.nickname}${item.content}${item.work}`.includes(params.keyword)) &&
       (params.tag === undefined || item.tag === commentTypes.find((type) => type.code === params.tag)?.label) &&

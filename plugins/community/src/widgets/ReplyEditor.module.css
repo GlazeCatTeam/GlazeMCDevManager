@@ -1,20 +1,18 @@
 .form,
 .disabled {
   flex: none;
-  padding: 14px 20px;
+  padding: 16px 20px;
   border-top: var(--g-border-width) solid var(--g-border-divider);
 }
 
 .inputRow {
   display: flex;
-  align-items: flex-end;
-  gap: 12px;
 }
 
 .inputRow textarea {
   flex: 1;
   min-width: 0;
-  height: 62px;
+  height: 84px;
   resize: none;
   padding: 10px 12px;
   background: var(--g-surface-sunken);
@@ -36,14 +34,40 @@
   color: var(--g-text-placeholder);
 }
 
-.hint {
+.footer {
   display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.footer > button {
+  min-width: 88px;
+}
+
+.hint {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
+  gap: 4px 12px;
   color: var(--g-text-muted);
-  font-size: 10px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.hint > span:last-child {
+  margin-left: auto;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.form > p {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .disabled {

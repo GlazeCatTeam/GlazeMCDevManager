@@ -6,7 +6,7 @@ import { FeedbackAttachments } from "./FeedbackAttachments";
 import { FeedbackBadge } from "./FeedbackBadge";
 import replyStyles from "./ReplyEditor.module.css";
 
-/** Show feedback and disable its real reply form while a write is in flight */
+/** Show feedback with a full-width composer and an aligned footer, disabled while sending */
 export function FeedbackDetail({
   entry,
   draft,
@@ -57,15 +57,17 @@ export function FeedbackDetail({
                   disabled={sending}
                   onChange={(event) => onDraftChange(event.target.value)}
                 />
+              </div>
+              <div className={replyStyles.footer}>
+                <div className={replyStyles.hint}>
+                  <span>回复将发送给玩家</span>
+                  <span>
+                    {draft.length} / {MAX_FEEDBACK_REPLY_LENGTH}
+                  </span>
+                </div>
                 <Button variant="primary" size="sm" type="submit" disabled={sending || !draft.trim()}>
                   {sending ? "发送中…" : "发送"}
                 </Button>
-              </div>
-              <div className={replyStyles.hint}>
-                <span>回复将发送给玩家</span>
-                <span>
-                  {draft.length} / {MAX_FEEDBACK_REPLY_LENGTH}
-                </span>
               </div>
             </form>
           )}

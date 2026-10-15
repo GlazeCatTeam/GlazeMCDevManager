@@ -10,7 +10,7 @@ import { fail, ok, type Result } from "../errors";
 import { getMcDevData, type NeteaseSession, withQuery, writeMcDevData } from "../http/client";
 import { readArray, readNumber, readRecord, readString } from "../http/parse";
 
-/** Decode comment rows and optional official reply fields without inventing reply timestamps */
+/** Decode replies returned for the authenticated account, ignoring the overall discussion count */
 export function readCommentPage(value: unknown): Result<CommentPage> {
   const raw = readRecord(value);
   const total = readNumber(raw.count);
@@ -48,8 +48,11 @@ export function readCommentPage(value: unknown): Result<CommentPage> {
       return fail({ kind: "parse", endpoint: "comments.list" });
     ids.add(id);
     const replies = readArray(row.developer_reply);
-    const replyContent = readString(replies?.[0]?.comment);
-    const hasReply = (replies?.length ?? 0) > 0 || (readNumber(row.commented_num) ?? 0) > 0;
+    // The platform scopes developer_reply to the request's session; commented_num is not our reply state
+    const replyContent = replies
+      ?.map((reply) => reply.comment)
+      .find((content): content is string => typeof content === "string" && content.trim().length > 0);
+    const hasReply = (replies?.length ?? 0) > 0;
     items.push({
       id,
       resourceId,
