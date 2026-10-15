@@ -1,7 +1,11 @@
-import { Button, PageHeader } from "@glaze/plugin-sdk";
+import { Button, PageHeader, useSession } from "@glaze/plugin-sdk";
 import { type KeyboardEvent, type ReactNode, useState } from "react";
 import styles from "./AnalyticsPage.module.css";
+import { workResources } from "./data";
+import { QueryState } from "./QueryState";
+import { useAnalyticsQuery } from "./useAnalyticsQuery";
 import { ModuleView } from "./views/ModuleView";
+import { PeriodIncomeView } from "./views/PeriodIncomeView";
 import { RealtimeView } from "./views/RealtimeView";
 import { SummaryView } from "./views/SummaryView";
 import { TrackingView } from "./views/TrackingView";
@@ -10,6 +14,7 @@ const tabs = [
   { id: "tracking", label: "数据追踪" },
   { id: "summary", label: "数据汇总" },
   { id: "module", label: "模组分析" },
+  { id: "period", label: "周期收益" },
   { id: "realtime", label: "实时收益" },
 ] as const;
 type Tab = (typeof tabs)[number]["id"];
@@ -25,10 +30,42 @@ function targetIndex(key: string, index: number): number | undefined {
   return moves[key];
 }
 
-/** Analytics: four tabs (tracking, monthly summary, single module, realtime income) */
+/** Analytics tabs share account scope while keeping each view's filters */
 export function AnalyticsPage() {
+  const { current } = useSession();
+  if (!current) return <p>请先登录开发者账号</p>;
+  return <AccountAnalytics key={current.id} />;
+}
+
+/** Keep resource selections and responses scoped to the current account */
+function AccountAnalytics() {
   const [tab, setTab] = useState<Tab>("tracking");
-  const [refreshVersion, setRefreshVersion] = useState(0);
+  const [visited, setVisited] = useState<Tab[]>(["tracking"]);
+  const [refreshVersions, setRefreshVersions] = useState<Record<Tab, number>>({
+    tracking: 0,
+    summary: 0,
+    module: 0,
+    period: 0,
+    realtime: 0,
+  });
+  const works = useAnalyticsQuery("works.list");
+  const resources = workResources(works.data ?? []);
+
+  /** Keep visited tabs and their filters; realtime income refreshes whenever revisited */
+  const selectTab = (next: Tab) => {
+    if (next === tab) return;
+    setTab(next);
+    setVisited((current) => (current.includes(next) ? current : [...current, next]));
+    if (next === "realtime" && visited.includes(next)) {
+      setRefreshVersions((current) => ({ ...current, realtime: current.realtime + 1 }));
+    }
+  };
+
+  /** Reload the actual resource list and the active analysis */
+  const refresh = () => {
+    works.reload();
+    setRefreshVersions((current) => ({ ...current, [tab]: current[tab] + 1 }));
+  };
 
   /** Arrow keys, Home and End move between tabs like a standard tablist */
   const moveTab = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
@@ -37,32 +74,34 @@ export function AnalyticsPage() {
       return;
     }
     event.preventDefault();
-    setTab(next.id);
+    selectTab(next.id);
     document.getElementById(`analytics-tab-${next.id}`)?.focus();
   };
 
-  // Only the active view is mounted; refreshing remounts it so it re-queries
+  // Mount on first visit, then reuse the loaded result until refresh or a filter change
   const views: Record<Tab, ReactNode> = {
-    tracking: <TrackingView refreshVersion={refreshVersion} />,
-    summary: <SummaryView key={refreshVersion} />,
-    module: <ModuleView key={refreshVersion} />,
-    realtime: <RealtimeView key={refreshVersion} />,
+    tracking: <TrackingView resources={resources} refreshVersion={refreshVersions.tracking} />,
+    summary: <SummaryView refreshVersion={refreshVersions.summary} />,
+    module: <ModuleView resources={resources} refreshVersion={refreshVersions.module} />,
+    period: <PeriodIncomeView refreshVersion={refreshVersions.period} />,
+    realtime: <RealtimeView resources={resources} refreshVersion={refreshVersions.realtime} />,
   };
 
   return (
     <div className={styles.page}>
       <PageHeader
         title="数据分析"
-        subtitle="多维度了解你的作品表现 · 网易平台"
-        actions={
-          <>
-            <span className={styles.refreshNote} role="status">
-              {refreshVersion > 0 ? "已重新查询平台数据" : ""}
-            </span>
-            <Button onClick={() => setRefreshVersion((value) => value + 1)}>刷新</Button>
-          </>
+        subtitle={
+          tab === "period"
+            ? "PC / PE 周期收益独立统计 · 北京时间"
+            : "多维度了解你的作品表现 · 曾上架的手游资源 · 北京时间"
         }
+        actions={<Button onClick={refresh}>刷新</Button>}
       />
+      {tab !== "period" && <QueryState query={works} />}
+      {tab !== "period" && !works.loading && !works.error && resources.length === 0 && (
+        <p>当前账号暂无可分析的手游资源；仅展示曾上架且不是前置模组的作品</p>
+      )}
       <div className={styles.tabs} role="tablist" aria-label="分析功能">
         {tabs.map((item, index) => (
           <button
@@ -74,7 +113,7 @@ export function AnalyticsPage() {
             aria-controls={`analytics-panel-${item.id}`}
             tabIndex={tab === item.id ? 0 : -1}
             className={tab === item.id ? `${styles.tab} ${styles.active}` : styles.tab}
-            onClick={() => setTab(item.id)}
+            onClick={() => selectTab(item.id)}
             onKeyDown={(event) => moveTab(event, index)}
           >
             {item.label}
@@ -90,7 +129,9 @@ export function AnalyticsPage() {
           hidden={tab !== item.id}
           className={styles.workspace}
         >
-          {tab === item.id && views[item.id]}
+          {visited.includes(item.id) &&
+            (item.id === "summary" || item.id === "period" || (works.data && resources.length > 0)) &&
+            views[item.id]}
         </div>
       ))}
     </div>

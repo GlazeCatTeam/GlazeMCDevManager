@@ -1,0 +1,151 @@
+.selector {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.heading,
+.title,
+.actions,
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.heading {
+  justify-content: space-between;
+}
+
+.title {
+  font-size: 14px;
+}
+
+.actions {
+  margin-left: auto;
+}
+
+.count,
+.empty {
+  color: var(--g-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.selected {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  max-height: 144px;
+  overflow-y: auto;
+}
+
+.selectedItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: min(100%, 320px);
+  min-height: 32px;
+  padding: 5px 10px;
+  border: var(--g-border-width) solid var(--g-border-subtle);
+  border-radius: var(--g-radius-control);
+  background: var(--g-surface-sunken);
+  color: var(--g-text-primary);
+  font-size: 12px;
+  text-align: left;
+}
+
+.selectedItem:hover {
+  border-color: var(--g-action-primary-edge);
+  background: var(--g-panel-hoverBg);
+}
+
+.selectedName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remove {
+  flex: none;
+  color: var(--g-text-muted);
+  font-size: 16px;
+}
+
+.browser {
+  min-width: 0;
+  padding-top: 14px;
+  border-top: var(--g-border-width) solid var(--g-border-subtle);
+}
+
+.browser[hidden] {
+  display: none;
+}
+
+.searchRow {
+  margin-bottom: 12px;
+}
+
+.options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  gap: 8px;
+  max-height: 232px;
+  overflow-y: auto;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 2px;
+  border: 0;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: var(--g-border-width) solid var(--g-border-subtle);
+  border-radius: var(--g-radius-control);
+  color: var(--g-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.option:hover {
+  background: var(--g-panel-hoverBg);
+}
+
+.option:focus-within {
+  outline: 2px solid var(--g-focus-ring);
+  outline-offset: -2px;
+}
+
+.option > input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  flex: none;
+  accent-color: var(--g-action-primary-bg);
+}
+
+.option > span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.checked {
+  background: color-mix(in srgb, var(--g-action-primary-bg) 12%, var(--g-surface-panel));
+  border-color: var(--g-action-primary-edge);
+  color: var(--g-text-primary);
+}

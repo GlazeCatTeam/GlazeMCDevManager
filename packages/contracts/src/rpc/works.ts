@@ -35,6 +35,8 @@ export interface WorkSummary {
   /** ISO timestamps from the platform */
   createTime: string;
   applyReviewTime: string | null;
+  /** Last go-live timestamp; absent in older clients, null when never published */
+  onlineTime?: string | null;
 }
 
 export interface WorkDetail {

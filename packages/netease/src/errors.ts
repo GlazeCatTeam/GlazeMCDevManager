@@ -5,7 +5,7 @@ export type NeteaseError =
   | { kind: "network"; cause: string }
   | { kind: "timeout" }
   | { kind: "business"; code: string; message: string }
-  | { kind: "parse"; endpoint: string };
+  | { kind: "parse"; endpoint: string; detail?: string };
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: NeteaseError };
 
@@ -27,6 +27,6 @@ export function describeError(error: NeteaseError): string {
     case "business":
       return error.message || `网易平台返回错误（${error.code}）`;
     case "parse":
-      return "网易平台返回的数据格式无法识别";
+      return error.detail ? `网易平台数据解析失败：${error.detail}` : "网易平台返回的数据格式无法识别";
   }
 }

@@ -1,4 +1,35 @@
-/* Every panel keeps its height as filters and data change; content scrolls inside */
+/* Charts retain their height; the tracking selector grows vertically without horizontal scrolling */
+.trackingFilters {
+  min-width: 0;
+  gap: 18px;
+  padding: 20px 24px;
+}
+
+.queryRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-top: 16px;
+  border-top: var(--g-border-width) solid var(--g-border-subtle);
+}
+
+.dateControls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-width: 0;
+}
+
+.queryActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
 .filters {
   height: 128px;
   flex: none;
@@ -28,25 +59,11 @@
   font-size: 12px;
 }
 
-.chips {
-  min-inline-size: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 .dateRange,
 .muted {
   color: var(--g-text-muted);
   font-size: 12px;
   white-space: nowrap;
-}
-
-.pushRight {
-  margin-left: auto;
 }
 
 .trendPanel {
@@ -73,20 +90,4 @@
 .resourcePanel {
   height: 310px;
   flex: none;
-}
-
-.realtimeResourcePanel {
-  height: 252px;
-  flex: none;
-}
-
-.ordersPanel {
-  height: 400px;
-  flex: none;
-}
-
-.orderFilters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 20px;
 }

@@ -1,4 +1,4 @@
-import type { RpcError, RpcMethod, RpcMethods } from "@glaze/contracts";
+import type { RpcError, RpcMethod, RpcMethods, RpcResult } from "@glaze/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { callHost, useSession } from "../context/session";
 
@@ -13,7 +13,7 @@ export interface HostQuery<T> {
 
 /**
  * Load a read capability and reload it when its params or the current account change.
- * Responses that arrive after a newer request started are ignored
+ * Replay of the same effect shares its request; obsolete and unmounted responses are ignored
  */
 export function useHostQuery<M extends RpcMethod>(
   method: M,
@@ -24,14 +24,13 @@ export function useHostQuery<M extends RpcMethod>(
   const [error, setError] = useState<RpcError | null>(null);
   const [loading, setLoading] = useState(true);
   const [version, setVersion] = useState(0);
-  const latest = useRef(0);
+  const pending = useRef<{ key: string; promise: Promise<RpcResult<RpcMethods[M]["result"]>> } | null>(null);
   const loadedAccount = useRef<string | null>(null);
   const paramsKey = JSON.stringify(params ?? null);
   const accountId = current?.id ?? null;
 
   useEffect(() => {
-    const request = latest.current + 1;
-    latest.current = request;
+    let active = true;
     setLoading(true);
     // Never show one account's data under another account
     if (loadedAccount.current !== accountId) {
@@ -39,10 +38,20 @@ export function useHostQuery<M extends RpcMethod>(
       setData(null);
       setError(null);
     }
-    // version is a dependency only to trigger a reload
-    void version;
-    callHost(method, JSON.parse(paramsKey) ?? undefined).then((result) => {
-      if (latest.current !== request) {
+    const key = JSON.stringify([method, paramsKey, accountId, version]);
+    if (pending.current?.key !== key) {
+      pending.current = {
+        key,
+        promise: Promise.resolve()
+          .then(() => callHost(method, JSON.parse(paramsKey) ?? undefined))
+          .catch((error: unknown) => ({
+            ok: false as const,
+            error: { kind: "internal", message: error instanceof Error ? error.message : "查询失败，请重试" },
+          })),
+      };
+    }
+    void pending.current.promise.then((result) => {
+      if (!active) {
         return;
       }
       if (result.ok) {
@@ -53,6 +62,9 @@ export function useHostQuery<M extends RpcMethod>(
       }
       setLoading(false);
     });
+    return () => {
+      active = false;
+    };
   }, [method, paramsKey, accountId, version]);
 
   const reload = useCallback(() => setVersion((value) => value + 1), []);

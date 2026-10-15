@@ -1,4 +1,5 @@
 import type {
+  IncomePlatform,
   WorkDetail,
   WorkPage,
   WorkPriceType,
@@ -60,24 +61,35 @@ function readWork(row: Record<string, unknown>): WorkSummary | null {
     weakOfflineReason: readString(row.weak_offline_reason),
     createTime,
     applyReviewTime: readString(row.apply_review_time),
+    onlineTime: readString(row.online_time),
   };
 }
 
-/** All mobile (PE) works of the account, in the platform's order, from GET /items/categories/pe/ */
-export async function listWorks(session: NeteaseSession): Promise<Result<WorkSummary[]>> {
-  const result = await getMcDevData("items.pe", withQuery("/items/categories/pe/", { start: 0, span: ALL }), session);
+/** List works from one platform; PC resources use the upstream comp category */
+export async function listWorks(
+  session: NeteaseSession,
+  platform: IncomePlatform = "pe",
+): Promise<Result<WorkSummary[]>> {
+  if (platform !== "pe" && platform !== "pc")
+    return fail({ kind: "business", code: "invalid_params", message: "资源平台无效" });
+  const category = platform === "pc" ? "comp" : "pe";
+  const result = await getMcDevData(
+    `items.${category}`,
+    withQuery(`/items/categories/${category}/`, { start: 0, span: ALL }),
+    session,
+  );
   if (!result.ok) {
     return result;
   }
   const rows = readArray(readRecord(result.value).item);
   if (rows === null) {
-    return fail({ kind: "parse", endpoint: "items.pe" });
+    return fail({ kind: "parse", endpoint: `items.${category}` });
   }
   const works: WorkSummary[] = [];
   for (const row of rows) {
     const work = readWork(row);
     if (work === null) {
-      return fail({ kind: "parse", endpoint: "items.pe" });
+      return fail({ kind: "parse", endpoint: `items.${category}` });
     }
     works.push(work);
   }

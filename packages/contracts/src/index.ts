@@ -1,4 +1,5 @@
 export * from "./rpc/account";
+export * from "./rpc/analytics";
 export * from "./rpc/appearance";
 export * from "./rpc/bridge";
 export * from "./rpc/capabilities";

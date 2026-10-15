@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "electron-vite";
 import pkg from "./package.json";
@@ -24,6 +25,18 @@ export default defineConfig({
     },
   },
   renderer: {
-    plugins: [react()],
+    plugins: [
+      react(),
+      {
+        name: "watch-workspace-source",
+        // These source packages sit outside the renderer root. Watching directories
+        // also catches new files, so previously missing imports can recover via HMR.
+        configureServer(server) {
+          server.watcher.add(
+            ["plugins", "packages", "themes"].map((directory) => resolve(import.meta.dirname, "../..", directory)),
+          );
+        },
+      },
+    ],
   },
 });

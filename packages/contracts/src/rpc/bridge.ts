@@ -1,11 +1,19 @@
 // Temporary hand-written contracts; replaced by Zod schemas in M1
 import type { AccountChanged, AccountSummary, InitialRoute, LoginStep } from "./account";
+import type {
+  AnalyticsDailyParams,
+  AnalyticsPeriodIncome,
+  AnalyticsRangeParams,
+  AnalyticsRealtime,
+  AnalyticsRealtimeParams,
+  AnalyticsRecord,
+} from "./analytics";
 import type { AppearanceSettings } from "./appearance";
 import type { CommentListParams, CommentPage, CommentReplyParams } from "./comments";
 import type { AccountParams, AnalyticsOverview, DeveloperLevel } from "./developer";
 import type { FeedbackListParams, FeedbackPageData, FeedbackReplyParams } from "./feedback";
 import type { CacheClearResult, GeneralSettings, GeneralState } from "./general";
-import type { IncomeEstimate, IncomeEstimateParams } from "./income";
+import type { IncomeEstimate, IncomeEstimateParams, IncomePlatform } from "./income";
 import type { MessageContent, MessageDeleteParams, MessageListParams, MessagePage, MessageParams } from "./messages";
 import type { RankBoard, RankEntry, RankListParams } from "./rank";
 import type { WorkCreateParams } from "./work-create";
@@ -65,9 +73,13 @@ export interface RpcMethods {
   "account.remove": { params: { id: string }; result: undefined };
   "developer.level": { params: AccountParams | undefined; result: DeveloperLevel };
   "analytics.overview": { params: AccountParams | undefined; result: AnalyticsOverview };
+  "analytics.daily": { params: AnalyticsDailyParams; result: AnalyticsRecord[] };
+  "analytics.periodIncome": { params: AnalyticsDailyParams; result: AnalyticsPeriodIncome };
+  "analytics.monthly": { params: AnalyticsRangeParams; result: AnalyticsRecord[] };
+  "analytics.realtime": { params: AnalyticsRealtimeParams; result: AnalyticsRealtime };
   "income.estimate": { params: IncomeEstimateParams | undefined; result: IncomeEstimate };
   "rank.list": { params: RankListParams; result: RankEntry[] };
-  "works.list": { params: AccountParams | undefined; result: WorkSummary[] };
+  "works.list": { params: (AccountParams & { platform?: IncomePlatform }) | undefined; result: WorkSummary[] };
   "works.page": { params: WorkPageParams; result: WorkPage };
   "works.create": { params: WorkCreateParams; result: undefined };
   "works.get": { params: WorkParams; result: WorkDetail };

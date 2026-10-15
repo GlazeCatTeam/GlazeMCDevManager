@@ -5,6 +5,12 @@ const TIMEOUT_MS = 15_000;
 const SUCCESS_STATUSES = new Set(["200", "201", "ok"]);
 const EXPIRED_STATUSES = new Set(["401", "no_login"]);
 
+/** Classify transport failures consistently during both headers and body reads */
+function transportFailure(error: unknown, signal: AbortSignal): Result<never> {
+  if (signal.aborted || (error instanceof Error && error.name === "TimeoutError")) return fail({ kind: "timeout" });
+  return fail({ kind: "network", cause: error instanceof Error ? error.message : String(error) });
+}
+
 /** The session a request runs with; only the session cookie value is sent */
 export interface NeteaseSession {
   sessionCookie: string;
@@ -80,20 +86,22 @@ export async function getMcDev<T>(
   path: string,
   session: NeteaseSession,
   request?: { method: "POST" | "PUT"; body: string; allowEmpty?: boolean },
+  timeoutMs = TIMEOUT_MS,
 ): Promise<Result<McDevResponse<T>>> {
   let response: Response;
+  const signal = AbortSignal.timeout(timeoutMs);
   try {
     const url = new URL(`${MC_DEV_API}${path}`);
     const options: RequestInit = {
       method: request?.method ?? "GET",
       headers: {
         Accept: "application/json",
+        "Content-Type": "application/json",
         Cookie: `${SESSION_COOKIE}=${session.sessionCookie}`,
-        ...(request ? { "Content-Type": "application/json" } : {}),
       },
       ...(request ? { body: request.body } : {}),
       redirect: "manual",
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal,
     };
     response = await fetch(url.href, options);
     if (!request && [301, 302, 307, 308].includes(response.status)) {
@@ -104,10 +112,7 @@ export async function getMcDev<T>(
       }
     }
   } catch (error) {
-    if (error instanceof DOMException && error.name === "TimeoutError") {
-      return fail({ kind: "timeout" });
-    }
-    return fail({ kind: "network", cause: error instanceof Error ? error.message : String(error) });
+    return transportFailure(error, signal);
   }
 
   if (response.status >= 300 && response.status < 400) {
@@ -122,13 +127,27 @@ export async function getMcDev<T>(
     return fail({ kind: "session_expired" });
   }
 
+  let text: string;
+  try {
+    text = await response.text();
+  } catch (error) {
+    return transportFailure(error, signal);
+  }
+
   let body: ResponseEnvelope;
   try {
-    body = parsePlatformJson(await response.text()) as ResponseEnvelope;
-    if (body === null || typeof body !== "object") return fail({ kind: "parse", endpoint });
+    body = parsePlatformJson(text) as ResponseEnvelope;
   } catch {
-    return fail({ kind: "parse", endpoint });
+    if (!response.ok)
+      return fail({
+        kind: "business",
+        code: String(response.status),
+        message: `网易平台请求失败（HTTP ${response.status}），请稍后重试`,
+      });
+    return fail({ kind: "parse", endpoint, detail: `响应内容不是有效 JSON（HTTP ${response.status}）` });
   }
+  if (body === null || typeof body !== "object" || Array.isArray(body))
+    return fail({ kind: "parse", endpoint, detail: "响应最外层不是对象" });
 
   const status = String(body.status ?? response.status).toLowerCase();
   if (EXPIRED_STATUSES.has(status)) {
@@ -138,7 +157,7 @@ export async function getMcDev<T>(
     return fail({ kind: "business", code: status, message: typeof body.msg === "string" ? body.msg : "" });
   }
   if ((body.data === undefined || body.data === null) && !request?.allowEmpty) {
-    return fail({ kind: "parse", endpoint });
+    return fail({ kind: "parse", endpoint, detail: `接口 ${endpoint} 缺少 data 载荷` });
   }
   const renewed = renewedSessionCookie(response.headers);
   if (renewed && renewed !== session.sessionCookie) {
@@ -171,7 +190,12 @@ export async function writeMcDevData(
 }
 
 /** GET a developer API path and keep only the payload; session rotation goes through session.onRenewed */
-export async function getMcDevData(endpoint: string, path: string, session: NeteaseSession): Promise<Result<unknown>> {
-  const result = await getMcDev<unknown>(endpoint, path, session);
+export async function getMcDevData(
+  endpoint: string,
+  path: string,
+  session: NeteaseSession,
+  options?: { timeoutMs: number },
+): Promise<Result<unknown>> {
+  const result = await getMcDev<unknown>(endpoint, path, session, undefined, options?.timeoutMs);
   return result.ok ? ok(result.value.data) : fail(result.error);
 }

@@ -1,0 +1,122 @@
+.root {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 12px;
+}
+
+.label {
+  flex: none;
+  color: var(--g-text-muted);
+}
+
+.control {
+  position: relative;
+  min-width: 0;
+  width: 280px;
+}
+
+.trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 10px;
+  background: var(--g-surface-sunken);
+  border: var(--g-border-width) solid var(--g-field-borderColor);
+  border-radius: var(--g-radius-control);
+  color: var(--g-text-primary);
+  font: inherit;
+  text-align: left;
+}
+
+.trigger > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.popup {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  width: 100%;
+  background: var(--g-surface-sunken);
+  border: var(--g-border-width) solid var(--g-field-borderColor);
+  border-radius: var(--g-radius-control);
+  box-shadow: 0 8px 24px #0006;
+}
+
+.search {
+  display: flex;
+  gap: 4px;
+  padding: 8px;
+  border-bottom: 1px solid var(--g-border-divider);
+}
+
+.search input {
+  min-width: 0;
+  width: 100%;
+  padding: 7px 8px;
+  background: var(--g-surface-panel);
+  color: var(--g-text-primary);
+  border: 1px solid var(--g-field-borderColor);
+  font: inherit;
+}
+
+.search button {
+  width: 28px;
+  flex: none;
+  color: var(--g-text-muted);
+}
+
+.list {
+  max-height: min(260px, 35vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.option {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 10px;
+  color: var(--g-text-primary);
+  font: inherit;
+  text-align: left;
+  line-height: 1.5;
+}
+
+.option > span:first-child {
+  overflow-wrap: anywhere;
+}
+
+.option > span:last-child {
+  flex: none;
+}
+
+.active {
+  background: color-mix(in srgb, var(--g-action-primary-bg) 35%, transparent);
+}
+
+.option[aria-selected="true"] {
+  font-weight: 700;
+}
+
+.note {
+  margin: 0;
+  padding: 8px 10px;
+  border-top: 1px solid var(--g-border-divider);
+  color: var(--g-text-muted);
+  font-size: 11px;
+  line-height: 1.6;
+}

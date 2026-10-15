@@ -30,3 +30,5 @@ export interface IncomeEstimate {
   /** Names of works whose sales query failed; the totals are incomplete when non-empty */
   failedWorks: string[];
 }
+
+export type IncomePlatform = "pe" | "pc";

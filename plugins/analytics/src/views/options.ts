@@ -1,4 +1,4 @@
-import type { DayRange, MonthRange } from "../mock";
+import type { DayRange, MonthRange } from "../data";
 
 // Segmented-control options shared by the analytics views
 

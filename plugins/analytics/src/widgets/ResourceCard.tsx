@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { Resource } from "../mock";
+import type { Resource } from "../data";
 import styles from "./ResourceCard.module.css";
 import { SeriesName } from "./Swatch";
 

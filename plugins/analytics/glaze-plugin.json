@@ -12,5 +12,5 @@
     "navItems": [{ "page": "analytics", "icon": "nav.analytics", "group": "top", "order": 30 }],
     "widgets": []
   },
-  "permissions": ["netease:analytics.read", "storage"]
+  "permissions": ["netease:analytics.read", "netease:works.read", "netease:income.read", "storage"]
 }

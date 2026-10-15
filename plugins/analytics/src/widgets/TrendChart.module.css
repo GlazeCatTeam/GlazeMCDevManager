@@ -12,6 +12,81 @@
   display: block;
 }
 
+.plot {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 150px;
+  outline-offset: 2px;
+}
+
+.crosshair {
+  stroke: var(--g-text-muted);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  pointer-events: none;
+}
+
+.tooltip {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  width: min(320px, calc(100% - 16px));
+  max-height: calc(100% - 16px);
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 12px;
+  border: 1px solid var(--g-border-subtle);
+  border-radius: var(--g-radius-panel);
+  background: color-mix(in srgb, var(--g-surface-panel) 96%, transparent);
+  box-shadow: 0 4px 16px #0006;
+  color: var(--g-text-primary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tooltipHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.hoverTooltip {
+  pointer-events: none;
+}
+
+.tooltipHeading > span {
+  color: var(--g-text-muted);
+  font-size: 11px;
+}
+
+.tooltipList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tooltipRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.tooltipName {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tooltipRow > strong {
+  white-space: nowrap;
+}
+
 .gridLine {
   stroke: var(--g-border-subtle);
   stroke-width: 1;

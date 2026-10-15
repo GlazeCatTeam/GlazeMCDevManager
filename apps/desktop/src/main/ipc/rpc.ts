@@ -3,6 +3,9 @@ import {
   type EventMessage,
   type EventName,
   type EventPayloads,
+  isAnalyticsDate,
+  isAnalyticsRange,
+  isAnalyticsResourceIds,
   isCommentListParams,
   isCommentReplyParams,
   isFeedbackListParams,
@@ -23,7 +26,11 @@ import {
   createWork,
   deleteMessages,
   estimateIncome,
+  getAnalyticsDaily,
+  getAnalyticsMonthly,
   getAnalyticsOverview,
+  getAnalyticsPeriodIncome,
+  getAnalyticsRealtime,
   getDeveloperLevel,
   getMessage,
   getMessageUnreadCount,
@@ -295,6 +302,31 @@ function createHandlers(
     },
     "developer.level": (params) => sessions.request(optionalString(params, "account"), getDeveloperLevel),
     "analytics.overview": (params) => sessions.request(optionalString(params, "account"), getAnalyticsOverview),
+    "analytics.daily": (params) => {
+      if (
+        !isAnalyticsRange(params) ||
+        !isAnalyticsResourceIds(params.resourceIds) ||
+        (params.includePeers !== undefined && typeof params.includePeers !== "boolean")
+      )
+        throw new CapabilityError("internal", "分析日期或资源参数无效");
+      return sessions.request(optionalString(params, "account"), (session) => getAnalyticsDaily(session, params));
+    },
+    "analytics.periodIncome": (params) => {
+      if (!isAnalyticsRange(params) || !isAnalyticsResourceIds(params.resourceIds))
+        throw new CapabilityError("internal", "周期收益日期或资源参数无效");
+      return sessions.request(optionalString(params, "account"), (session) =>
+        getAnalyticsPeriodIncome(session, params),
+      );
+    },
+    "analytics.monthly": (params) => {
+      if (!isAnalyticsRange(params)) throw new CapabilityError("internal", "分析日期范围无效");
+      return sessions.request(optionalString(params, "account"), (session) => getAnalyticsMonthly(session, params));
+    },
+    "analytics.realtime": (params) => {
+      if (!params || !isAnalyticsDate(params.date) || !isAnalyticsResourceIds(params.resourceIds))
+        throw new CapabilityError("internal", "实时收益日期或资源参数无效");
+      return sessions.request(optionalString(params, "account"), (session) => getAnalyticsRealtime(session, params));
+    },
     "income.estimate": (params) => {
       const month = optionalString(params, "month") ?? monthOf(new Date());
       if (!parseMonth(month)) {
@@ -313,7 +345,10 @@ function createHandlers(
         getRankList(session, board, category, limit),
       );
     },
-    "works.list": (params) => sessions.request(optionalString(params, "account"), listWorks),
+    "works.list": (params) => {
+      const platform = optionalOneOf(params, "platform", ["pe", "pc"] as const) ?? "pe";
+      return sessions.request(optionalString(params, "account"), (session) => listWorks(session, platform));
+    },
     "works.page": (params) => {
       const page = optionalInteger(params, "page", 0, 100_000_000);
       const pageSize = optionalInteger(params, "pageSize", 1, 50);

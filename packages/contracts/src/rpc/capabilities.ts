@@ -23,6 +23,10 @@ export interface Capability {
 const shellOnly = (permission: string | null, risk: Risk): Capability => ({ caller: "shell", permission, risk });
 
 export const capabilities: Record<RpcMethod, Capability> = {
+  "analytics.daily": shellOnly("netease:analytics.read", "read"),
+  "analytics.periodIncome": shellOnly("netease:analytics.read", "read"),
+  "analytics.monthly": shellOnly("netease:analytics.read", "read"),
+  "analytics.realtime": shellOnly("netease:income.read", "read"),
   "general.get": shellOnly(null, "read"),
   "general.set": shellOnly(null, "write"),
   "general.clearCache": shellOnly(null, "write"),
