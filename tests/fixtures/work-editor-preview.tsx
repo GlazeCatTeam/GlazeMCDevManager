@@ -11,7 +11,12 @@ import type {
   WorkRecord,
   WorkSummary,
 } from "../../packages/contracts/src";
-import { workOperationMethods, workOperationStates } from "../../packages/contracts/src";
+import {
+  deferredWorkCreatePatch,
+  emptyWorkCreateFields,
+  workOperationMethods,
+  workOperationStates,
+} from "../../packages/contracts/src";
 import { applyTheme } from "../../packages/theme/src";
 import oreUi from "../../themes/ore-ui/theme.json";
 import "../../apps/desktop/src/renderer/global.css";
@@ -117,10 +122,40 @@ const options: WorkEditorOptions = {
   ],
 };
 const requests: { method: string; params: unknown }[] = [];
+let saveFailure = false;
+const editorFeatures = new URLSearchParams(location.search).has("editorFeatures");
+if (editorFeatures) {
+  Object.assign(document.fields, {
+    ...emptyWorkCreateFields(),
+    ...document.fields,
+    price_type: "diamond",
+    price: 600,
+    price_rank: 1,
+  });
+  Object.assign(work, { price: 600, priceType: "diamond" });
+  options.prerequisiteAllowed = true;
+  options.peTypes.push({ id: 6, title: "联机大厅" });
+  options.peResourceFileTypes = { 2: ["zip"], 6: ["zip"] };
+  options.pcTypes = [
+    { id: 3, title: "地图组件" },
+    { id: 8, title: "功能组件" },
+    { id: 9, title: "联机大厅" },
+  ];
+  options.pcSubTypes = { 8: [{ id: 20, title: "玩法拓展" }] };
+  options.lobbyTags = [
+    { id: 1, title: "生存" },
+    { id: 2, title: "竞技模式" },
+  ];
+  options.lobbyTagLimit = 2;
+  options.lobbyCompetitiveTagId = 2;
+}
 const performancePreview = new URLSearchParams(location.search).has("performance");
 const actionsPreview = new URLSearchParams(location.search).has("actions");
 const scheduledPreview = new URLSearchParams(location.search).has("scheduled");
 let actionFailure = new URLSearchParams(location.search).get("actionFailure");
+const slowPages = new URLSearchParams(location.search).has("slow");
+const failedPage = new URLSearchParams(location.search).get("failPage");
+let pageFailureUsed = false;
 const workList = performancePreview
   ? Array.from({ length: 90 }, (_, i) => ({ ...work, itemId: String(1000 + i), name: `性能测试作品 ${i + 1}` }))
   : [work];
@@ -186,6 +221,55 @@ if (performancePreview) {
 /** Model the preload contract locally; this fixture has no network implementation */
 const rpc = async (method: string, params?: unknown) => {
   requests.push({ method, params: structuredClone(params) });
+  if (method === "works.searchReferences") {
+    const p = params as { kind: string; query: string };
+    if (p.query === "失败") return { ok: false, error: { kind: "business", message: "模拟搜索失败" } };
+    await new Promise((resolve) => setTimeout(resolve, p.query === "旧搜索" ? 700 : 30));
+    return {
+      ok: true,
+      value: [
+        {
+          itemId: p.kind === "pcPrerequisite" ? "9000000000000000001" : "8000000000000000001",
+          name: `${p.query}测试依赖`,
+        },
+        { itemId: "9000000000000000002", name: "第二个测试依赖" },
+      ],
+    };
+  }
+  if (method === "works.prepareImage") {
+    const canvas = window.document.createElement("canvas");
+    canvas.width = 200;
+    canvas.height = 100;
+    const context = canvas.getContext("2d");
+    if (context) {
+      context.fillStyle = "#3c8527";
+      context.fillRect(0, 0, 100, 100);
+      context.fillStyle = "#f4ba37";
+      context.fillRect(100, 0, 100, 100);
+    }
+    return {
+      ok: true,
+      value: {
+        token: "fixture-image-token",
+        width: 200,
+        height: 100,
+        targetWidth: 100,
+        targetHeight: 100,
+        preview: canvas.toDataURL("image/png").split(",")[1],
+      },
+    };
+  }
+  if (method === "works.discardImage") return { ok: true, value: undefined };
+  if (method === "works.uploadCroppedImage")
+    return {
+      ok: true,
+      value: {
+        name: "cropped.png",
+        size: 100,
+        url: "https://x19.fp.ps.netease.com/cropped.png",
+        receipt: { body: '{"url":"https://x19.fp.ps.netease.com/cropped.png"}', sign: "fixture", file_type: "image" },
+      },
+    };
   if (workOperationMethods.includes(method as WorkOperationMethod)) {
     await new Promise((resolve) => setTimeout(resolve, 350));
     const input = params as WorkOperationParams;
@@ -220,18 +304,27 @@ const rpc = async (method: string, params?: unknown) => {
     return { ok: true, value: { outcome: actionFailure === "uncertain" ? "uncertain" : "completed" } };
   }
   if (performancePreview)
-    metrics.textContent = `分页 ${requests.filter((r) => r.method === "works.page").length} · 全量 ${requests.filter((r) => r.method === "works.list").length} · 封面 ${requests.filter((r) => r.method === "works.get").length}`;
+    metrics.textContent = `分页 ${requests.filter((r) => r.method === "works.page").length} · 全量 ${requests.filter((r) => r.method === "works.list").length} · 封面 ${requests.filter((r) => r.method === "works.get").length} · 详情 ${requests.filter((r) => r.method === "works.editor").length} · 选项 ${requests.filter((r) => r.method === "works.options").length}`;
   if (method === "works.page") {
-    if (performancePreview) await new Promise((resolve) => setTimeout(resolve, 250));
+    if (performancePreview) await new Promise((resolve) => setTimeout(resolve, slowPages ? 1500 : 250));
     const { page, pageSize } = params as { page: number; pageSize: number };
+    if (!pageFailureUsed && failedPage !== null && page === Number(failedPage)) {
+      pageFailureUsed = true;
+      return { ok: false, error: { kind: "network", message: "模拟分页请求失败" } };
+    }
     return {
       ok: true,
       value: { items: structuredClone(workList.slice(page * pageSize, (page + 1) * pageSize)), total: workList.length },
     };
   }
   if (performancePreview && method === "works.get") await new Promise((resolve) => setTimeout(resolve, 400));
+  if (performancePreview && method === "works.editor") await new Promise((resolve) => setTimeout(resolve, 500));
+  if (performancePreview && method === "works.options") await new Promise((resolve) => setTimeout(resolve, 350));
   const values: Record<string, unknown> = {
-    "app.getInitialRoute": { route: "glaze.works/works", params: {} },
+    "app.getInitialRoute": {
+      route: new URLSearchParams(location.search).has("home") ? "glaze.home/home" : "glaze.works/works",
+      params: {},
+    },
     "window.getState": { maximized: false },
     "account.list": [account],
     "account.current": account,
@@ -269,11 +362,19 @@ const rpc = async (method: string, params?: unknown) => {
       ...document,
       itemId: created.itemId,
       version: "0.1",
-      fields: structuredClone(fields),
+      fields: editorFeatures
+        ? {
+            ...structuredClone(fields),
+            ...Object.fromEntries(
+              Object.keys(deferredWorkCreatePatch(fields)).map((key) => [key, emptyWorkCreateFields()[key] ?? null]),
+            ),
+          }
+        : structuredClone(fields),
     });
     return { ok: true, value: undefined };
   }
   if (method === "works.save") {
+    if (saveFailure) return { ok: false, error: { kind: "business", message: "模拟保存失败，草稿保留" } };
     const input = params as { itemId: string; patch: WorkRecord };
     const target = documents.get(input.itemId);
     if (!target) return { ok: false, error: { kind: "fixture", message: "作品不存在" } };
@@ -318,7 +419,35 @@ const rpc = async (method: string, params?: unknown) => {
     ? { ok: true, value: structuredClone(values[method]) }
     : { ok: false, error: { kind: "fixture", message: `未模拟接口 ${method}` } };
 };
-Object.assign(globalThis, { glaze: { rpc, on: () => () => {} } as GlazeBridge });
+Object.assign(globalThis, {
+  glaze: {
+    rpc,
+    on: () => () => {},
+    uploadDroppedResource: async (file, params) => {
+      requests.push({ method: "works.uploadDroppedResource", params });
+      return {
+        ok: true,
+        value: {
+          name: file.name,
+          size: file.size,
+          url: "https://x19.fp.ps.netease.com/drop.mcpack",
+          receipt: { body: "{}", sign: "fixture", file_type: "zip_package" },
+        },
+      };
+    },
+  } as GlazeBridge,
+});
+if (editorFeatures)
+  Object.assign(globalThis, {
+    workEditorFixture: {
+      requests,
+      documents,
+      workList,
+      failSave: (value: boolean) => {
+        saveFailure = value;
+      },
+    },
+  });
 const schedules = new Map<string, string | null>();
 if (scheduledPreview) schedules.set("3009", "2099-01-01T10:30:00+08:00");
 if (actionsPreview)

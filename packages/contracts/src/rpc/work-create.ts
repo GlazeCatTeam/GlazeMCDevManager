@@ -1,9 +1,19 @@
 import { isWorkRecord, isWorkValue, type WorkRecord, workSections } from "./work-editor";
 
-/** Creation has its own DTO; PC sync and related works are configured after creation */
-export const workCreateFields = Object.values(workSections)
-  .flat()
-  .filter((key) => !["sync_pc_flag", "sync_item_info", "dlc_info", "relate_item_id"].includes(key));
+/** Creation accepts a full draft; update-only configuration is applied after selecting the created work */
+export const workCreateFields = Object.values(workSections).flat();
+
+/** Preserve fields absent from the create protocol for an explicit follow-up update */
+export function deferredWorkCreatePatch(fields: WorkRecord): WorkRecord {
+  const patch: WorkRecord = {};
+  if (fields.sync_pc_flag === true)
+    Object.assign(patch, { sync_pc_flag: true, sync_item_info: fields.sync_item_info ?? {} });
+  if (isWorkRecord(fields.dlc_info) && fields.dlc_info.dlc_switch === true)
+    Object.assign(patch, { dlc_info: fields.dlc_info, relate_item_id: fields.relate_item_id ?? "" });
+  if (fields.corp_proof_image) patch.corp_proof_image = fields.corp_proof_image;
+  if (Array.isArray(fields.discount) && fields.discount.length) patch.discount = fields.discount;
+  return patch;
+}
 
 export interface WorkCreateParams {
   account: string;
@@ -16,6 +26,12 @@ export function emptyWorkCreateFields(): WorkRecord {
     item_name: "",
     is_domain_server_item: 0,
     is_original: true,
+    corp_proof_image: "",
+    discount: [],
+    sync_pc_flag: false,
+    sync_item_info: {},
+    dlc_info: { dlc_switch: false, dlc_type: "off", master: {}, slave_list: [] },
+    relate_item_id: "",
     tag: [],
     activity_desc: "",
     price: 0,
@@ -30,6 +46,17 @@ export function emptyWorkCreateFields(): WorkRecord {
     mount_call_enabled: false,
     res: [],
     prerequisite_items: [],
+    pe_is_add_play_plan: false,
+    lobby_min_num: 0,
+    lobby_max_num: 0,
+    lobby_force_max_num: 10,
+    lobby_tags: [],
+    is_lobby_competitive: false,
+    is_asymmetric: false,
+    lobby_camps: [],
+    lobby_player_num: 1,
+    lobby_normal_mode: false,
+    lobby_reconnect_time: 1,
     channel: [],
     banner_pic: "",
     video_info_list: [],

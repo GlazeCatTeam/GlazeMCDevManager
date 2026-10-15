@@ -134,7 +134,7 @@ type CallerIdentity =
 
 ### 作品列表八项能力（2026-10-16）
 
-应用已定义并接入 `works.cancelReview`、`works.publish`、`works.appointOnline`、`works.cancelAppointOnline`、`works.submitSelfTest`、`works.cancelTest`、`works.delete`、`works.changePrice`。权限均为 `netease:works.write`; 删除风险为 `dangerous`, 其他为 `write`。目前均为 `shellOnly`, 没有 MCP exposure; 取消定时上架只允许 `appoint_online`, 发送显式 null 清除预约。
+应用已定义并接入 `works.cancelReview`、`works.publish`、`works.appointOnline`、`works.cancelAppointOnline`、`works.submitSelfTest`、`works.cancelTest`、`works.delete`、`works.changePrice`。权限均为 `netease:works.write`; 删除风险为 `dangerous`, 其他为 `write`。目前均为 `shellOnly`, 没有 MCP exposure; 上表关于独立上架和删除未开放 MCP 的范围保持不变。取消定时上架只允许 `appoint_online`, 发送显式 null 清除预约。
 
 能力接收固定账号、作品 ID 和预期状态; 自测额外携带免机审选择, 定时上架携带北京时间, 调价携带原币种/价格与新价格。主进程对参数、调用窗口、账号、作品实时状态和价格规则进行校验, 同一账号/作品的列表写操作互斥。所有八项操作都经过应用内确认, 不自动重试写入; 无法判断写结果时返回 `outcome: uncertain`, 界面要求核对后再操作。未来 MCP 接入必须复用这些校验并接入批准机制, 不能直接开放现有 IPC。
 
@@ -149,10 +149,10 @@ type CallerIdentity =
 
 | 页面分区 | AI 可填写或修改 | 限制 |
 |---|---|---|
-| 基本信息 | 名称、专区、原创标记、标签、活动说明；已有作品的关联模组与 PC 同步开关 | ID、模组码、审核状态等只读；新建不配置关联模组与 PC 同步 |
+| 基本信息 | 名称、专区、原创标记、标签、活动说明、授权证明、关联模组与 PC 同步开关 | ID、模组码、审核状态等只读；新建的更新专用配置按两步流程应用，不猜测新 ID |
 | 资源定价 | 平台允许的定价类型、价格与档位 | 读取实时选项，确认页突出价格变更 |
 | 详情与攻略 | PE 详情富文本、详情图片 | 富文本经过白名单清理；已有攻略只读，攻略上传/编辑协议尚未接入 |
-| 资源文件 | 分类、modAPI 版本、推荐标签、坐骑功能、资源包及提升版本选项、前置依赖 | 文件必须经过受控材料流程；不开放新建前置模组 |
+| 资源文件 | 分类、modAPI 版本、推荐标签、坐骑功能、资源包及提升版本选项、前置依赖、畅玩计划、联机大厅 | 文件必须经过受控材料流程；新建前置模组须核对账号开关，且强制免费 |
 | 图片与视频 | 平台图片位、推广广图、视频及封面 | 按实际选项校验尺寸、文件类型及视频约束 |
 | 更新与上架 | 更新纪要、弱下架开关及原因 | 弱下架字段不等于独立的立即上架/定时上架操作 |
 | PC 同步 | 已有作品的 PC 名称、简介、详情、分类、适用范围、地图标记、标签、图片、弱下架设置 | 只开放当前编辑器已有字段，不承诺独立 PC 作品创建或任意 PC 文件上传 |
@@ -209,6 +209,16 @@ AI 的字段修改引用材料 ID；主进程内部解析平台签名回执，�
 - 当前页面写入逻辑尚未完成真实平台端到端验收，MCP 适配不能把这一限制隐藏为已验证。
 
 ## 待定事项
+
+### 已接入应用的详情扩展能力（2026-10-16）
+
+`works.searchReferences`（`netease:works.read`, read）按 PE 前置、PC 前置或关联作品的专用资源池搜索, 最多返回 20 条, 长整数 ID 始终为字符串。`works.options` 补充账号前置权限及联机大厅分类。扩展字段复用 `works.save`/`works.create` 的白名单、基线与主进程校验。
+
+图片分为 `works.prepareImage`（`netease:works.write`, read, 原生选择并生成本地预览）、`works.uploadCroppedImage`（同权限, write, 按矩形裁剪后上传）、`works.discardImage`（同权限, write, 释放本地快照）。全部仍为 shellOnly, 无 MCP exposure。裁剪令牌绑定窗口与账号, 五分钟有效, 不接受任意路径或渲染层提供的图片字节。未来 AI 材料流程须通过授权导入适配这些能力, 不能直接开放原生选择器接口。
+
+新建草稿允许 PC 同步、关联、授权和折扣配置, 但创建协议未声明的更新字段不能伪造写入。保留待应用配置, 创建成功后显式选定准确作品并展示确认, 再调用 `works.save`; 不根据名称猜测 ID, 不自动提审。当前 UI 草稿只在应用进程内保留, 不等价于上文未来 MCP 的持久化操作记录。
+
+资源拖入使用 `works.uploadDroppedResource`（`netease:works.write`, write, shellOnly, 无 MCP exposure）。能力参数为账号、可选作品 ID 和草稿资源类别; 专用 preload `uploadDroppedResource(File, params)` 使用 Electron `webUtils.getPathForFile` 解析实际磁盘文件, 普通 `rpc` 入口拒绝此方法, 不接受渲染层传来的路径字符串或合成 File。内部路径仅在 preload 与主进程之间传递。主进程复核主窗口、账号、文件及实时类别规则, 复用 `works.upload` 的上传实现。未来 MCP 材料导入必须走授权文件能力, 不直接调用此桥。
 
 | 事项 | 选项 | 计划决定时间 |
 |---|---|---|

@@ -2,6 +2,7 @@ import {
   isWorkRecord,
   isWorkSaveParams,
   isWorkValue,
+  normalizePcRequirements,
   type WorkEditorDocument,
   type WorkEditorOptions,
   type WorkImageSlot,
@@ -15,6 +16,8 @@ import {
 import { fail, ok, type Result } from "../errors";
 import { getMcDevData, type NeteaseSession, parsePlatformJson, writeMcDevData } from "../http/client";
 import { isNeteaseImageUrl } from "../http/hosts";
+import { lobbyFields, normalizeWorkAdvanced, validateWorkAdvanced } from "./work-advanced";
+import { emptyWorkUpdate, normalizeWorkUpdateDefaults } from "./work-update-defaults";
 import { workUpdateFields } from "./work-update-fields";
 import { readWorkStatus } from "./works";
 
@@ -77,6 +80,11 @@ export function workEditorFields(raw: WorkRecord): WorkRecord {
   const dlc = record(raw.dlc_info);
   values.dlc_info = { ...dlc, master: structured(dlc.master, {}), slave_list: structured(dlc.slave_list, []) };
   values.relate_item_id = String(raw.relate_item_id ?? "");
+  if (isWorkRecord(values.sync_item_info) && values.sync_item_info.requirement !== undefined)
+    values.sync_item_info = {
+      ...values.sync_item_info,
+      requirement: normalizePcRequirements(values.sync_item_info.requirement),
+    };
   return values;
 }
 /** Fetch the full editor from the same authoritative detail endpoint */
@@ -126,12 +134,14 @@ function imageSlots(value: unknown): WorkImageSlot[] {
 }
 /** Load form dictionaries; failures remain visible instead of producing hardcoded choices */
 export async function getWorkEditorOptions(session: NeteaseSession): Promise<Result<WorkEditorOptions>> {
-  const [constants, tags] = await Promise.all([
+  const [constants, tags, profile] = await Promise.all([
     getMcDevData("items.mc_consts", "/items/mc_consts/", session),
     getMcDevData("item-tag", "/item-tag/", session),
+    getMcDevData("users.me", "/users/me", session),
   ]);
   if (!constants.ok) return constants;
   if (!tags.ok) return tags;
+  if (!profile.ok) return profile;
   const c = record(constants.value);
   const channel = record(c.channel);
   const types = record(c.pri_type);
@@ -140,6 +150,10 @@ export async function getWorkEditorOptions(session: NeteaseSession): Promise<Res
     return fail({ kind: "parse", endpoint: "items.mc_consts" });
   const peImages = [...imageSlots(channel.pe), ...imageSlots(channel.pe_multi)];
   return ok({
+    prerequisiteAllowed: record(profile.value).prerequisite_switch === true,
+    lobbyTags: options(c.lobby_tags),
+    lobbyTagLimit: typeof c.item_tag_limit === "number" ? c.item_tag_limit : 0,
+    lobbyCompetitiveTagId: options(c.lobby_tags).find((tag) => tag.title === "竞技模式")?.id ?? null,
     tags: Array.isArray(record(tags.value).tag_list)
       ? (record(tags.value).tag_list as WorkValue[]).filter((v): v is string => typeof v === "string")
       : [],
@@ -147,6 +161,18 @@ export async function getWorkEditorOptions(session: NeteaseSession): Promise<Res
     peTypes: options(types.pe),
     pcTypes: options(types.comp),
     peSubTypes: optionGroups(subtypes.pe),
+    peResourceFileTypes: Object.fromEntries(
+      Object.entries(record(subtypes.pe)).map(([key, value]) => [
+        key,
+        [
+          ...new Set(
+            records(value)
+              .map((row) => row.file_type)
+              .filter((type): type is string => typeof type === "string" && !!type),
+          ),
+        ],
+      ]),
+    ),
     pcSubTypes: optionGroups(subtypes.pc ?? subtypes.comp),
     secondTypes: optionGroups(c.mod_second_type),
     recommendTags: optionGroups(c.label_type),
@@ -174,6 +200,8 @@ export async function getWorkEditorOptions(session: NeteaseSession): Promise<Res
 }
 /** Restrict edited fields and validate limits before any write request */
 export function validateWorkPatch(patch: WorkRecord, original: WorkRecord): string | null {
+  const advancedError = validateWorkAdvanced(patch, original);
+  if (advancedError) return advancedError;
   for (const [key, value] of Object.entries(patch)) {
     if (stringFields.has(key) && typeof value !== "string") return `${key} 应为文本`;
     if (booleanFields.has(key) && typeof value !== "boolean") return `${key} 应为布尔值`;
@@ -310,19 +338,29 @@ function validChannels(value: WorkValue[]): boolean {
 }
 /** Build the documented update DTO from the latest server snapshot plus an explicit patch */
 export function buildWorkUpdate(raw: WorkRecord, patch: WorkRecord): WorkRecord {
-  const result: WorkRecord = {};
-  for (const field of workUpdateFields) if (raw[field] !== undefined) result[field] = raw[field];
+  const result: WorkRecord = emptyWorkUpdate();
+  for (const field of workUpdateFields)
+    if (raw[field] !== undefined && (raw[field] !== null || !(field in result))) result[field] = raw[field];
   result.tag = raw.tags ?? raw.tag ?? [];
   result.white_list = structured(raw.whitelist ?? raw.white_list, []);
   result.mc_version = Array.isArray(raw.mc_version)
     ? raw.mc_version
     : structured(raw.mc_version, typeof raw.mc_version === "string" && raw.mc_version ? [raw.mc_version] : []);
-  result.dlc_info = workEditorFields(raw).dlc_info ?? {};
+  const dlc = record(workEditorFields(raw).dlc_info);
+  result.dlc_info = {
+    ...record(result.dlc_info),
+    ...dlc,
+    dlc_switch: dlc.dlc_switch ?? false,
+    dlc_type: dlc.dlc_type || "off",
+    master: dlc.master ?? {},
+    slave_list: dlc.slave_list ?? [],
+  };
   result.claim_item_enabled = Boolean(raw.claim_item_enabled);
   Object.assign(result, patch);
+  normalizeWorkUpdateDefaults(result);
   result.is_check_apply = false;
   result.pre_review_video = raw.pre_review_video || "{}";
-  result.collection_id = String(raw.collection_id ?? "0");
+  result.collection_id = String(raw.collection_id || "0");
   result.relate_item_id = String(result.relate_item_id || "0");
   if (result.sync_pc_flag && isWorkRecord(result.sync_item_info)) {
     const syncKeys = [
@@ -357,7 +395,7 @@ export function buildWorkUpdate(raw: WorkRecord, patch: WorkRecord): WorkRecord 
     delete result.play_plan_expire_time;
     result.play_plan_expire_month = 0;
   }
-  return result;
+  return normalizeWorkAdvanced(result, "prerequisite_items" in patch);
 }
 /** Preserve numeric 64-bit relate_item_id exactly when serializing the request */
 function serializeUpdate(value: WorkRecord): string {
@@ -383,6 +421,7 @@ export async function saveWorkEditor(session: NeteaseSession, params: WorkSavePa
   if (error) return fail({ kind: "business", code: "validation", message: error });
   const body = buildWorkUpdate(raw, params.patch);
   const dictionaryFields = [
+    "res",
     "pri_type",
     "sub_type",
     "mod_second_type",
@@ -390,6 +429,12 @@ export async function saveWorkEditor(session: NeteaseSession, params: WorkSavePa
     "label_type_list",
     "price",
     "sync_item_info",
+    "sync_pc_flag",
+    "prerequisite_items",
+    "pe_is_add_play_plan",
+    "corp_proof_image",
+    "discount",
+    ...lobbyFields,
   ];
   if (
     dictionaryFields.some((key) => key in params.patch) ||
@@ -398,12 +443,19 @@ export async function saveWorkEditor(session: NeteaseSession, params: WorkSavePa
     const choices = await getWorkEditorOptions(session);
     if (!choices.ok) return choices;
     const c = choices.value;
+    const advancedError = validateWorkAdvanced(params.patch, fields, c, params.itemId);
+    if (advancedError) return fail({ kind: "business", code: "validation", message: advancedError });
     for (const [key, options] of [
       ["pri_type", c.peTypes],
       ["sub_type", c.peSubTypes[String(body.pri_type)] ?? []],
       ["mod_second_type", c.secondTypes[String(body.sub_type)] ?? []],
     ] as const) {
-      if (key in params.patch && body[key] !== 0 && !options.some((option) => option.id === body[key]))
+      if (
+        key in params.patch &&
+        body[key] !== 0 &&
+        !(key === "pri_type" && body[key] === 9 && raw.pri_type === 9) &&
+        !options.some((option) => option.id === body[key])
+      )
         return fail({ kind: "business", code: "validation", message: "资源分类已变化，请刷新平台选项" });
     }
     if ("mod_version" in params.patch && !c.versions.includes(String(body.mod_version)))

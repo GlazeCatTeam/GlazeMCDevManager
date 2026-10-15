@@ -7,6 +7,17 @@
   gap: 28px;
 }
 
+.listArea {
+  position: relative;
+}
+.loadStatus {
+  position: absolute;
+  right: 0;
+  top: -23px;
+  color: var(--g-text-muted);
+  font-size: 12px;
+}
+
 /* Fixed tile size: three columns, always three 196px rows so the pager stays put */
 .grid {
   margin: 0;
@@ -41,4 +52,29 @@
 
 .emptyHint {
   color: var(--g-text-muted);
+}
+
+/* Keep the OreUI card layout stable while the first network response is pending */
+.skeleton {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: var(--g-surface-panel);
+  border: var(--g-border-width) solid var(--g-panel-borderColor);
+  border-radius: var(--g-radius-panel);
+  box-shadow: var(--g-panel-shadow);
+}
+.skeletonCover {
+  width: 44px;
+  height: 44px;
+  background: var(--g-surface-sunken);
+}
+.skeletonLine {
+  width: 70%;
+  height: 14px;
+  background: var(--g-surface-sunken);
+}
+.skeletonLine:last-child {
+  width: 45%;
 }

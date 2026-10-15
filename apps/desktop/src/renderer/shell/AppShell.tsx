@@ -36,6 +36,26 @@ export function AppShell() {
   const pages = useMemo(loadPages, []);
   const [location, setLocation] = useState<Location | null>(null);
   const [session, setSession] = useState<Session>({ current: null, accounts: [] });
+  const worksEnabled = pluginStates?.find((item) => item.id === "glaze.works")?.enabled ?? !registry;
+
+  // Background preparation belongs to the enabled plugin lifecycle, not module import side effects
+  useEffect(() => {
+    if (!worksEnabled) return;
+    let active = true;
+    let dispose: (() => void) | undefined;
+    void import("@glaze/plugin-works")
+      .then((plugin) => {
+        if (active) dispose = plugin.startWorksWarmup();
+      })
+      .catch(() => {
+        void callHost("app.reportRendererError", { kind: "error" }).catch(() => {});
+      });
+    return () => {
+      active = false;
+      dispose?.();
+    };
+  }, [worksEnabled]);
+
   // First page and accounts come from the main process; account changes are pushed afterwards
   useEffect(() => {
     let alive = true;

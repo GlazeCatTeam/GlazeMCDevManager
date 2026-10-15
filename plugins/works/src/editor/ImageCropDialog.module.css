@@ -1,0 +1,42 @@
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.hint {
+  color: var(--g-text-muted);
+}
+.preview {
+  display: block;
+  position: relative;
+  padding: 0;
+  border: 0;
+  max-height: 320px;
+  max-width: 100%;
+  margin: auto;
+  overflow: hidden;
+  background: var(--g-surface-sunken);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.preview[data-dragging="true"] {
+  cursor: grabbing;
+}
+.preview:focus-visible {
+  outline: 2px solid var(--g-text-link);
+  outline-offset: 3px;
+}
+.preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.selection {
+  pointer-events: none;
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid var(--g-text-link);
+  box-shadow: 0 0 0 1000px #0008;
+}

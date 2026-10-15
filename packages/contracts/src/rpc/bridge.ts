@@ -28,6 +28,7 @@ import type { MessageContent, MessageDeleteParams, MessageListParams, MessagePag
 import type { PluginInstallPreview, PluginSnapshot } from "./plugins";
 import type { RankBoard, RankEntry, RankListParams } from "./rank";
 import type { SessionSettings } from "./session-settings";
+import type { WorkCropParams, WorkImageDraft, WorkImageParams, WorkReference, WorkSearchParams } from "./work-assets";
 import type { WorkCreateParams } from "./work-create";
 import type {
   WorkEditorDocument,
@@ -38,6 +39,7 @@ import type {
   WorkUploadParams,
 } from "./work-editor";
 import type { WorkOperationParams, WorkOperationResult } from "./work-operations";
+import type { WorkResourceUploadParams } from "./work-resource";
 import type { WorkDetail, WorkPage, WorkPageParams, WorkParams, WorkReviewFeedback, WorkSummary } from "./works";
 
 export const RPC_CHANNEL = "glaze:rpc";
@@ -108,6 +110,10 @@ export interface RpcMethods {
   "works.list": { params: (AccountParams & { platform?: IncomePlatform }) | undefined; result: WorkSummary[] };
   "works.page": { params: WorkPageParams; result: WorkPage };
   "works.create": { params: WorkCreateParams; result: undefined };
+  "works.searchReferences": { params: WorkSearchParams; result: WorkReference[] };
+  "works.prepareImage": { params: WorkImageParams; result: WorkImageDraft | null };
+  "works.uploadCroppedImage": { params: WorkCropParams; result: WorkUpload };
+  "works.discardImage": { params: { account: string; token: string }; result: undefined };
   "works.cancelReview": { params: WorkOperationParams; result: WorkOperationResult };
   "works.publish": { params: WorkOperationParams; result: WorkOperationResult };
   "works.appointOnline": { params: WorkOperationParams; result: WorkOperationResult };
@@ -123,6 +129,7 @@ export interface RpcMethods {
   "works.save": { params: WorkSaveParams; result: undefined };
   "works.submitReview": { params: WorkParams; result: WorkReviewResult };
   "works.upload": { params: WorkUploadParams; result: WorkUpload | null };
+  "works.uploadDroppedResource": { params: WorkResourceUploadParams; result: WorkUpload };
 }
 
 export interface EventPayloads {
@@ -153,6 +160,7 @@ export interface EventMessage {
 
 /** API exposed to the renderer as window.glaze */
 export interface GlazeBridge {
+  uploadDroppedResource?(file: File, params: WorkResourceUploadParams): Promise<RpcResult<WorkUpload>>;
   rpc<M extends RpcMethod>(method: M, params?: RpcMethods[M]["params"]): Promise<RpcResult<RpcMethods[M]["result"]>>;
   on<E extends EventName>(event: E, listener: (payload: EventPayloads[E]) => void): () => void;
 }

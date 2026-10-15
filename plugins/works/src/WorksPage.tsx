@@ -10,16 +10,25 @@ import {
   type WorkStatus,
   type WorkSummary,
 } from "@glaze/plugin-sdk";
-import { useCallback, useEffect, useState } from "react";
-import { WorkCreatePage, WorkDetailPage } from "./editor/WorkDetailPage";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { EditorRoute } from "./EditorRoute";
+import { loadWorkEditor } from "./editor-loader";
 import type { WorkAction } from "./status";
-import { invalidateWorks, useWorksPage } from "./useWorkQuery";
+import {
+  invalidateWorks,
+  preloadNextWorksPage,
+  preloadWorkEditor,
+  preloadWorkOptions,
+  useWorksPage,
+} from "./useWorkQuery";
+import { rememberWorkListPosition, selectWorkListView, type WorkListView, workListPosition } from "./view-state";
 import styles from "./WorksPage.module.css";
 import { ReviewFeedbackDialog } from "./widgets/ReviewFeedbackDialog";
 import { type ListWriteAction, WorkActionDialog } from "./widgets/WorkActionDialog";
 import { WorkTile } from "./widgets/WorkTile";
 
 const PER_PAGE = 9;
+const LOADING_SLOTS = Array.from({ length: PER_PAGE }, (_, position) => `loading-${position}`);
 
 /** One-line summary under the title */
 function summary(list: WorkSummary[], total: number): string {
@@ -38,9 +47,12 @@ export function WorksPage() {
 
 /** Account changes remount pagination and selection before any old rows can be painted */
 function WorksForAccount({ account }: { account: AccountSummary }) {
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState(() => workListPosition(account.id).page);
   const works = useWorksPage(account.id, page, PER_PAGE);
-  const [knownTotal, setKnownTotal] = useState(0);
+  const [lastView, setLastView] = useState<WorkListView | null>(null);
+  const [slowLoad, setSlowLoad] = useState(false);
+  const pageRef = useRef<HTMLDivElement>(null);
+  const scrollContainer = useRef<HTMLElement | null>(null);
   const [coverRevision, setCoverRevision] = useState(0);
   const [feedbackFor, setFeedbackFor] = useState<WorkSummary | null>(null);
   const [actionFor, setActionFor] = useState<{ work: WorkSummary; action: ListWriteAction } | null>(null);
@@ -53,15 +65,84 @@ function WorksForAccount({ account }: { account: AccountSummary }) {
   const closeView = useCallback(() => setViewing(null), []);
   const closeCreate = useCallback(() => setCreatingFor(null), []);
 
-  const list = works.data?.items ?? [];
-  const pageCount = Math.max(1, Math.ceil((works.data?.total ?? knownTotal) / PER_PAGE));
+  /** Intent-driven preparation shares its request with the eventual detail page */
+  const prepare = useCallback(
+    (work: WorkSummary) => {
+      void loadWorkEditor().catch(() => {});
+      void preloadWorkEditor(account.id, work.itemId);
+    },
+    [account.id],
+  );
+
+  /** Start data and code together instead of waiting for the editor chunk to mount */
+  const openDetail = (work: WorkSummary) => {
+    prepare(work);
+    setPage(displayedPage);
+    setViewing({ work, account: account.id });
+  };
+
+  /** New works need the same editor code and platform dictionaries */
+  const prepareCreate = () => {
+    void loadWorkEditor().catch(() => {});
+    void preloadWorkOptions(account.id);
+  };
+
+  const shown = selectWorkListView(page, works.data, lastView);
+  const displayedPage = shown?.page ?? page;
+  const list = shown?.data.items ?? [];
+  const pageCount = Math.max(1, Math.ceil((shown?.data.total ?? 0) / PER_PAGE));
+  const showingEditor = !!viewing || !!creatingFor;
 
   useEffect(() => {
     if (!works.data) return;
     const total = works.data.total;
-    setKnownTotal(total);
+    if (total === 0 || page < Math.ceil(total / PER_PAGE)) setLastView({ page, data: works.data });
     setPage((old) => Math.min(old, Math.max(0, Math.ceil(total / PER_PAGE) - 1)));
-  }, [works.data]);
+  }, [works.data, page]);
+
+  useEffect(() => {
+    // Restart the subtle indicator when the user changes target during an outstanding read.
+    void page;
+    setSlowLoad(false);
+    if (!works.loading) return;
+    const timer = setTimeout(() => setSlowLoad(true), 300);
+    return () => clearTimeout(timer);
+  }, [works.loading, page]);
+
+  useEffect(() => {
+    if (!works.data || works.loading || works.error || showingEditor || account.status !== "active") return;
+    const total = works.data.total;
+    let cancelled = false;
+    let idle: number | undefined;
+    const prepareNext = () => {
+      void preloadNextWorksPage(account.id, page, PER_PAGE, total, () => cancelled);
+    };
+    const timer = setTimeout(() => {
+      if (typeof window.requestIdleCallback === "function")
+        idle = window.requestIdleCallback(prepareNext, { timeout: 1000 });
+      else prepareNext();
+    }, 500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      if (idle !== undefined) window.cancelIdleCallback(idle);
+    };
+  }, [account.id, account.status, page, works.data, works.loading, works.error, showingEditor]);
+
+  useLayoutEffect(() => {
+    const main = pageRef.current?.closest("main") ?? scrollContainer.current;
+    if (!main) return;
+    scrollContainer.current = main;
+    if (showingEditor) {
+      main.scrollTop = 0;
+      return;
+    }
+    main.scrollTop = workListPosition(account.id).scrollTop;
+    const remember = () => rememberWorkListPosition(account.id, displayedPage, main.scrollTop);
+    remember();
+    main.addEventListener("scroll", remember, { passive: true });
+    return () => main.removeEventListener("scroll", remember);
+  }, [account.id, displayedPage, showingEditor]);
 
   /** Explicit refresh and successful writes bypass both list and cover caches */
   const refresh = () => {
@@ -75,7 +156,7 @@ function WorksForAccount({ account }: { account: AccountSummary }) {
     if (action === "viewFeedback") {
       setFeedbackFor(work);
     }
-    if ((action === "update" || action === "submitReview") && account) setViewing({ work, account: account.id });
+    if (action === "update" || action === "submitReview") openDetail(work);
     if (action !== "update" && action !== "submitReview" && action !== "viewFeedback" && account.status === "active") {
       setActionMessage(null);
       setActionFor({ work, action });
@@ -84,12 +165,13 @@ function WorksForAccount({ account }: { account: AccountSummary }) {
 
   if (creatingFor && creatingFor === account?.id)
     return (
-      <WorkCreatePage
+      <EditorRoute
         key={`new:${creatingFor}`}
         account={creatingFor}
         works={list}
         onClose={closeCreate}
         onSaved={() => {
+          rememberWorkListPosition(account.id, 0, 0);
           setCreatingFor(null);
           setCreatedFor(creatingFor);
           setPage(0);
@@ -100,7 +182,7 @@ function WorksForAccount({ account }: { account: AccountSummary }) {
 
   if (viewing && viewing.account === account?.id)
     return (
-      <WorkDetailPage
+      <EditorRoute
         key={`${viewing.account}:${viewing.work.itemId}`}
         work={viewing.work}
         account={viewing.account}
@@ -111,19 +193,24 @@ function WorksForAccount({ account }: { account: AccountSummary }) {
     );
 
   return (
-    <div className={styles.page}>
+    <div className={styles.page} ref={pageRef}>
       <PageHeader
         title="作品管理"
-        subtitle={works.data ? summary(list, works.data.total) : "正在加载本页作品…"}
+        subtitle={shown ? summary(list, shown.data.total) : "正在加载作品…"}
         actions={
           <>
-            <Button onClick={refresh} disabled={works.loading}>
-              {works.loading ? "刷新中…" : "刷新"}
+            <Button onClick={refresh} disabled={works.loading} aria-busy={works.loading}>
+              刷新
             </Button>
             <Button
               variant="primary"
               disabled={account?.status !== "active"}
-              onClick={() => account && setCreatingFor(account.id)}
+              onPointerEnter={prepareCreate}
+              onFocus={prepareCreate}
+              onClick={() => {
+                prepareCreate();
+                setCreatingFor(account.id);
+              }}
             >
               <Icon name="action.add" size={14} />
               新增作品
@@ -135,7 +222,6 @@ function WorksForAccount({ account }: { account: AccountSummary }) {
       {createdFor === account?.id && (
         <Notice>作品已创建，尚未提交审核。请在刷新后的列表中打开作品继续编辑或提审。</Notice>
       )}
-
       {actionMessage && (
         <div role="status">
           <Notice>{actionMessage}</Notice>
@@ -150,40 +236,58 @@ function WorksForAccount({ account }: { account: AccountSummary }) {
             </TextButton>
           }
         >
-          作品加载失败：{works.error.message}
+          {page !== displayedPage ? `第 ${page + 1} 页加载失败，仍显示第 ${displayedPage + 1} 页：` : "作品加载失败："}
+          {works.error.message}
         </Notice>
       )}
 
-      {list.length > 0 ? (
-        <ul className={styles.grid} aria-label="作品" aria-busy={works.loading}>
-          {list.map((work) => (
-            <WorkTile
-              key={`${work.itemId}:${coverRevision}`}
-              account={account.id}
-              work={work}
-              canWrite={account.status === "active"}
-              onAction={onAction}
-              onOpenDetail={(work) => account && setViewing({ work, account: account.id })}
-            />
-          ))}
-        </ul>
-      ) : (
-        <div className={styles.empty}>
-          <Icon name="nav.works" size={48} className={styles.emptyIcon} />
-          {works.loading ? (
-            <span className={styles.emptyTitle}>正在加载作品…</span>
-          ) : (
-            <>
-              <span className={styles.emptyTitle}>{works.error ? "作品加载失败" : "暂无作品"}</span>
-              <span className={styles.emptyHint}>
-                {works.error ? "检查网络后点「重试」" : "点击「新增作品」，创建你的第一个作品"}
-              </span>
-            </>
-          )}
-        </div>
-      )}
+      <div className={styles.listArea} aria-busy={works.loading}>
+        <span className={styles.loadStatus} role="status">
+          {slowLoad && works.loading ? (page !== displayedPage ? `正在打开第 ${page + 1} 页…` : "正在更新作品…") : ""}
+        </span>
+        {list.length > 0 ? (
+          <ul className={styles.grid} aria-label="作品" aria-busy={works.loading}>
+            {list.map((work) => (
+              <WorkTile
+                key={work.itemId}
+                refreshToken={coverRevision}
+                account={account.id}
+                work={work}
+                onAction={onAction}
+                onPrepare={prepare}
+                canWrite={account.status === "active"}
+                onOpenDetail={openDetail}
+              />
+            ))}
+          </ul>
+        ) : works.loading ? (
+          <div role="status" aria-label="正在加载作品" className={styles.grid}>
+            {LOADING_SLOTS.map((slot) => (
+              <div className={styles.skeleton} key={slot} aria-hidden="true">
+                <span className={styles.skeletonCover} />
+                <span className={styles.skeletonLine} />
+                <span className={styles.skeletonLine} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className={styles.empty}>
+            <Icon name="nav.works" size={48} className={styles.emptyIcon} />
+            {works.loading ? (
+              <span className={styles.emptyTitle}>正在加载作品…</span>
+            ) : (
+              <>
+                <span className={styles.emptyTitle}>{works.error ? "作品加载失败" : "暂无作品"}</span>
+                <span className={styles.emptyHint}>
+                  {works.error ? "检查网络后点「重试」" : "点击「新增作品」，创建你的第一个作品"}
+                </span>
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
-      <Pagination page={page} pageCount={pageCount} onChange={setPage} note={`每页 ${PER_PAGE} 个`} />
+      <Pagination page={displayedPage} pageCount={pageCount} onChange={setPage} note={`每页 ${PER_PAGE} 个`} />
 
       {feedbackFor && <ReviewFeedbackDialog work={feedbackFor} onClose={closeFeedback} />}
       {actionFor && (

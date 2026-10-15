@@ -1,5 +1,5 @@
 import { avatarColorsFor, Button, remoteImageUrl, Tag, TextButton, type WorkSummary } from "@glaze/plugin-sdk";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { formatDate, formatDateTime } from "../format";
 import { actionLabels, actionsFor, readActions, statusLabels, statusTones, type WorkAction } from "../status";
 import { useWorkCover } from "../useWorkQuery";
@@ -9,9 +9,11 @@ import styles from "./WorkTile.module.css";
 export interface WorkTileProps {
   work: WorkSummary;
   account: string;
+  refreshToken: number;
   /** Read actions, editor entry points and confirmed list operations */
   onAction: (work: WorkSummary, action: WorkAction) => void;
   onOpenDetail: (work: WorkSummary) => void;
+  onPrepare: (work: WorkSummary) => void;
   canWrite: boolean;
 }
 
@@ -39,8 +41,15 @@ function Cover({ iconUrl, seed }: { iconUrl: string | null; seed: string }) {
 }
 
 /** Fixed-size tile for one work: status, platform, price, dates and available actions */
-export function WorkTile({ work, account, onAction, onOpenDetail, canWrite }: WorkTileProps) {
-  const detail = useWorkCover(account, work.itemId);
+export function WorkTile({ work, account, refreshToken, onAction, onOpenDetail, onPrepare, canWrite }: WorkTileProps) {
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** A short hover delay avoids fetching every card swept by the pointer */
+  const cancelHover = useCallback(() => {
+    if (hoverTimer.current !== null) clearTimeout(hoverTimer.current);
+    hoverTimer.current = null;
+  }, []);
+  useEffect(() => cancelHover, [cancelHover]);
+  const detail = useWorkCover(account, work.itemId, refreshToken);
   const actions = actionsFor(work.status);
   const onlineTime = detail.data?.onlineTime ?? null;
   const appointOnlineTime = detail.data?.appointOnlineTime;
@@ -51,7 +60,18 @@ export function WorkTile({ work, account, onAction, onOpenDetail, canWrite }: Wo
       : `创建 ${formatDate(work.createTime)}`;
 
   return (
-    <li className={styles.tile}>
+    <li
+      className={styles.tile}
+      onPointerEnter={() => {
+        cancelHover();
+        hoverTimer.current = setTimeout(() => onPrepare(work), 120);
+      }}
+      onPointerLeave={cancelHover}
+      onFocusCapture={() => {
+        cancelHover();
+        onPrepare(work);
+      }}
+    >
       <div className={styles.head}>
         <Cover key={detail.data?.iconUrl ?? "none"} iconUrl={detail.data?.iconUrl ?? null} seed={work.itemId} />
         <span className={styles.titles}>

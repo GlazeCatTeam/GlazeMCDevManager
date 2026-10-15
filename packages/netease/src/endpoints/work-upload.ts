@@ -11,7 +11,7 @@ export function resolveWorkUploadUrl(token: string): string {
   const url = new URL(payload.url);
   if (
     url.protocol !== "https:" ||
-    !["x19.fp.ps.netease.com", "x19.pfp.ps.netease.com"].includes(url.hostname) ||
+    !["x19.fp.ps.netease.com", "x19.pfp.ps.netease.com", "fp.ps.netease.com"].includes(url.hostname) ||
     url.port ||
     url.username ||
     url.password

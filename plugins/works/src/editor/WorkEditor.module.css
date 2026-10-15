@@ -25,6 +25,27 @@
   gap: 16px;
   min-width: 0;
 }
+.sectionFields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.proof {
+  max-width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+  align-self: flex-start;
+  border: var(--g-border-width) solid var(--g-panel-borderColor);
+}
+.discount {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px;
+  border: var(--g-border-width) solid var(--g-panel-borderColor);
+  background: var(--g-surface-sunken);
+}
 .fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -228,7 +249,14 @@ textarea.input {
   color: var(--g-text-muted);
   font-size: 12px;
 }
+.fileDragOver {
+  outline: 2px dashed var(--g-text-link);
+  outline-offset: 2px;
+  background: var(--g-surface-sunken);
+}
 .file {
+  min-width: 0;
+  margin: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;

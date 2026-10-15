@@ -1,15 +1,14 @@
 import {
   Button,
-  Panel,
   remoteImageUrl,
   TextButton,
   type WorkEditorOptions,
   type WorkImageSlot,
   type WorkRecord,
-  type WorkSection,
   type WorkUpload,
   type WorkUploadKind,
 } from "@glaze/plugin-sdk";
+import { EditorSection, type EditorSectionActions } from "./EditorSection";
 import { type EditorSectionProps, object, rows, text } from "./fields";
 import styles from "./WorkEditor.module.css";
 
@@ -17,11 +16,8 @@ export type UploadFile = (
   kind: WorkUploadKind,
   channelId?: number,
   platform?: "pe" | "pc",
+  droppedFile?: File,
 ) => Promise<WorkUpload | null>;
-export interface SectionActions {
-  update: (section: WorkSection) => void;
-  dirty: (section: WorkSection) => boolean;
-}
 
 /** Keep unknown and disabled image slots while changing only the chosen channel */
 export function ImageSlots({
@@ -114,11 +110,14 @@ export function MediaSections({
   change,
   choices,
   upload,
-  update,
+  save,
   dirty,
+  editing,
+  beginEdit,
   creating = false,
 }: EditorSectionProps &
-  SectionActions & { choices: WorkEditorOptions | null; upload: UploadFile; creating?: boolean }) {
+  EditorSectionActions & { choices: WorkEditorOptions | null; upload: UploadFile; creating?: boolean }) {
+  const actions = { disabled, save, dirty, editing, beginEdit, creating };
   const videos = rows(value.video_info_list);
   const video = videos[0];
   /** Replace one video while retaining any remaining server records */
@@ -137,38 +136,20 @@ export function MediaSections({
   };
   return (
     <>
-      <Panel
-        title="PE 图片"
-        actions={
-          !creating && (
-            <TextButton disabled={disabled || !dirty("images")} onClick={() => update("images")}>
-              更新此分区
-            </TextButton>
-          )
-        }
-      >
+      <EditorSection section="images" title="PE 图片" {...actions}>
         {!choices ? (
           <p className={styles.hint}>正在加载平台图片位…</p>
         ) : (
           <ImageSlots
             slots={choices.peImages.filter((slot) => slot.id !== 7)}
             channels={rows(value.channel)}
-            disabled={disabled}
+            disabled={disabled || !editing("images")}
             upload={upload}
             onChange={(images) => change("channel", images)}
           />
         )}
-      </Panel>
-      <Panel
-        title="资源中心首页轮播推广广图"
-        actions={
-          !creating && (
-            <TextButton disabled={disabled || !dirty("banner")} onClick={() => update("banner")}>
-              更新此分区
-            </TextButton>
-          )
-        }
-      >
+      </EditorSection>
+      <EditorSection section="banner" title="资源中心首页轮播推广广图" {...actions}>
         <div className={styles.promotion}>
           {text(value.banner_pic) && <img src={remoteImageUrl(text(value.banner_pic)) ?? ""} alt="首页轮播推广广图" />}
           <div className={styles.stack}>
@@ -195,17 +176,8 @@ export function MediaSections({
             <span className={styles.hint}>上传不代表获得推广位；推广申请与竞拍仍按平台流程处理。</span>
           </div>
         </div>
-      </Panel>
-      <Panel
-        title="视频与封面"
-        actions={
-          !creating && (
-            <TextButton disabled={disabled || !dirty("video")} onClick={() => update("video")}>
-              更新此分区
-            </TextButton>
-          )
-        }
-      >
+      </EditorSection>
+      <EditorSection section="video" title="视频与封面" {...actions}>
         <div className={styles.fields}>
           <div className={styles.stack}>
             <strong>作品视频</strong>
@@ -250,7 +222,7 @@ export function MediaSections({
             </div>
           </div>
         </div>
-      </Panel>
+      </EditorSection>
     </>
   );
 }

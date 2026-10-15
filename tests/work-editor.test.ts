@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import "./work-advanced.test";
 import { afterEach, test } from "node:test";
 import { createWorkOperationHandlers } from "../apps/desktop/src/main/ipc/work-operations";
 import { validateWorkVideo } from "../apps/desktop/src/main/ipc/work-video";
@@ -32,8 +33,24 @@ import { getWorksPage, listWorks, readWorkStatus } from "../packages/netease/src
 import { getMcDevData, parsePlatformJson, writeMcDevData } from "../packages/netease/src/http/client";
 import { WorkQueryCache } from "../plugins/works/src/query-cache";
 import { actionsFor, statusLabels, statusTones } from "../plugins/works/src/status";
+import {
+  clearWorkReads,
+  invalidateWorks,
+  preloadNextWorksPage,
+  preloadWorkEditor,
+  preloadWorkOptions,
+  preloadWorksPage,
+} from "../plugins/works/src/useWorkQuery";
+import {
+  clearWorkListPositions,
+  rememberWorkListPosition,
+  selectWorkListView,
+  workListPosition,
+} from "../plugins/works/src/view-state";
+import { startWorksWarmup } from "../plugins/works/src/warmup";
 
 const originalFetch = globalThis.fetch;
+
 test("list operation contracts reject unknown fields, invalid states, dates and prices", () => {
   const base = { account: "a", itemId: "4686664860310207622", expectedStatus: "accept" };
   assert.equal(isWorkOperationParams("works.publish", base), true);
@@ -307,6 +324,8 @@ test("host rejects concurrent writes and an account switch during preflight", as
   mockFetch((_url, init) => (init.method === "GET" ? response({ ...fixture, status: "init" }) : response()));
   assert.deepEqual(await handlers["works.delete"](params), { outcome: "completed" });
 });
+const hostGlobal = globalThis as typeof globalThis & { glaze?: unknown };
+const originalBridge = hostGlobal.glaze;
 const session = { sessionCookie: "unit-test-session" };
 const itemId = "4686664860310207622";
 const fixture = {
@@ -366,6 +385,208 @@ function response(data?: unknown, status = "ok") {
 }
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  if (originalBridge === undefined) delete hostGlobal.glaze;
+  else hostGlobal.glaze = originalBridge;
+  clearWorkReads();
+});
+
+/** Count renderer reads with an in-memory host; no authenticated platform is contacted */
+function mockWorkHost() {
+  const calls: { method: string; params: Record<string, unknown> }[] = [];
+  const account = { id: "a", status: "active" };
+  const listeners = new Map<string, (payload: { current: typeof account | null; accounts: unknown[] }) => void>();
+  hostGlobal.glaze = {
+    rpc: async (method: string, params: Record<string, unknown> = {}) => {
+      calls.push({ method, params });
+      return {
+        ok: true,
+        value:
+          method === "account.current"
+            ? account
+            : method === "works.page"
+              ? { total: 0, items: [] }
+              : method === "works.editor"
+                ? {
+                    itemId: params.itemId,
+                    status: "init",
+                    version: "0.1",
+                    modCode: "",
+                    guides: [],
+                    fields: { item_name: "test" },
+                  }
+                : { tags: [] },
+      };
+    },
+    on: (event: string, listener: (payload: { current: typeof account | null; accounts: unknown[] }) => void) => {
+      listeners.set(event, listener);
+      return () => listeners.delete(event);
+    },
+  };
+  return {
+    calls,
+    emit: (current: typeof account | null) =>
+      listeners.get("account.changed")?.({ current, accounts: current ? [current] : [] }),
+    clearCache: () => listeners.get("cache.cleared")?.({ current: null, accounts: [] }),
+  };
+}
+
+test("first-page warmup shares the visible read and never requests all works or covers", async () => {
+  const host = mockWorkHost();
+  await Promise.all([preloadWorksPage("a"), preloadWorksPage("a")]);
+  assert.deepEqual(host.calls, [{ method: "works.page", params: { account: "a", page: 0, pageSize: 9 } }]);
+  await preloadWorksPage("a");
+  assert.equal(host.calls.length, 1);
+});
+
+test("next-page preparation is bounded to one page and two simultaneous cover reads", async () => {
+  const calls: { method: string; params: Record<string, unknown> }[] = [];
+  let active = 0;
+  let maximum = 0;
+  hostGlobal.glaze = {
+    rpc: async (method: string, params: Record<string, unknown>) => {
+      calls.push({ method, params });
+      if (method === "works.page")
+        return {
+          ok: true,
+          value: { total: 90, items: Array.from({ length: 9 }, (_, i) => ({ itemId: String(10 + i) })) },
+        };
+      active++;
+      maximum = Math.max(maximum, active);
+      await Promise.resolve();
+      active--;
+      return { ok: true, value: { itemId: params.itemId } };
+    },
+  };
+  await preloadNextWorksPage("a", 0, 9, 90);
+  assert.equal(maximum, 2);
+  assert.equal(calls.length, 10);
+  assert.deepEqual(calls[0], { method: "works.page", params: { account: "a", page: 1, pageSize: 9 } });
+  await preloadNextWorksPage("a", 0, 9, 90);
+  assert.equal(calls.length, 10);
+  await preloadNextWorksPage("a", 9, 9, 90);
+  await preloadNextWorksPage("a", 1, 9, 90, () => true);
+  assert.equal(calls.length, 10);
+});
+
+test("cancelled or invalidated background pages never start cover batches", async () => {
+  for (const invalidate of [false, true]) {
+    clearWorkReads();
+    let cancelled = false;
+    const calls: string[] = [];
+    hostGlobal.glaze = {
+      rpc: async (method: string) => {
+        calls.push(method);
+        if (invalidate) invalidateWorks("a");
+        else cancelled = true;
+        return { ok: true, value: { total: 90, items: [{ itemId: "10" }] } };
+      },
+    };
+    await preloadNextWorksPage("a", 0, 9, 90, () => cancelled);
+    assert.deepEqual(calls, ["works.page"]);
+  }
+});
+
+test("pending navigation preserves the displayed page until its own rows arrive", () => {
+  const previous = { page: 0, data: { total: 90, items: [] } };
+  assert.equal(selectWorkListView(2, null, previous), previous);
+  const arrived = { total: 90, items: [] };
+  assert.deepEqual(selectWorkListView(2, arrived, previous), { page: 2, data: arrived });
+  assert.equal(selectWorkListView(9, { total: 5, items: [] }, previous), previous);
+  assert.deepEqual(selectWorkListView(0, { total: 0, items: [] }, previous), {
+    page: 0,
+    data: { total: 0, items: [] },
+  });
+});
+
+test("list page and scroll position are account-local and cleared with session data", () => {
+  rememberWorkListPosition("a", 3, 480);
+  assert.deepEqual(workListPosition("a"), { page: 3, scrollTop: 480 });
+  assert.deepEqual(workListPosition("b"), { page: 0, scrollTop: 0 });
+  clearWorkListPositions();
+  assert.deepEqual(workListPosition("a"), { page: 0, scrollTop: 0 });
+});
+
+test("detail intent shares in-flight data and reuses dictionaries across different works", async () => {
+  const host = mockWorkHost();
+  await Promise.all([preloadWorkEditor("a", "1"), preloadWorkEditor("a", "1")]);
+  await preloadWorkEditor("a", "2");
+  assert.equal(host.calls.filter((call) => call.method === "works.editor").length, 2);
+  assert.equal(host.calls.filter((call) => call.method === "works.options").length, 1);
+  assert.ok(host.calls.every((call) => ["works.editor", "works.options"].includes(call.method)));
+  invalidateWorks("a");
+  await preloadWorkEditor("a", "1");
+  assert.equal(host.calls.filter((call) => call.method === "works.editor").length, 3);
+  assert.equal(host.calls.filter((call) => call.method === "works.options").length, 1);
+});
+
+test("editor and options caches stay isolated across accounts and clear on session reset", async () => {
+  const host = mockWorkHost();
+  await preloadWorkEditor("a", "1");
+  await preloadWorkEditor("b", "1");
+  assert.equal(host.calls.length, 4);
+  clearWorkReads();
+  await preloadWorkEditor("a", "1");
+  assert.equal(host.calls.length, 6);
+});
+
+test("failed option prefetch remains retryable", async () => {
+  hostGlobal.glaze = { rpc: async () => ({ ok: false, error: { kind: "network", message: "offline" } }) };
+  assert.equal((await preloadWorkOptions("a")).ok, false);
+  const host = mockWorkHost();
+  assert.equal((await preloadWorkOptions("a")).ok, true);
+  assert.equal(host.calls.length, 1);
+});
+
+test("idle first-page preparation survives routine account events but clears on logout", async () => {
+  const host = mockWorkHost();
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const timers = new Map<number, () => void>();
+  let next = 0;
+  const schedule = (callback: () => void) => {
+    timers.set(++next, callback);
+    return next;
+  };
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      setTimeout: schedule,
+      clearTimeout: (id: number) => timers.delete(id),
+      requestIdleCallback: schedule,
+      cancelIdleCallback: (id: number) => timers.delete(id),
+      addEventListener: () => {},
+    },
+  });
+  const stop = startWorksWarmup();
+  try {
+    const boot = timers.get(1);
+    timers.delete(1);
+    boot?.();
+    await Promise.resolve();
+    assert.equal(host.calls.filter((call) => call.method === "works.page").length, 0);
+    for (const [id, callback] of timers) {
+      timers.delete(id);
+      callback();
+    }
+    await preloadWorksPage("a");
+    host.emit({ id: "a", status: "active" });
+    await preloadWorksPage("a");
+    assert.equal(host.calls.filter((call) => call.method === "works.page").length, 1);
+    host.clearCache();
+    await preloadWorksPage("a");
+    assert.equal(host.calls.filter((call) => call.method === "works.page").length, 2);
+    host.emit(null);
+    assert.equal(timers.size, 0);
+    host.emit({ id: "b", status: "active" });
+    stop();
+    for (const callback of timers.values()) callback();
+    assert.equal(host.calls.filter((call) => call.method === "works.page").length, 2);
+    await preloadWorksPage("a");
+    assert.equal(host.calls.filter((call) => call.method === "works.page").length, 3);
+  } finally {
+    stop();
+    if (previousWindow) Object.defineProperty(globalThis, "window", previousWindow);
+    else Reflect.deleteProperty(globalThis, "window");
+  }
 });
 
 test("scheduled works keep their platform status across list, page and editor reads", async () => {
@@ -503,11 +724,11 @@ function newWorkFields() {
   };
 }
 
-test("creation is shell-only and rejects identifiers, review flags and update-only fields", () => {
+test("creation is shell-only and rejects identifiers and review flags while accepting deferred draft fields", () => {
   assert.equal(capabilities["works.create"].caller, "shell");
   assert.equal(capabilities["works.create"].mcp, undefined);
   assert.equal(isWorkCreateParams({ account: "a", fields: newWorkFields() }), true);
-  for (const key of ["item_id", "is_check_apply", "sync_item_info", "sync_pc_flag", "relate_item_id"])
+  for (const key of ["item_id", "is_check_apply", "unknown_field"])
     assert.equal(isWorkCreateParams({ account: "a", fields: { ...newWorkFields(), [key]: true } }), false);
   assert.equal(isWorkCreateParams({ account: "", fields: newWorkFields() }), false);
   const a = emptyWorkCreateFields();
@@ -645,6 +866,47 @@ test("partial update preserves resource metadata, guides, discount and play-plan
   assert.equal("sync_item_info" in body, false);
 });
 
+test("sparse detail responses produce complete update defaults without losing populated metadata", () => {
+  const raw = {
+    item_id: itemId,
+    item_name: "测试作品",
+    status: "init",
+    item_version: "3.4",
+    mc_version: "",
+    subject_id: "",
+    collection_id: "",
+    claim_item_enabled: 0,
+    corp_proof_image: null,
+    requirement: null,
+    multi_tags: "",
+    sync_pc_flag: false,
+    dlc_info: { dlc_switch: false, dlc_type: "off", master: null, slave_list: null },
+    res: fixture.res,
+    channel: fixture.channel,
+    video_info_list: [{ url: "https://x19.fp.ps.netease.com/video.mp4", size: 100, cover: "cover" }],
+    intercept_fields: ["info"],
+  };
+  const body = buildWorkUpdate(raw, { item_name: "测试作品123" });
+  assert.equal(body.item_name, "测试作品123");
+  for (const key of ["online_platform", "requirement", "prerequisite_item_ids", "silent_white_list", "guide_list"])
+    assert.deepEqual(body[key], [], key);
+  assert.equal(body.mod_id, 0);
+  assert.equal(body.java_version, "");
+  assert.equal(body.current_change_log, "");
+  assert.equal(body.is_asymmetric, false);
+  assert.equal(body.claim_item_enabled, false);
+  assert.equal(body.is_check_apply, false);
+  assert.equal(body.multi_tags, "0");
+  assert.equal(body.collection_id, "0");
+  assert.equal(body.subject_id, null);
+  assert.deepEqual(body.dlc_info, { dlc_switch: false, dlc_type: "off", master: {}, slave_list: [] });
+  for (const key of ["res", "channel", "video_info_list"] as const) assert.deepEqual(body[key], raw[key]);
+  for (const key of ["corp_proof_image", "sync_item_info", "intercept_fields", "status"])
+    assert.equal(key in body, false, key);
+  (body.online_platform as unknown[]).push("test");
+  assert.deepEqual(buildWorkUpdate(raw, {}).online_platform, []);
+});
+
 test("save uses the latest server snapshot and writes a numeric long id exactly once", async () => {
   const calls = mockFetch((_url, _init, index) =>
     index === 0 ? response({ ...fixture, activity_desc: "最新活动说明" }) : response(),
@@ -739,6 +1001,10 @@ test("review is separate from saving and does not hide need_check_apply", async 
 
 test("upload policy blocks off-service, credential-bearing and insecure destinations", () => {
   const token = (url: string) => `Policy signature:${btoa(JSON.stringify({ url }))}`;
+  assert.equal(
+    resolveWorkUploadUrl(token("https://fp.ps.netease.com/x19/file/new/")),
+    "https://fp.ps.netease.com/x19/file/new/",
+  );
   assert.equal(
     resolveWorkUploadUrl(token("https://x19.pfp.ps.netease.com/x19/file/new/")),
     "https://x19.pfp.ps.netease.com/x19/file/new/",

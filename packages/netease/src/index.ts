@@ -22,6 +22,7 @@ export { getUserInfo, type UserInfo } from "./endpoints/user";
 export { createWork } from "./endpoints/work-create";
 export { getWorkEditorOptions, readWorkEditor, saveWorkEditor, submitWorkReview } from "./endpoints/work-editor";
 export { performWorkOperation } from "./endpoints/work-operations";
+export { searchWorkReferences } from "./endpoints/work-references";
 export { uploadWorkFile } from "./endpoints/work-upload";
 export { getReviewFeedback, getWork, getWorksPage, listWorks } from "./endpoints/works";
 export { describeError, fail, type NeteaseError, ok, type Result } from "./errors";

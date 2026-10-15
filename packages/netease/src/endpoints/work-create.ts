@@ -8,6 +8,7 @@ import {
 } from "@glaze/contracts";
 import { fail, ok, type Result } from "../errors";
 import { type NeteaseSession, writeMcDevData } from "../http/client";
+import { normalizeWorkAdvanced, validateWorkAdvanced } from "./work-advanced";
 import { workCreateDefaults } from "./work-create-defaults";
 import { getWorkEditorOptions, validateWorkPatch } from "./work-editor";
 
@@ -15,11 +16,14 @@ import { getWorkEditorOptions, validateWorkPatch } from "./work-editor";
 export function validateWorkCreate(fields: WorkRecord, options: WorkEditorOptions): string | null {
   const invalid = validateWorkPatch(fields, fields);
   if (invalid) return invalid;
+  const advanced = validateWorkAdvanced(fields, fields, options);
+  if (advanced) return advanced;
   if (typeof fields.item_name !== "string" || !fields.item_name.trim()) return "请填写资源名称";
   if (
-    !options.peTypes.some((option) => option.id === fields.pri_type) ||
-    fields.pri_type === 0 ||
-    fields.pri_type === 9
+    (fields.pri_type === 9
+      ? !options.prerequisiteAllowed
+      : !options.peTypes.some((option) => option.id === fields.pri_type)) ||
+    fields.pri_type === 0
   )
     return "请选择有效的资源类别";
   for (const [key, choices] of [
@@ -57,7 +61,7 @@ export function validateWorkCreate(fields: WorkRecord, options: WorkEditorOption
     (fields.price_type === "point" && fields.price_rank !== -5)
   )
     return "定价档位无效";
-  if (!Array.isArray(fields.res) || !fields.res.length) return "请上传资源 ZIP 文件";
+  if (!Array.isArray(fields.res) || !fields.res.length) return "请上传资源文件";
   if (fields.res.some((row) => !isWorkRecord(row) || !isWorkRecord(row.res_url))) return "新作品必须使用资源上传回执";
   if (
     !Array.isArray(fields.channel) ||
@@ -74,12 +78,15 @@ export function validateWorkCreate(fields: WorkRecord, options: WorkEditorOption
 
 /** Construct only the documented create DTO, without identifiers or update-only metadata */
 export function buildWorkCreate(fields: WorkRecord): WorkRecord {
+  fields = normalizeWorkAdvanced(fields);
   const body: WorkRecord = {
     ...structuredClone(workCreateDefaults),
-    ...fields,
+    ...Object.fromEntries(Object.entries(fields).filter(([key]) => Object.hasOwn(workCreateDefaults, key))),
     item_name: String(fields.item_name).trim(),
     item_version: "0.1",
     is_check_apply: false,
+    sync_pc_flag: false,
+    dlc_info: { dlc_switch: false, dlc_type: "off", master: {}, slave_list: [] },
   };
   body.res = (Array.isArray(fields.res) ? fields.res : []).filter(isWorkRecord).map((row) => ({
     res_name: row.res_name ?? "",

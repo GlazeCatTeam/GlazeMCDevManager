@@ -11,12 +11,14 @@ export function RichEditor({
   disabled,
   upload,
   maxLength = 1000,
+  syncFromPe,
 }: {
   value: string;
   onChange: (value: string) => void;
   disabled: boolean;
   upload: () => Promise<WorkUpload | null>;
   maxLength?: number;
+  syncFromPe?: () => string;
 }) {
   const editor = useRef<HTMLDivElement>(null);
   const range = useRef<Range | null>(null);
@@ -114,6 +116,18 @@ export function RichEditor({
           链接
         </TextButton>
         <TextButton onClick={() => void insertImage()}>上传图片</TextButton>
+        {syncFromPe && (
+          <TextButton
+            onClick={() => {
+              const html = sanitizeWorkHtml(syncFromPe());
+              if (editor.current) editor.current.innerHTML = sanitizeWorkHtml(html, true);
+              range.current = null;
+              onChange(html);
+            }}
+          >
+            同步 PE 详情
+          </TextButton>
+        )}
       </fieldset>
       {/* biome-ignore lint/a11y/useSemanticElements: Native textareas cannot edit rich text */}
       <div

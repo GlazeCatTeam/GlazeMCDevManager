@@ -18,6 +18,7 @@ import {
   isMessageListParams,
   isWorkCreateParams,
   isWorkSaveParams,
+  isWorkSearchParams,
   type RankBoard,
   type RankCategory,
   RPC_CHANNEL,
@@ -56,6 +57,7 @@ import {
   replyComment,
   replyFeedback,
   saveWorkEditor,
+  searchWorkReferences,
   submitWorkReview,
 } from "@glaze/netease";
 import { BrowserWindow, type IpcMainInvokeEvent, ipcMain } from "electron";
@@ -70,7 +72,8 @@ import { closeLoginWindow, loginWithOfficialWindow } from "../windows/login-wind
 import { appWindows } from "../windows/main-window";
 import { CapabilityError, fromNeteaseError } from "./errors";
 import { exportLogs, openLogs, pickPlugin } from "./settings-files";
-import { pickAndUploadWorkFile } from "./work-files";
+import { pickAndUploadWorkFile, uploadDroppedWorkResource } from "./work-files";
+import { discardWorkImage, prepareWorkImage, uploadCroppedWorkImage } from "./work-image";
 import { createWorkOperationHandlers } from "./work-operations";
 
 type Handler<M extends RpcMethod> = (
@@ -275,6 +278,37 @@ function createHandlers(
         throw new CapabilityError("account_changed", "账号已切换，请重新打开新建页面");
       return sessions.request(params.account, (session) => createWork(session, params));
     },
+    "works.searchReferences": (params) => {
+      if (!isWorkSearchParams(params)) throw new CapabilityError("validation", "模组搜索参数无效");
+      return sessions.request(params.account, (session) => searchWorkReferences(session, params));
+    },
+    "works.prepareImage": (params, event) => {
+      const window = senderWindow(event);
+      const kind = optionalOneOf(params, "kind", ["image", "banner", "videoCover", "proof"] as const);
+      const account = requireString(params, "account");
+      const platform = optionalOneOf(params, "platform", ["pe", "pc"] as const) ?? "pe";
+      const channelId = optionalInteger(params, "channelId", 0, 10000);
+      if (!window || !kind || (kind === "image" && channelId === undefined))
+        throw new CapabilityError("validation", "图片选择参数无效");
+      return prepareWorkImage(sessions, window, {
+        account,
+        kind,
+        platform,
+        ...(channelId === undefined ? {} : { channelId }),
+      });
+    },
+    "works.uploadCroppedImage": (params, event) => {
+      const window = senderWindow(event);
+      if (!window) throw new CapabilityError("validation", "窗口已关闭");
+      requireString(params, "account");
+      requireString(params, "token");
+      return uploadCroppedWorkImage(sessions, window, params);
+    },
+    "works.discardImage": (params, event) => {
+      const window = senderWindow(event);
+      if (window) discardWorkImage(requireString(params, "account"), requireString(params, "token"), window);
+      return undefined;
+    },
     "works.editor": (params) => {
       const itemId = requireItemId(params);
       return sessions.request(optionalString(params, "account"), (session) => readWorkEditor(session, itemId));
@@ -304,9 +338,11 @@ function createHandlers(
         "video",
         "videoCover",
         "richImage",
+        "proof",
       ] as const);
       const platform = optionalOneOf(params, "platform", ["pe", "pc"] as const) ?? "pe";
       const channelId = optionalInteger(params, "channelId", 0, 10000);
+      const resourceType = optionalInteger(params, "resourceType", 1, 10000);
       const window = senderWindow(event);
       if (!kind || !window || (kind === "image" && channelId === undefined))
         throw new CapabilityError("validation", "上传参数无效");
@@ -316,7 +352,21 @@ function createHandlers(
         kind,
         platform,
         ...(channelId === undefined ? {} : { channelId }),
+        ...(resourceType === undefined ? {} : { resourceType }),
       });
+    },
+    "works.uploadDroppedResource": (params, event) => {
+      const window = senderWindow(event);
+      const account = requireString(params, "account");
+      const resourceType = optionalInteger(params, "resourceType", 1, 10000);
+      const itemId = optionalString(params, "itemId") === undefined ? undefined : requireItemId(params);
+      if (!window || resourceType === undefined) throw new CapabilityError("validation", "拖入资源参数无效");
+      return uploadDroppedWorkResource(
+        sessions,
+        window,
+        { account, resourceType, ...(itemId === undefined ? {} : { itemId }) },
+        requireString(params, "nativePath"),
+      );
     },
     "window.minimize": (_params, event) => {
       senderWindow(event)?.minimize();

@@ -16,8 +16,9 @@ export const workSections = {
     "dlc_info",
     "relate_item_id",
     "sync_pc_flag",
+    "corp_proof_image",
   ],
-  price: ["price", "price_rank", "price_type"],
+  price: ["price", "price_rank", "price_type", "discount"],
   detail: ["info"],
   resource: [
     "pri_type",
@@ -28,6 +29,17 @@ export const workSections = {
     "mount_call_enabled",
     "res",
     "prerequisite_items",
+    "pe_is_add_play_plan",
+    "lobby_min_num",
+    "lobby_max_num",
+    "lobby_force_max_num",
+    "lobby_tags",
+    "is_lobby_competitive",
+    "is_asymmetric",
+    "lobby_camps",
+    "lobby_player_num",
+    "lobby_normal_mode",
+    "lobby_reconnect_time",
   ],
   images: ["channel"],
   banner: ["banner_pic"],
@@ -57,11 +69,16 @@ export interface WorkImageSlot extends WorkOption {
   version: number;
 }
 export interface WorkEditorOptions {
+  prerequisiteAllowed?: boolean;
+  lobbyTags?: WorkOption[];
+  lobbyTagLimit?: number;
+  lobbyCompetitiveTagId?: number | null;
   tags: string[];
   tagLimit: number;
   peTypes: WorkOption[];
   pcTypes: WorkOption[];
   peSubTypes: Record<string, WorkOption[]>;
+  peResourceFileTypes?: Record<string, string[]>;
   pcSubTypes: Record<string, WorkOption[]>;
   secondTypes: Record<string, WorkOption[]>;
   recommendTags: Record<string, WorkOption[]>;
@@ -82,7 +99,7 @@ export interface WorkReviewResult {
   needCheckApply: boolean;
   queueLength: number;
 }
-export type WorkUploadKind = "resource" | "image" | "banner" | "video" | "videoCover" | "richImage";
+export type WorkUploadKind = "resource" | "image" | "banner" | "video" | "videoCover" | "richImage" | "proof";
 export interface WorkUploadParams {
   account: string;
   /** Absent while uploading files for a new work */
@@ -90,6 +107,8 @@ export interface WorkUploadParams {
   kind: WorkUploadKind;
   channelId?: number;
   platform?: "pe" | "pc";
+  /** Selected draft category, validated against the live platform dictionaries */
+  resourceType?: number;
 }
 export interface WorkUpload {
   name: string;

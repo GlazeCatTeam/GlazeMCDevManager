@@ -2,27 +2,43 @@ import {
   Button,
   callHost,
   Dialog,
+  deferredWorkCreatePatch,
   emptyWorkCreateFields,
+  matchPcClassification,
   Notice,
+  normalizePcRequirements,
   PageHeader,
   Panel,
+  type RpcResult,
   Tag,
   TextButton,
-  useHostQuery,
+  uploadDroppedResource,
+  type WorkCrop,
   type WorkEditorDocument,
   type WorkEditorOptions,
+  type WorkImageDraft,
   type WorkRecord,
   type WorkSection,
   type WorkSummary,
+  type WorkUpload,
   type WorkValue,
+  workResourceAllowed,
   workSections,
 } from "@glaze/plugin-sdk";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { priceText } from "../format";
 import { statusLabels } from "../status";
+import { useWorkEditor, useWorkOptions } from "../useWorkQuery";
 import { CurrencyIcon, WorkPrice } from "../widgets/WorkPrice";
+import { AuthorizationField, DiscountFields, LobbyFields } from "./AdvancedFields";
+import { CompleteCreation } from "./CompleteCreation";
+import { EditorLoading } from "./EditorLoading";
+import { EditorSection as Section } from "./EditorSection";
 import { Field, Input, number, object, rows, Select, text, YesNo } from "./fields";
+import { ImageCropDialog } from "./ImageCropDialog";
 import { ImageSlots, MediaSections, type UploadFile } from "./MediaSections";
+import { ReferencePicker } from "./ReferencePicker";
+import { ResourceFileField } from "./ResourceFileField";
 import { RichEditor } from "./RichEditor";
 import { workHtmlLength } from "./rich-html";
 import styles from "./WorkEditor.module.css";
@@ -39,7 +55,7 @@ const diamondPrices = [300, 600, 1000, 2000, 5000, 10000, 20000];
 const editableStatuses = new Set(["init", "online", "reject", "offline", "system_offline"]);
 const drafts = new Map<
   string,
-  { document: WorkEditorDocument; base: WorkRecord; value: WorkRecord; uncertain?: boolean }
+  { document: WorkEditorDocument; base: WorkRecord; value: WorkRecord; uncertain?: boolean; created?: boolean }
 >();
 
 interface DetailProps {
@@ -53,7 +69,7 @@ interface DetailProps {
 
 /** New works use the existing editor without requesting a nonexistent server detail */
 export function WorkCreatePage(props: Omit<DetailProps, "work" | "creating">) {
-  const choices = useHostQuery("works.options", { account: props.account });
+  const choices = useWorkOptions(props.account);
   const [revision, setRevision] = useState(0);
   const work: WorkSummary = {
     itemId: "",
@@ -86,14 +102,16 @@ export function WorkCreatePage(props: Omit<DetailProps, "work" | "creating">) {
 
 /** Full-page details reuse the workbench shell and reload with the captured account */
 export function WorkDetailPage(props: DetailProps) {
-  const detail = useHostQuery("works.editor", { itemId: props.work.itemId, account: props.account });
-  const choices = useHostQuery("works.options", { account: props.account });
-  if (detail.loading)
-    return (
-      <div className={styles.page}>
-        <PageHeader title="模组详情" subtitle="正在加载作品…" />
-      </div>
-    );
+  const detail = useWorkEditor(props.account, props.work.itemId);
+  const choices = useWorkOptions(props.account);
+  const [snapshot, setSnapshot] = useState(detail.data);
+  const [revision, setRevision] = useState(0);
+  // A fast refresh can skip the loading render; remount for every new authoritative snapshot
+  if (detail.data !== snapshot) {
+    setSnapshot(detail.data);
+    setRevision(revision + 1);
+  }
+  if (detail.loading) return <EditorLoading title={props.work.name} onClose={props.onClose} />;
   if (!detail.data || detail.error)
     return (
       <div className={styles.page}>
@@ -106,6 +124,7 @@ export function WorkDetailPage(props: DetailProps) {
   return (
     <Editor
       {...props}
+      key={revision}
       initial={detail.data}
       choices={choices.data}
       optionsError={choices.error?.message ?? null}
@@ -115,7 +134,7 @@ export function WorkDetailPage(props: DetailProps) {
   );
 }
 
-/** Fetch the complete selector only when related-work configuration is actually visible */
+/** Use bounded platform search for related works in both new and existing drafts */
 function RelatedWorkPicker({
   account,
   itemId,
@@ -129,65 +148,16 @@ function RelatedWorkPicker({
   disabled: boolean;
   onChange: (id: string) => void;
 }) {
-  const works = useHostQuery("works.list", { account });
-  const list = works.data ?? [];
   return (
-    <Field label="关联模组">
-      <select
-        aria-label="关联模组"
-        className={styles.input}
-        value={value}
-        disabled={disabled || works.loading || !!works.error}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">{works.loading ? "正在加载关联作品…" : "请选择"}</option>
-        {value && !list.some((work) => work.itemId === value) && <option value={value}>{value}</option>}
-        {list
-          .filter((work) => work.itemId !== itemId)
-          .map((work) => (
-            <option key={work.itemId} value={work.itemId}>
-              {work.name}
-            </option>
-          ))}
-      </select>
-      {works.error && (
-        <Notice action={<TextButton onClick={works.reload}>重试</TextButton>}>{works.error.message}</Notice>
-      )}
-    </Field>
-  );
-}
-
-/** An update action always names the independently saved section */
-function Section({
-  section,
-  title,
-  disabled,
-  dirty,
-  save,
-  children,
-  creating = false,
-}: {
-  section: WorkSection;
-  title: string;
-  disabled: boolean;
-  dirty: (section: WorkSection) => boolean;
-  save: (section: WorkSection) => void;
-  children: ReactNode;
-  creating?: boolean;
-}) {
-  return (
-    <Panel
-      title={title}
-      actions={
-        !creating && (
-          <TextButton disabled={disabled || !dirty(section)} onClick={() => save(section)}>
-            更新此分区
-          </TextButton>
-        )
-      }
-    >
-      {children}
-    </Panel>
+    <ReferencePicker
+      account={account}
+      itemId={itemId}
+      kind="related"
+      label="关联模组"
+      selected={value && value !== "0" ? [{ itemId: value, name: value }] : []}
+      disabled={disabled}
+      onChange={(items) => onChange(items[0]?.itemId ?? "")}
+    />
   );
 }
 
@@ -213,11 +183,15 @@ function Editor({
   const [value, setValue] = useState(restored?.value ?? initial.fields);
   const [tab, setTab] = useState("basic");
   const [busy, setBusy] = useState(false);
+  const [editingSections, setEditingSections] = useState<WorkSection[]>([]);
   const lock = useRef(false);
   const alive = useRef(true);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [uncertain, setUncertain] = useState(restored?.uncertain ?? false);
+  const [created, setCreated] = useState(restored?.created ?? false);
+  const [cropping, setCropping] = useState<WorkImageDraft | null>(null);
+  const cropResolve = useRef<((crop: WorkCrop | null) => void) | null>(null);
   const [tagInput, setTagInput] = useState("");
   const [confirm, setConfirm] = useState<"back" | "reload" | "review" | "create" | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -225,21 +199,41 @@ function Editor({
     (key) => JSON.stringify(value[key] ?? null) !== JSON.stringify(base[key] ?? null),
   );
   const writable = editableStatuses.has(document.status);
-  const disabled = busy || !writable || uncertain;
+  const blocked = busy || !writable || uncertain;
+  const editing = (section: WorkSection) => props.creating === true || editingSections.includes(section);
+  const activeSection = tab === "release" || tab === "media" ? null : (tab as WorkSection);
+  const disabled = blocked || (activeSection !== null && !editing(activeSection));
+  /** Unlocking changes local interaction only and never saves or uploads */
+  const beginEdit = (section: WorkSection) => {
+    if (!blocked) setEditingSections((old) => (old.includes(section) ? old : [...old, section]));
+  };
+  /** Gate field changes and bulk saves by the sections explicitly unlocked in this visit */
+  const canChange = (key: string) =>
+    props.creating === true ||
+    Object.entries(workSections).some(
+      ([section, keys]) =>
+        editingSections.includes(section as WorkSection) && (keys as readonly string[]).includes(key),
+    );
   const sync = object(value.sync_item_info);
   const dlc = object(value.dlc_info);
   const imageChoices = choices?.peImages ?? [];
-  const availableTabs = value.sync_pc_flag ? [...tabs, { id: "pc", label: "PC 同步" }] : tabs;
+  const availableTabs =
+    number(value.pri_type) === 9
+      ? tabs.filter((t) => !["price", "media"].includes(t.id))
+      : value.sync_pc_flag
+        ? [...tabs, { id: "pc", label: "PC 同步" }]
+        : tabs;
 
   useEffect(() => {
-    if (JSON.stringify(base) === JSON.stringify(value) && !uncertain) drafts.delete(draftKey);
-    else drafts.set(draftKey, { document, base, value, uncertain });
-  }, [draftKey, document, base, value, uncertain]);
+    if (JSON.stringify(base) === JSON.stringify(value) && !uncertain && !created) drafts.delete(draftKey);
+    else drafts.set(draftKey, { document, base, value, uncertain, created });
+  }, [draftKey, document, base, value, uncertain, created]);
 
   useEffect(() => {
     alive.current = true;
     return () => {
       alive.current = false;
+      cropResolve.current?.(null);
     };
   }, []);
   useEffect(() => {
@@ -256,7 +250,18 @@ function Editor({
 
   /** Update one field while preserving the untouched portion of the server document */
   const change = (key: string, next: WorkValue) => {
-    if (!disabled) setValue((old) => ({ ...old, [key]: next }));
+    if (!blocked && (canChange(key) || (key === "sync_item_info" && editing("basic"))))
+      setValue((old) => {
+        const updated = { ...old, [key]: next };
+        if (
+          choices &&
+          base.sync_pc_flag !== true &&
+          updated.sync_pc_flag === true &&
+          ["pri_type", "sub_type"].includes(key)
+        )
+          updated.sync_item_info = matchPcClassification(updated, object(updated.sync_item_info), choices);
+        return updated;
+      });
   };
   const changePc = (key: string, next: WorkValue) => change("sync_item_info", { ...sync, [key]: next });
   const dirty = (section: WorkSection) => workSections[section].some((key) => dirtyKeys.includes(key));
@@ -264,15 +269,16 @@ function Editor({
   /** Send only changed fields and retain all other drafts if a section is saved */
   const persist = async (section?: WorkSection): Promise<boolean> => {
     const keys = section
-      ? dirtyKeys.filter((key) => (workSections[section] as readonly string[]).includes(key))
-      : dirtyKeys;
+      ? dirtyKeys.filter((key) => editing(section) && (workSections[section] as readonly string[]).includes(key))
+      : dirtyKeys.filter(canChange);
     if (
-      section === "basic" &&
+      (section === "basic" || section === undefined) &&
       keys.includes("sync_pc_flag") &&
       value.sync_pc_flag === true &&
       dirtyKeys.includes("sync_item_info")
     )
       keys.push("sync_item_info");
+    if (section === "pc" && dirtyKeys.includes("sync_pc_flag")) keys.push("sync_pc_flag");
     if (!keys.length) return true;
     if (keys.includes("info") && workHtmlLength(text(value.info)) > 1000) {
       setError("PE 详情不能超过 1000 字");
@@ -298,7 +304,16 @@ function Editor({
       return false;
     }
     setBase((old) => ({ ...old, ...patch }));
-    setMessage(section ? "此分区已保存到网易" : "全部修改已保存到网易");
+    setEditingSections((old) =>
+      section ? old.filter((s) => s !== section && !workSections[s].some((key) => keys.includes(key))) : [],
+    );
+    setMessage(
+      section
+        ? "此分区已保存到网易"
+        : keys.length === dirtyKeys.length
+          ? "全部修改已保存到网易"
+          : "已解锁分区的修改已保存到网易",
+    );
     props.onSaved();
     const fresh = await callHost("works.editor", { itemId: props.work.itemId, account: props.account });
     if (!alive.current) return false;
@@ -347,6 +362,14 @@ function Editor({
         error: { kind: "internal", message: "无法确认主进程的创建响应" },
       }));
       if (result.ok) {
+        if (Object.keys(deferredWorkCreatePatch(value)).length) {
+          drafts.set(draftKey, { document, base, value, created: true });
+          if (alive.current) {
+            setCreated(true);
+            setUncertain(false);
+          }
+          return;
+        }
         drafts.delete(draftKey);
         if (alive.current) props.onSaved();
         return;
@@ -365,21 +388,73 @@ function Editor({
     });
   };
 
-  /** A native file picker performs upload in the host, never from the renderer */
-  const upload: UploadFile = async (kind, channelId, platform = "pe") => {
+  /** Picked and dropped files share host validation and the same editor write lock */
+  const upload: UploadFile = async (kind, channelId, platform = "pe", droppedFile) => {
     if (lock.current || !writable || uncertain) return null;
+    const section: WorkSection =
+      kind === "proof"
+        ? "basic"
+        : kind === "resource"
+          ? "resource"
+          : kind === "banner"
+            ? "banner"
+            : kind === "video" || kind === "videoCover"
+              ? "video"
+              : platform === "pc" || tab === "pc"
+                ? "pc"
+                : kind === "richImage"
+                  ? "detail"
+                  : "images";
+    if (!editing(section)) return null;
     lock.current = true;
     setBusy(true);
     setError("");
     setMessage("选择文件并上传中，请稍候…");
     try {
-      const result = await callHost("works.upload", {
+      const params = {
         ...(props.creating ? {} : { itemId: props.work.itemId }),
         account: props.account,
         kind,
         platform,
         ...(channelId === undefined ? {} : { channelId }),
-      });
+        ...(kind === "resource" ? { resourceType: number(value.pri_type) } : {}),
+      };
+      let result: RpcResult<WorkUpload | null>;
+      if (kind === "image" || kind === "banner" || kind === "videoCover" || kind === "proof") {
+        const prepared = await callHost("works.prepareImage", { ...params, kind });
+        if (!prepared.ok) {
+          setError(prepared.error.message);
+          setMessage("");
+          return null;
+        }
+        if (!prepared.value) {
+          setMessage("已取消文件选择");
+          return null;
+        }
+        const image = prepared.value;
+        if (!alive.current) {
+          void callHost("works.discardImage", { account: props.account, token: image.token });
+          return null;
+        }
+        const crop = await new Promise<WorkCrop | null>((resolve) => {
+          cropResolve.current = resolve;
+          setCropping(image);
+        });
+        cropResolve.current = null;
+        if (!crop || !alive.current) {
+          void callHost("works.discardImage", { account: props.account, token: image.token });
+          setMessage("已取消裁剪，图片未上传");
+          return null;
+        }
+        setMessage("正在上传裁剪后的图片…");
+        result = await callHost("works.uploadCroppedImage", { account: props.account, token: image.token, crop });
+      } else if (kind === "resource" && droppedFile)
+        result = await uploadDroppedResource(droppedFile, {
+          account: props.account,
+          ...(props.creating ? {} : { itemId: props.work.itemId }),
+          resourceType: number(value.pri_type),
+        });
+      else result = await callHost("works.upload", params);
       if (!alive.current) return null;
       if (!result.ok) {
         setError(result.error.message);
@@ -405,6 +480,11 @@ function Editor({
 
   /** Complete an explicit review confirmation only after the draft was saved */
   const submit = () => {
+    if (dirtyKeys.some((key) => !canChange(key))) {
+      setConfirm(null);
+      setError("仍有只读分区的恢复草稿，请先点击对应分区的更新并保存，再提交审核。");
+      return;
+    }
     setConfirm(null);
     void run(async () => {
       if (!(await persist())) return;
@@ -437,10 +517,26 @@ function Editor({
     change("tag", [...existing, { name, source: 0 }]);
     setTagInput("");
   };
-  const common = { disabled, dirty, save, creating: props.creating ?? false };
+  const common = { disabled: blocked, editing, beginEdit, dirty, save, creating: props.creating ?? false };
   const peType = number(value.pri_type);
   const resources = rows(value.res);
   const resource = resources[0];
+
+  if (created && props.creating)
+    return (
+      <CompleteCreation
+        account={props.account}
+        name={text(value.item_name)}
+        patch={deferredWorkCreatePatch(value)}
+        uncertain={uncertain}
+        onUncertain={setUncertain}
+        onClose={props.onSaved}
+        onDone={() => {
+          drafts.delete(draftKey);
+          props.onSaved();
+        }}
+      />
+    );
 
   return (
     <div className={styles.page}>
@@ -460,13 +556,16 @@ function Editor({
               {props.creating ? "重置表单" : "刷新"}
             </Button>
             {!props.creating && (
-              <Button disabled={disabled} onClick={() => setConfirm("review")}>
+              <Button
+                disabled={blocked || dirtyKeys.some((key) => !canChange(key))}
+                onClick={() => setConfirm("review")}
+              >
                 提交审核
               </Button>
             )}
             <Button
               variant="primary"
-              disabled={disabled || !dirtyKeys.length || (props.creating && (!choices || !!optionsError))}
+              disabled={blocked || !dirtyKeys.some(canChange) || (props.creating && (!choices || !!optionsError))}
               onClick={() => save()}
             >
               {busy ? "处理中…" : props.creating ? "创建作品" : "保存"}
@@ -479,7 +578,7 @@ function Editor({
         <Notice>
           {uncertain
             ? "上次创建结果尚未确认，请先返回作品列表核对。重置表单不会撤销已发送的创建请求。"
-            : "填写作品信息并上传资源后创建。创建不会自动提交审核；PC 同步及关联模组可在创建后配置。"}
+            : "填写作品信息并上传资源后创建。创建不会自动提交审核；PC、关联、授权和折扣配置会保留，创建后选定准确作品再应用。"}
         </Notice>
       )}
       {message && (
@@ -491,6 +590,11 @@ function Editor({
         <Notice action={<TextButton onClick={reloadOptions}>重试</TextButton>}>平台选项加载失败：{optionsError}</Notice>
       )}
       {!writable && <Notice>当前状态只允许查看，审核结束或撤销审核后才能修改。</Notice>}
+      {!props.creating && writable && (
+        <span className={styles.hint}>
+          各分区默认只读。点击“更新”后修改，再保存；保存成功后恢复只读。未保存草稿会保留，重新进入需再次点击更新。
+        </span>
+      )}
       <div className={styles.tabs} role="tablist" aria-label="模组详情分区">
         {availableTabs.map((t) => (
           <button
@@ -530,7 +634,7 @@ function Editor({
                   <YesNo
                     label="加入“我的山头”专区 *"
                     value={value.is_domain_server_item === 1}
-                    disabled={disabled}
+                    disabled={disabled || peType === 9}
                     onChange={(v) => change("is_domain_server_item", v ? 1 : 0)}
                   />
                   <YesNo
@@ -540,53 +644,58 @@ function Editor({
                     onChange={(v) => change("is_original", v)}
                   />
                 </div>
-                <Field label="模组标签">
-                  <div className={styles.tagInput}>
-                    <input
-                      className={styles.input}
-                      aria-label="搜索或输入模组标签"
-                      value={tagInput}
-                      list="work-tag-options"
-                      disabled={disabled}
-                      placeholder="搜索标签 / 输入自定义标签"
-                      onChange={(e) => setTagInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          addTag();
-                        }
-                      }}
-                    />
-                    <datalist id="work-tag-options">
-                      {choices?.tags.map((tag) => (
-                        <option key={tag}>{tag}</option>
-                      ))}
-                    </datalist>
-                    <Button disabled={disabled || !tagInput.trim()} onClick={addTag}>
-                      添加
-                    </Button>
-                  </div>
-                  <div className={styles.tags}>
-                    {rows(value.tag).map((tag, i) => (
-                      <span className={styles.tag} key={text(tag.name)}>
-                        {text(tag.name)}
-                        <button
-                          type="button"
-                          disabled={disabled}
-                          aria-label={`移除标签 ${text(tag.name)}`}
-                          onClick={() =>
-                            change(
-                              "tag",
-                              rows(value.tag).filter((_, index) => index !== i),
-                            )
+                {peType !== 9 && (
+                  <Field label="模组标签">
+                    <div className={styles.tagInput}>
+                      <input
+                        className={styles.input}
+                        aria-label="搜索或输入模组标签"
+                        value={tagInput}
+                        list="work-tag-options"
+                        disabled={disabled}
+                        placeholder="搜索标签 / 输入自定义标签"
+                        onChange={(e) => setTagInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            addTag();
                           }
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                </Field>
+                        }}
+                      />
+                      <datalist id="work-tag-options">
+                        {choices?.tags.map((tag) => (
+                          <option key={tag}>{tag}</option>
+                        ))}
+                      </datalist>
+                      <Button disabled={disabled || !tagInput.trim()} onClick={addTag}>
+                        添加
+                      </Button>
+                    </div>
+                    <div className={styles.tags}>
+                      {rows(value.tag).map((tag, i) => (
+                        <span className={styles.tag} key={text(tag.name)}>
+                          {text(tag.name)}
+                          <button
+                            type="button"
+                            disabled={disabled}
+                            aria-label={`移除标签 ${text(tag.name)}`}
+                            onClick={() =>
+                              change(
+                                "tag",
+                                rows(value.tag).filter((_, index) => index !== i),
+                              )
+                            }
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </Field>
+                )}
+                {value.is_original === false && (
+                  <AuthorizationField value={value} disabled={disabled} change={change} upload={upload} />
+                )}
                 <Input
                   label="活动参与说明"
                   value={text(value.activity_desc)}
@@ -599,7 +708,7 @@ function Editor({
                   <YesNo
                     label="是否为关联模组"
                     value={dlc.dlc_switch === true}
-                    disabled={disabled || props.creating === true}
+                    disabled={disabled || peType === 9}
                     onChange={(v) =>
                       change("dlc_info", {
                         ...dlc,
@@ -611,8 +720,33 @@ function Editor({
                   <YesNo
                     label="同步生成 PC 模组"
                     value={value.sync_pc_flag === true}
-                    disabled={disabled || props.creating === true}
-                    onChange={(v) => change("sync_pc_flag", v)}
+                    disabled={disabled || peType === 9 || !choices}
+                    onChange={(v) => {
+                      change("sync_pc_flag", v);
+                      if (v && choices && base.sync_pc_flag !== true)
+                        change(
+                          "sync_item_info",
+                          matchPcClassification(
+                            value,
+                            {
+                              item_name: text(value.item_name),
+                              brief: "",
+                              info: "",
+                              pri_type: 0,
+                              sub_type: 0,
+                              available_scope: choices?.pcScopes[0]?.id ?? "",
+                              include_map: false,
+                              tag: [],
+                              channel: [],
+                              requirement: [],
+                              weak_offline: false,
+                              weak_offline_reason: "",
+                              ...sync,
+                            },
+                            choices,
+                          ),
+                        );
+                    }}
                   />
                 </div>
                 {dlc.dlc_switch === true && (
@@ -714,6 +848,7 @@ function Editor({
                     />
                   </Field>
                 )}
+                <DiscountFields value={value} disabled={disabled || peType === 9} change={change} />
               </div>
             </Section>
           )}
@@ -757,14 +892,56 @@ function Editor({
                   <Select
                     label="资源类别 *"
                     value={peType}
-                    choices={(choices?.peTypes ?? []).filter((option) =>
-                      peType === 9 ? option.id === 9 : option.id !== 9,
-                    )}
+                    choices={[
+                      ...(choices?.peTypes ?? []).filter(
+                        (option) =>
+                          option.id !== 9 &&
+                          (!resource ||
+                            !choices ||
+                            option.id === peType ||
+                            workResourceAllowed(text(resource.res_name), option.id, choices)),
+                      ),
+                      ...(peType === 9 || (props.creating && choices?.prerequisiteAllowed)
+                        ? [{ id: 9, title: "前置模组" }]
+                        : []),
+                    ].filter((option) => props.creating || peType !== 9 || option.id === 9)}
                     disabled={disabled || !choices}
                     onChange={(v) => {
                       change("pri_type", v);
                       change("sub_type", choices?.peSubTypes[String(v)]?.[0]?.id ?? 0);
                       change("mod_second_type", 0);
+                      if (v === 6) {
+                        const defaults = emptyWorkCreateFields();
+                        for (const key of [
+                          "lobby_min_num",
+                          "lobby_max_num",
+                          "lobby_force_max_num",
+                          "lobby_tags",
+                          "is_lobby_competitive",
+                          "is_asymmetric",
+                          "lobby_camps",
+                          "lobby_player_num",
+                          "lobby_normal_mode",
+                          "lobby_reconnect_time",
+                        ])
+                          change(key, value[key] ?? defaults[key] ?? null);
+                      }
+                      if (v === 9) {
+                        change("price_type", "free");
+                        change("price_rank", -4);
+                        change("price", 0);
+                        change("discount", []);
+                        change("sync_pc_flag", false);
+                        change("sync_item_info", {});
+                        change("pe_is_add_play_plan", false);
+                        change("prerequisite_items", []);
+                        change("tag", []);
+                        change("label_type_list", []);
+                        change("channel", []);
+                        change("video_info_list", []);
+                        change("dlc_info", { dlc_switch: false, dlc_type: "off", master: {}, slave_list: [] });
+                        change("relate_item_id", "");
+                      }
                     }}
                   />
                   <Select
@@ -801,34 +978,45 @@ function Editor({
                     </select>
                   </Field>
                 </div>
-                {Object.entries(choices?.recommendTags ?? {}).map(([group, options]) => (
-                  <Field key={group} label={`推荐标签 · ${group === "1" ? "玩法" : group === "2" ? "主题" : group}`}>
-                    <div className={styles.checks}>
-                      {options.map((option) => (
-                        <label key={option.id}>
-                          <input
-                            type="checkbox"
-                            checked={Array.isArray(value.label_type_list) && value.label_type_list.includes(option.id)}
-                            disabled={disabled}
-                            onChange={(e) => {
-                              const selected = Array.isArray(value.label_type_list) ? value.label_type_list : [];
-                              change(
-                                "label_type_list",
-                                e.target.checked ? [...selected, option.id] : selected.filter((id) => id !== option.id),
-                              );
-                            }}
-                          />
-                          {option.title}
-                        </label>
-                      ))}
-                    </div>
-                  </Field>
-                ))}
+                {peType !== 9 &&
+                  Object.entries(choices?.recommendTags ?? {}).map(([group, options]) => (
+                    <Field key={group} label={`推荐标签 · ${group === "1" ? "玩法" : group === "2" ? "主题" : group}`}>
+                      <div className={styles.checks}>
+                        {options.map((option) => (
+                          <label key={option.id}>
+                            <input
+                              type="checkbox"
+                              checked={
+                                Array.isArray(value.label_type_list) && value.label_type_list.includes(option.id)
+                              }
+                              disabled={disabled}
+                              onChange={(e) => {
+                                const selected = Array.isArray(value.label_type_list) ? value.label_type_list : [];
+                                change(
+                                  "label_type_list",
+                                  e.target.checked
+                                    ? [...selected, option.id]
+                                    : selected.filter((id) => id !== option.id),
+                                );
+                              }}
+                            />
+                            {option.title}
+                          </label>
+                        ))}
+                      </div>
+                    </Field>
+                  ))}
                 <div className={styles.fields}>
+                  <YesNo
+                    label="加入模组畅玩计划"
+                    value={value.pe_is_add_play_plan === true}
+                    disabled={disabled || peType === 9}
+                    onChange={(v) => change("pe_is_add_play_plan", v)}
+                  />
                   <YesNo
                     label="坐骑召唤功能 *"
                     value={value.mount_call_enabled === true}
-                    disabled={disabled}
+                    disabled={disabled || peType === 9}
                     onChange={(v) => change("mount_call_enabled", v)}
                   />
                   <YesNo
@@ -838,51 +1026,54 @@ function Editor({
                     onChange={(v) => change("res", [{ ...resource, add_version: v }, ...resources.slice(1)])}
                   />
                 </div>
+                {peType !== 9 && (
+                  <ReferencePicker
+                    account={props.account}
+                    itemId={props.work.itemId}
+                    kind="pePrerequisite"
+                    label="PE 前置模组"
+                    selected={rows(value.prerequisite_items).map((row) => ({
+                      itemId: text(row.item_id),
+                      name: text(row.item_name),
+                    }))}
+                    disabled={disabled}
+                    onChange={(items) =>
+                      change(
+                        "prerequisite_items",
+                        items.map((item) => ({ item_id: item.itemId, item_name: item.name })),
+                      )
+                    }
+                  />
+                )}
+                {peType === 6 && <LobbyFields value={value} disabled={disabled} change={change} choices={choices} />}
                 <Field label="资源文件 *">
-                  <div className={styles.file}>
-                    <div className={styles.stack}>
-                      <strong className={styles.fileName}>{text(resource?.res_name) || "未选择资源包"}</strong>
-                      <span className={styles.hint}>ZIP · 最大 2048M</span>
-                    </div>
-                    <div className={styles.actions}>
-                      <Button
-                        size="sm"
-                        disabled={disabled}
-                        onClick={async () => {
-                          const file = await upload("resource");
-                          if (file)
-                            change("res", [
-                              {
-                                res_name: file.name,
-                                res_url: file.receipt,
-                                add_version: resource?.add_version !== false,
-                                mc_version: Array.isArray(resource?.mc_version) ? resource.mc_version : [],
-                              },
-                            ]);
-                        }}
-                      >
-                        上传 / 替换
-                      </Button>
-                      <TextButton tone="danger" disabled={disabled || !resource} onClick={() => change("res", [])}>
-                        移除
-                      </TextButton>
-                    </div>
-                  </div>
+                  <ResourceFileField
+                    resource={resource}
+                    resourceType={peType}
+                    choices={choices}
+                    disabled={disabled}
+                    onError={setError}
+                    remove={() => change("res", [])}
+                    upload={async (dropped) => {
+                      const file = await upload("resource", undefined, "pe", dropped);
+                      if (file)
+                        change("res", [
+                          {
+                            res_name: file.name,
+                            res_url: file.receipt,
+                            add_version: resource?.add_version !== false,
+                            mc_version: Array.isArray(resource?.mc_version) ? resource.mc_version : [],
+                          },
+                          ...resources.slice(1),
+                        ]);
+                    }}
+                  />
                 </Field>
               </div>
             </Section>
           )}
           {tab === "media" && (
-            <MediaSections
-              value={value}
-              disabled={disabled}
-              change={change}
-              choices={choices}
-              upload={upload}
-              update={save}
-              dirty={dirty}
-              creating={props.creating ?? false}
-            />
+            <MediaSections value={value} change={change} choices={choices} upload={upload} {...common} />
           )}
           {tab === "release" && (
             <>
@@ -960,6 +1151,7 @@ function Editor({
                 />
                 <RichEditor
                   value={text(sync.info)}
+                  syncFromPe={() => text(value.info)}
                   disabled={disabled}
                   maxLength={10000}
                   onChange={(v) => changePc("info", v)}
@@ -972,7 +1164,11 @@ function Editor({
                     choices={choices?.pcTypes ?? []}
                     disabled={disabled}
                     onChange={(v) => {
-                      changePc("pri_type", v);
+                      change("sync_item_info", {
+                        ...sync,
+                        pri_type: v,
+                        sub_type: choices?.pcSubTypes[String(v)]?.[0]?.id ?? 0,
+                      });
                     }}
                   />
                   <Select
@@ -1036,6 +1232,24 @@ function Editor({
                   value={sync.weak_offline === true}
                   disabled={disabled}
                   onChange={(v) => changePc("weak_offline", v)}
+                />
+                <ReferencePicker
+                  account={props.account}
+                  itemId={props.work.itemId}
+                  kind="pcPrerequisite"
+                  label="PC 前置模组"
+                  multiple
+                  selected={rows(normalizePcRequirements(sync.requirement ?? [])).map((r) => ({
+                    itemId: text(r.item_id),
+                    name: text(r.item_name),
+                  }))}
+                  disabled={disabled}
+                  onChange={(items) =>
+                    changePc(
+                      "requirement",
+                      items.map((item) => ({ item_id: item.itemId, item_name: item.name })),
+                    )
+                  }
                 />
                 {sync.weak_offline === true && (
                   <Input
@@ -1107,10 +1321,19 @@ function Editor({
             ? "正在处理，请勿重复提交"
             : props.creating
               ? "所有分区在创建作品时一并保存"
-              : "分区更新仅保存当前分区，保存按钮提交全部修改"}
+              : "更新仅解锁当前分区；保存此分区提交局部修改，顶部保存提交已解锁分区的修改"}
         </span>
         <span>{imageChoices.length ? `已加载 ${imageChoices.length} 个 PE 图片位` : "图片位来自平台配置"}</span>
       </div>
+      {cropping && (
+        <ImageCropDialog
+          image={cropping}
+          onDone={(crop) => {
+            setCropping(null);
+            cropResolve.current?.(crop);
+          }}
+        />
+      )}
       {confirm && (
         <Dialog
           title={confirm === "create" ? "确认创建作品" : confirm === "review" ? "保存并提交审核" : "放弃未保存的修改？"}
