@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -812,7 +812,8 @@ test("material import bounds paths and keeps a stable copy after the source chan
     await mkdir(outside);
     await writeFile(join(source, "a.zip"), "original");
     await writeFile(join(outside, "b.zip"), "outside");
-    assert.equal(await resolveMaterial(source, "a.zip"), join(source, "a.zip"));
+    // Windows runners may expose the temporary directory through an 8.3 short path
+    assert.equal(await resolveMaterial(source, "a.zip"), await realpath(join(source, "a.zip")));
     await assert.rejects(resolveMaterial(source, "../outside/b.zip"), /授权目录/);
     await assert.rejects(resolveMaterial(source, "a.zip:secret"), /授权目录/);
     await symlink(outside, join(source, "escape"), "junction");
