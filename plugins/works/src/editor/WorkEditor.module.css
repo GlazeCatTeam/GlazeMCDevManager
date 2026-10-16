@@ -147,16 +147,6 @@ textarea.input {
 .tag button {
   color: var(--g-text-muted);
 }
-.tagInput {
-  display: flex;
-  gap: 8px;
-}
-.tagInput .input {
-  flex: 1;
-}
-.tagInput button {
-  flex: none;
-}
 .tabs {
   display: flex;
   flex-wrap: wrap;

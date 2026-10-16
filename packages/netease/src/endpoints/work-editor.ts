@@ -404,7 +404,7 @@ function serializeUpdate(value: WorkRecord): string {
     key === "relate_item_id" && typeof entry === "string" && /^\d+$/.test(entry) ? rawJson(entry) : entry,
   );
 }
-/** Merge only edited fields; concurrent changes to those fields require reloading */
+/** Merge edited fields, check primary-category detail groups and reject concurrent edits */
 export async function saveWorkEditor(
   session: NeteaseSession,
   params: WorkSaveParams,
@@ -452,7 +452,7 @@ export async function saveWorkEditor(
     for (const [key, options] of [
       ["pri_type", c.peTypes],
       ["sub_type", c.peSubTypes[String(body.pri_type)] ?? []],
-      ["mod_second_type", c.secondTypes[String(body.sub_type)] ?? []],
+      ["mod_second_type", c.secondTypes[String(body.pri_type)] ?? []],
     ] as const) {
       if (
         key in params.patch &&

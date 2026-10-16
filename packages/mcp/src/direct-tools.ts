@@ -1,3 +1,4 @@
+import { deferredWorkCreatePatch, isWorkRecord } from "@glaze/contracts";
 import { z } from "zod";
 import type { ToolDefinition } from "./tools";
 
@@ -11,6 +12,8 @@ const material = {
   platform: z.enum(["pe", "pc"]).default("pe"),
   channelId: z.number().int().min(0).max(10000).optional(),
   resourceType: z.number().int().min(1).max(10000).optional(),
+  filePath: z.string().min(1).max(4096).optional(),
+  interactive: z.boolean().optional(),
   directoryId: id.optional(),
   relativePath: z.string().min(1).max(1024).optional(),
 };
@@ -24,7 +27,28 @@ function tool(
   description: string,
   readOnly = false,
 ): ToolDefinition {
-  return { name, method: name, title, permission, schema: z.strictObject(shape), description, readOnly };
+  let schema = z.strictObject(shape);
+  if (name === "works_create")
+    schema = schema.superRefine((params, ctx) => {
+      if (isWorkRecord(params.fields) && Object.keys(deferredWorkCreatePatch(params.fields)).length)
+        ctx.addIssue({
+          code: "custom",
+          path: ["fields"],
+          message: "新建接口不支持 PC 同步、关联作品、授权证明或折扣配置；请先创建作品，确认准确 ID 后再保存这些配置",
+        });
+    });
+  if (name === "works_upload" || name === "promotion_upload")
+    schema = schema.superRefine((params, ctx) => {
+      const directory = params.directoryId !== undefined || params.relativePath !== undefined;
+      if (directory && (!params.directoryId || !params.relativePath))
+        ctx.addIssue({ code: "custom", message: "directoryId 与 relativePath 必须同时提供" });
+      if (Number(params.filePath !== undefined) + Number(directory) + Number(params.interactive === true) !== 1)
+        ctx.addIssue({
+          code: "custom",
+          message: "请选择一种素材来源: filePath、directoryId + relativePath 或 interactive: true",
+        });
+    });
+  return { name, method: name, title, permission, schema, description, readOnly };
 }
 
 export const directTools = [
@@ -55,8 +79,8 @@ export const directTools = [
     "works_create",
     "直接创建作品",
     "works:save",
-    { ...account, fields, ...key },
-    "直接提交完整新作品字段，无需草稿。先读取 works_options。上传新作品材料时省略 itemId，再在 fields 引用材料 ID。平台未返回准确 ID 时返回 created_id_unresolved，不猜测作品 ID。",
+    { ...account, fields, submitReview: z.boolean().default(false), ...key },
+    "直接创建作品，成功即返回 succeeded，不要求因缺少 ID 人工核对。先读取 works_options；上传新作品材料时省略 itemId，再引用材料 ID。submitReview 默认 false；仅用户明确要求新增并提审时设为 true，额外需要提审权限，在同一次创建请求中完成。结果包含 created、submittedReview 和 itemId（平台未返回时为 null），不猜测 ID；后续修改或补充 PC 同步等配置仍须准确 ID。unknown 禁止自动重试，重试复用 idempotencyKey。",
   ),
   tool(
     "works_submit_review",
@@ -70,7 +94,7 @@ export const directTools = [
     "上传作品材料",
     "works:upload",
     { ...account, itemId: itemId.optional(), ...material, ...key },
-    "直接上传作品材料并返回 assetId。指定 directoryId 和 relativePath 从已授权目录读取，否则打开文件选择器。已有作品提供 itemId；新作品省略。材料仅可用于同一客户端、账号和作品，不返回上传签名。",
+    "后台上传作品材料并返回 assetId。优先传 filePath（运行 Glaze 的电脑上、用户明确指定的素材文件绝对路径），或 directoryId + relativePath 从已授权目录读取；仅 interactive=true 才打开文件选择器，缺少来源直接报错。不得自行扫描或上传无关文件。已有作品提供 itemId；新作品省略。材料绑定客户端、账号和作品，不返回本机路径或上传签名。",
   ),
   tool(
     "works_operation_get",
@@ -93,6 +117,6 @@ export const directTools = [
     "上传推广材料",
     "netease:promotion.write",
     { ...account, ...material, ...key },
-    "上传推广图片或视频，返回可用于 promotion_join 或 promotion_saveBanner 的 assetId。kind 仅支持 richImage、banner、video。无需草稿。",
+    "后台上传推广图片或视频，返回可用于 promotion_join 或 promotion_saveBanner 的 assetId。kind 仅支持 richImage、banner、video。优先传用户明确指定的本机素材绝对路径 filePath，或 directoryId + relativePath；仅 interactive=true 打开文件选择器，缺少来源直接报错。不得自行扫描或上传无关文件。",
   ),
 ];

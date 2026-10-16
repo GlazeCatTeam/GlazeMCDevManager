@@ -12,7 +12,7 @@ import type {
   WorkReviewResult,
   WorkUpload,
 } from "@glaze/contracts";
-import { MCP_DEFAULT_PORT } from "@glaze/contracts";
+import { isMcpPort, MCP_DEFAULT_PORT } from "@glaze/contracts";
 
 export interface StoredClient extends Omit<McpClient, "connected" | "directories"> {
   /** Legacy bridge secrets are stripped from public snapshots during migration */
@@ -34,6 +34,7 @@ export interface StoredOperation extends McpOperation {
   assetParams?: { kind: McpAsset["kind"]; platform: "pe" | "pc"; channelId?: number; resourceType?: number };
   directoryId?: string;
   relativePath?: string;
+  filePath?: string;
 }
 export interface McpData {
   port: number;
@@ -42,6 +43,8 @@ export interface McpData {
   drafts: McpDraft[];
   assets: StoredAsset[];
   operations: StoredOperation[];
+  /** Older completed operations retain their results and idempotency keys outside the recent UI history */
+  operationArchive?: StoredOperation[];
   audit: McpAudit[];
   draftKeys: Record<string, string>;
 }
@@ -57,7 +60,7 @@ export interface McpPorts {
   options(account: string): Promise<WorkEditorOptions>;
   validate(draft: McpDraft, patch: WorkRecord): Promise<{ field: string; message: string }[]>;
   saveWork(draft: McpDraft, patch: WorkRecord, beforeWrite: () => void): Promise<void>;
-  createWork(draft: McpDraft, fields: WorkRecord, beforeWrite: () => void): Promise<void>;
+  createWork(draft: McpDraft, fields: WorkRecord, beforeWrite: () => void, submitReview?: boolean): Promise<void>;
   review(account: string, itemId: string, expected: WorkRecord, beforeWrite: () => void): Promise<WorkReviewResult>;
   pickFile(): Promise<string | null>;
   upload(draft: McpDraft, asset: StoredAsset, beforeWrite: () => void): Promise<WorkUpload>;
@@ -92,10 +95,33 @@ export function emptyMcpData(): McpData {
     drafts: [],
     assets: [],
     operations: [],
+    operationArchive: [],
     audit: [],
     draftKeys: {},
   };
 }
+
+/** Validate decrypted state before migration so malformed archives never lose replay protection */
+export function parseMcpData(input: unknown): McpData {
+  const data = input as McpData;
+  if (
+    !data ||
+    typeof data.enabled !== "boolean" ||
+    !Array.isArray(data.clients) ||
+    !Array.isArray(data.operations) ||
+    (data.operationArchive !== undefined && !Array.isArray(data.operationArchive)) ||
+    !Array.isArray(data.drafts) ||
+    !Array.isArray(data.assets) ||
+    !Array.isArray(data.audit) ||
+    !data.draftKeys
+  )
+    throw new Error("MCP 授权文件无法读取，请保留原文件并检查日志");
+  if (data.port === undefined) data.port = MCP_DEFAULT_PORT;
+  if (!isMcpPort(data.port)) throw new Error("MCP 端口配置无效，请保留原文件并检查日志");
+  data.operationArchive ??= [];
+  return data;
+}
+
 export class McpError extends Error {
   constructor(
     public readonly kind: string,
@@ -124,7 +150,7 @@ export function publicValue(value: unknown): unknown {
       Object.entries(value)
         .filter(
           ([key]) =>
-            !/^(cookie|password|ticket|token|sessionCookie|authorization|sign|receipt|path|fingerprint|key|body)$/i.test(
+            !/^(cookie|password|ticket|token|sessionCookie|authorization|sign|receipt|path|filePath|fingerprint|key|body)$/i.test(
               key,
             ),
         )

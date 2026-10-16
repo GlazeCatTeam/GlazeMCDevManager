@@ -41,8 +41,8 @@ import { StreamableHTTPClientTransport } from "../packages/mcp/node_modules/@mod
 import { InMemoryTransport } from "../packages/mcp/node_modules/@modelcontextprotocol/sdk/dist/esm/inMemory.js";
 import { ToolListChangedNotificationSchema } from "../packages/mcp/node_modules/@modelcontextprotocol/sdk/dist/esm/types.js";
 import { appTools } from "../packages/mcp/src/app-tools";
-import { resolveMaterial, snapshotMaterial, verifyMaterial } from "../packages/mcp/src/assets";
-import { emptyMcpData, McpError, type McpPorts } from "../packages/mcp/src/model";
+import { resolveLocalMaterial, resolveMaterial, snapshotMaterial, verifyMaterial } from "../packages/mcp/src/assets";
+import { emptyMcpData, McpError, type McpPorts, parseMcpData } from "../packages/mcp/src/model";
 import { createMcpServer, McpHttpServer } from "../packages/mcp/src/server";
 import { McpService } from "../packages/mcp/src/service";
 import { legacyToolDefinitions } from "../packages/mcp/src/tools";
@@ -50,7 +50,7 @@ import type { PreferenceStore } from "../packages/storage/src";
 import { themeFixture } from "./fixtures/theme-package.mjs";
 
 /** Build an isolated service with explicit network stubs and a durable-state spy */
-function fixture(legacy = true) {
+function fixture(legacy = true, recentOperationLimit = 5000) {
   const account: AccountSummary = {
     id: "a",
     nickname: "测试账号",
@@ -116,7 +116,7 @@ function fixture(legacy = true) {
     },
     assetRoot: join(tmpdir(), "glaze-mcp-test-unused"),
   };
-  const service = new McpService(emptyMcpData(), ports);
+  const service = new McpService(emptyMcpData(), ports, recentOperationLimit);
   // Report missing permissions immediately instead of waiting for a user answer
   service.accessWaitMs = 0;
   // Retain regression coverage of the internal snapshot executor; production publishes direct tools only
@@ -763,7 +763,7 @@ test("unknown results lock drafts; restart preserves unknown writes and expires 
   assert.equal(restarted.snapshot().operations[0]?.state, "unknown");
 });
 
-test("creation without an ID returns unresolved and cannot accidentally submit review", async () => {
+test("creation without an ID succeeds and cannot accidentally submit review", async () => {
   const f = fixture();
   const draft = (await f.call("works_draft_create", { idempotencyKey: "new" })) as McpDraft;
   const operation = (await f.call("works_create", {
@@ -771,7 +771,7 @@ test("creation without an ID returns unresolved and cannot accidentally submit r
     revision: 1,
     idempotencyKey: "create",
   })) as McpOperation;
-  assert.equal(operation.state, "created_id_unresolved");
+  assert.equal(operation.state, "succeeded");
   assert.equal(f.counts.create, 1);
   assert.equal(f.counts.review, 0);
 });
@@ -1239,7 +1239,7 @@ test("direct create, review and save-review keep distinct grants and fail-closed
     fields: { item_name: "新作品" },
     idempotencyKey: "create",
   })) as McpOperation;
-  assert.equal(created.state, "created_id_unresolved");
+  assert.equal(created.state, "succeeded");
   assert.equal(f.counts.create, 1);
 });
 
@@ -1257,6 +1257,106 @@ test("direct unknown writes remain blocked across new requests without retaining
   assert.equal(((await f.call("works_save", args)) as McpOperation).id, result.id);
 });
 
+test("local material paths reject network paths, streams, links, directories and unrelated file types", async () => {
+  const root = await mkdtemp(join(tmpdir(), "glaze-mcp-local-path-"));
+  try {
+    const file = join(root, "宣传图.PNG");
+    await writeFile(file, "image");
+    assert.equal(await resolveLocalMaterial(file, "image"), await realpath(file));
+    for (const path of [
+      "image.png",
+      "https://example.com/image.png",
+      "\\\\server\\share\\image.png",
+      "//server/share/image.png",
+      `${file}:secret`,
+      `${root}/../image.png`,
+      `${file}\0`,
+      join(root, "secret.txt"),
+    ])
+      await assert.rejects(resolveLocalMaterial(path, "image"), /绝对路径|格式/);
+    await assert.rejects(resolveLocalMaterial(join(root, "missing.png"), "image"), /无法读取指定素材文件/);
+    await mkdir(join(root, "folder.png"));
+    await assert.rejects(resolveLocalMaterial(join(root, "folder.png"), "image"), /普通文件/);
+    await mkdir(join(root, "real"));
+    await writeFile(join(root, "real", "image.png"), "image");
+    await symlink(join(root, "real"), join(root, "linked"), "junction");
+    await assert.rejects(resolveLocalMaterial(join(root, "linked", "image.png"), "image"), /链接|联接点/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("direct uploads require one explicit source before permissions and never default to a picker", async () => {
+  const f = fixture(false);
+  let picked = 0;
+  f.ports.pickFile = async () => {
+    picked++;
+    return null;
+  };
+  f.service.grant(f.client.id, { accounts: ["a"], defaultAccount: "a", permissions: ["netease:works.read"] });
+  for (const name of ["works_upload", "promotion_upload"])
+    for (const source of [
+      {},
+      { directoryId: "d" },
+      { relativePath: "image.png" },
+      { filePath: "image.png", interactive: true },
+      { filePath: "image.png", directoryId: "d", relativePath: "image.png" },
+    ])
+      await assert.rejects(
+        f.call(name, { kind: "image", idempotencyKey: "invalid", ...source }),
+        /素材来源|必须同时提供/,
+      );
+  assert.equal(f.service.snapshot().requests.length, 0);
+  assert.equal(picked, 0);
+  await assert.rejects(
+    f.call("works_upload", { kind: "image", filePath: join(tmpdir(), "image.png"), idempotencyKey: "denied" }),
+    /权限/,
+  );
+  assert.equal(picked, 0);
+  f.service.grant(f.client.id, { accounts: ["a"], defaultAccount: "a", permissions: [...mcpPermissions] });
+  const cancelled = (await f.call("works_upload", {
+    kind: "image",
+    interactive: true,
+    idempotencyKey: "picker",
+  })) as McpOperation;
+  assert.equal(cancelled.state, "rejected");
+  assert.equal(picked, 1);
+});
+
+test("background uploads preserve snapshots, deduplicate and stop before upload after revocation", async () => {
+  const root = await mkdtemp(join(tmpdir(), "glaze-mcp-background-"));
+  const f = fixture(false);
+  try {
+    const filePath = join(root, "image.png");
+    await writeFile(filePath, "original");
+    f.ports.assetRoot = join(root, "snapshots");
+    f.ports.pickFile = async () => {
+      throw new Error("Unexpected picker");
+    };
+    const upload = f.ports.upload;
+    f.ports.upload = async (draft, asset, guard) => {
+      await writeFile(filePath, "changed");
+      assert.equal(await readFile(asset.path, "utf8"), "original");
+      return upload(draft, asset, guard);
+    };
+    const args = { itemId: "123", kind: "image", filePath, idempotencyKey: "background" };
+    const result = (await f.call("works_upload", args)) as McpOperation;
+    assert.equal(result.state, "succeeded");
+    assert.equal(((await f.call("works_upload", args)) as McpOperation).id, result.id);
+    assert.equal(f.counts.upload, 1);
+    assert.equal(JSON.stringify(f.service.snapshot()).includes(filePath.replace(/\\/g, "\\\\")), false);
+    await assert.rejects(f.call("works_upload", { ...args, filePath: join(root, "other.png") }), /幂等键/);
+    f.ports.upload = async (draft, asset, guard) => {
+      f.service.grant(f.client.id, { accounts: ["a"], defaultAccount: "a", permissions: ["netease:works.read"] });
+      return upload(draft, asset, guard);
+    };
+    await assert.rejects(f.call("works_upload", { ...args, idempotencyKey: "revoked" }), /权限|授权/);
+    assert.equal(f.counts.upload, 1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("direct uploads are reusable by their work and cannot cross work or client boundaries", async () => {
   const root = await mkdtemp(join(tmpdir(), "glaze-mcp-direct-assets-"));
   const f = fixture(false);
@@ -1264,20 +1364,32 @@ test("direct uploads are reusable by their work and cannot cross work or client 
     const source = join(root, "image.png");
     await writeFile(source, "material");
     f.ports.assetRoot = join(root, "snapshots");
-    f.ports.pickFile = async () => source;
+    f.ports.pickFile = async () => {
+      throw new Error("Background uploads must not open a picker");
+    };
     const uploaded = (await f.call("works_upload", {
       itemId: "123",
       kind: "image",
+      filePath: source,
       channelId: 1,
       idempotencyKey: "upload",
     })) as McpOperation;
     assert.equal(uploaded.state, "succeeded");
     assert.ok(uploaded.assetId);
+    assert.equal(JSON.stringify(uploaded).includes(root), false);
+    assert.equal("filePath" in uploaded, false);
     const patch = { channel: [{ channel_id: 1, channel_url: { $asset: uploaded.assetId, as: "receipt" } }] };
     await assert.rejects(f.call("works_save", { itemId: "456", patch, idempotencyKey: "other-work" }), /材料/);
     const saved = (await f.call("works_save", { itemId: "123", patch, idempotencyKey: "save" })) as McpOperation;
     assert.equal(saved.state, "succeeded");
     assert.equal(JSON.stringify(uploaded).includes("host-only"), false);
+    const details = (await f.call("works_save", {
+      itemId: "123",
+      patch: { info: `<p><img src="glaze-asset:${uploaded.assetId}"></p>` },
+      idempotencyKey: "save-detail-image",
+    })) as McpOperation;
+    assert.equal(details.state, "succeeded");
+    assert.equal(f.remote.fields.info, '<p><img src="https://x.nosdn.127.net/a.png"></p>');
     const other = f.service.registerClient("Other");
     f.service.connected(other.id, () => {});
     f.service.grant(other.id, { accounts: ["a"], defaultAccount: "a", permissions: [...mcpPermissions] });
@@ -1367,8 +1479,14 @@ test("promotion resolves only host-uploaded materials and never exposes signed r
     const source = join(root, "banner.png");
     await writeFile(source, "banner");
     f.ports.assetRoot = join(root, "snapshots");
-    f.ports.pickFile = async () => source;
-    const upload = (await f.call("promotion_upload", { kind: "banner", idempotencyKey: "banner" })) as McpOperation;
+    f.ports.pickFile = async () => {
+      throw new Error("Background uploads must not open a picker");
+    };
+    const upload = (await f.call("promotion_upload", {
+      kind: "banner",
+      filePath: source,
+      idempotencyKey: "banner",
+    })) as McpOperation;
     assert.equal(upload.state, "succeeded");
     let received: Record<string, unknown> = {};
     f.ports.invoke = async (_m, params, guard, beforeWrite) => {
@@ -1640,6 +1758,401 @@ test("an advance one-time approval from glaze_request_access is used by the next
     f.call("comments_reply", { id: "comment-1", content: "谢谢", idempotencyKey: "second" }),
     /权限/,
   );
+});
+
+test("save-review requests both missing permissions together and consumes them for one complete call", async () => {
+  const f = fixture(false);
+  f.service.grant(f.client.id, { accounts: ["a"], defaultAccount: "a", permissions: [...mcpLevels.view.permissions] });
+  f.service.accessWaitMs = 1000;
+  const args = { itemId: "123", patch: { item_name: "保存并提审" }, submitReview: true, idempotencyKey: "compound" };
+  const saving = f.call("works_save", args);
+  const request = f.service.snapshot().requests[0];
+  assert.deepEqual(request?.permissions, ["works:save", "works:review"]);
+  assert.deepEqual(f.counts, { save: 0, create: 0, review: 0, upload: 0 });
+  assert.equal(f.service.data.operations.length, 0);
+  f.service.answer(request?.id ?? "", "once");
+  const result = (await saving) as McpOperation;
+  assert.equal(result.state, "succeeded");
+  assert.equal(f.counts.save, 1);
+  assert.equal(f.counts.review, 1);
+  assert.equal(f.service.allowed(f.client.id, "works:save"), false);
+  assert.equal(f.service.allowed(f.client.id, "works:review"), false);
+  assert.deepEqual(await f.call("works_save", args), result);
+  assert.equal(f.service.requestCount(), 0);
+  assert.equal(f.counts.review, 1);
+  f.service.accessWaitMs = 0;
+  await assert.rejects(
+    f.call("works_save", { ...args, idempotencyKey: "compound-next" }),
+    (error: McpError) => error.kind === "permission_pending",
+  );
+  assert.deepEqual(f.service.snapshot().requests[0]?.permissions, ["works:save", "works:review"]);
+});
+
+test("save-review requests its extra permission and a denial never starts or records a write", async () => {
+  const f = fixture(false);
+  f.service.grant(f.client.id, {
+    accounts: ["a"],
+    defaultAccount: "a",
+    permissions: [...mcpLevels.assist.permissions],
+  });
+  f.service.accessWaitMs = 1000;
+  const saving = f.call("works_save", {
+    itemId: "123",
+    patch: { item_name: "拒绝提审" },
+    submitReview: true,
+    idempotencyKey: "denied-compound",
+  });
+  const request = f.service.snapshot().requests[0];
+  assert.deepEqual(request?.permissions, ["works:review"]);
+  f.service.answer(request?.id ?? "", "deny");
+  await assert.rejects(saving, (error: McpError) => error.kind === "forbidden");
+  assert.equal(f.service.data.operations.length, 0);
+  assert.equal(f.durable().operations.length, 0);
+  assert.equal(f.counts.save, 0);
+  assert.equal(f.counts.review, 0);
+  assert.equal(f.service.allowed(f.client.id, "works:review"), false);
+});
+
+test("advance one-time review grants survive validation and replay but end after success or failure", async () => {
+  const f = fixture(false);
+  f.service.grant(f.client.id, {
+    accounts: ["a"],
+    defaultAccount: "a",
+    permissions: [...mcpLevels.assist.permissions],
+  });
+  const args = {
+    itemId: "123",
+    patch: { item_name: "首次保存" },
+    submitReview: true,
+    idempotencyKey: "advance-compound",
+  };
+  /** Approve review in advance without adding it to the client's persistent grant */
+  const approveReview = async () => {
+    f.service.accessWaitMs = 1000;
+    const asking = f.call("glaze_request_access", { permissions: ["works:review"], reason: "保存并提交审核" });
+    const request = f.service.snapshot().requests[0];
+    assert.deepEqual(request?.permissions, ["works:review"]);
+    f.service.answer(request?.id ?? "", "once");
+    await asking;
+    f.service.accessWaitMs = 0;
+  };
+  await approveReview();
+  await assert.rejects(f.call("works_save", { ...args, unknown: true }), /Unrecognized/);
+  assert.equal(f.service.allowed(f.client.id, "works:review"), true);
+  const result = (await f.call("works_save", args)) as McpOperation;
+  assert.equal(result.state, "succeeded");
+  assert.equal(f.service.allowed(f.client.id, "works:review"), false);
+  await approveReview();
+  assert.deepEqual(await f.call("works_save", args), result);
+  assert.equal(f.service.allowed(f.client.id, "works:review"), true);
+  await assert.rejects(f.call("works_save", { ...args, patch: { item_name: "变更幂等内容" } }), /幂等键/);
+  assert.equal(f.service.allowed(f.client.id, "works:review"), true);
+  f.ports.review = async (_account, _item, _expected, beforeWrite) => {
+    beforeWrite();
+    throw new McpError("network", "测试网络中断");
+  };
+  const failedArgs = { ...args, patch: { item_name: "保存后断网" }, idempotencyKey: "advance-failed" };
+  const unknown = (await f.call("works_save", failedArgs)) as McpOperation;
+  assert.equal(unknown.state, "unknown");
+  assert.equal(f.service.allowed(f.client.id, "works:review"), false);
+  assert.deepEqual(await f.call("works_save", failedArgs), unknown);
+  assert.equal(f.counts.save, 2);
+  assert.equal(f.counts.review, 1);
+  await assert.rejects(
+    f.call("works_save", { ...args, idempotencyKey: "needs-permission-again" }),
+    (error: McpError) => error.kind === "permission_pending",
+  );
+});
+
+test("scope changes revoke unused advance one-time permissions", async () => {
+  const f = fixture(false);
+  f.service.grant(f.client.id, {
+    accounts: ["a"],
+    defaultAccount: "a",
+    permissions: [...mcpLevels.assist.permissions],
+  });
+  f.service.accessWaitMs = 0;
+  await f.call("glaze_request_access", { permissions: ["works:review"], reason: "测试授权撤销" });
+  f.service.answer(f.service.snapshot().requests[0]?.id ?? "", "once");
+  assert.equal(f.service.allowed(f.client.id, "works:review"), true);
+  f.service.disconnect(f.client.id);
+  assert.equal(f.service.allowed(f.client.id, "works:review"), false);
+});
+
+test("concurrent permission requests cannot duplicate a one-time grant across calls", async () => {
+  const f = fixture(false);
+  f.service.grant(f.client.id, {
+    accounts: ["a"],
+    defaultAccount: "a",
+    permissions: [...mcpLevels.assist.permissions],
+  });
+  f.service.accessWaitMs = 1000;
+  const args = {
+    itemId: "123",
+    patch: { item_name: "并发提审" },
+    submitReview: true,
+    idempotencyKey: "concurrent-once",
+  };
+  const saving = f.call("works_save", args);
+  const asking = f.call("glaze_request_access", { permissions: ["works:review"], reason: "同一提审请求" });
+  await assert.rejects(
+    f.call("works_save", { ...args, idempotencyKey: "concurrent-rejected" }),
+    (error: McpError) => error.kind === "rate_limited",
+  );
+  assert.equal(f.service.requestCount(), 1);
+  f.service.answer(f.service.snapshot().requests[0]?.id ?? "", "once");
+  await Promise.all([saving, asking]);
+  assert.equal(f.service.allowed(f.client.id, "works:review"), false);
+  assert.equal(f.counts.review, 1);
+  f.service.accessWaitMs = 0;
+  await assert.rejects(
+    f.call("works_save", { ...args, idempotencyKey: "concurrent-next" }),
+    (error: McpError) => error.kind === "permission_pending",
+  );
+});
+
+test("decrypted stores migrate legacy history and reject malformed durable archives", () => {
+  const legacy = emptyMcpData();
+  delete legacy.operationArchive;
+  const migrated = parseMcpData(JSON.parse(JSON.stringify(legacy)));
+  assert.deepEqual(migrated.operationArchive, []);
+  for (const invalid of [null, {}, "history", 12])
+    assert.throws(() => parseMcpData({ ...emptyMcpData(), operationArchive: invalid }), /授权文件无法读取/);
+});
+
+test("completed history rolls into durable archives and old keys still return their exact result after restart", async () => {
+  const f = fixture(false, 2);
+  const requests = Array.from({ length: 5 }, (_, index) => ({
+    itemId: "123",
+    patch: { item_name: `历史保存 ${index}` },
+    idempotencyKey: `history-${index}`,
+  }));
+  const first = (await f.call("works_save", requests[0])) as McpOperation;
+  for (const args of requests.slice(1)) await f.call("works_save", args);
+  assert.equal(f.counts.save, 5);
+  assert.equal(f.service.data.operations.length, 2);
+  assert.equal(f.service.data.operationArchive?.length, 3);
+  assert.equal(f.service.snapshot().operations.length, 2);
+  assert.deepEqual(await f.call("works_operation_get", { operationId: first.id }), first);
+  const restarted = new McpService(structuredClone(f.durable()), f.ports, 2);
+  restarted.status = "running";
+  assert.deepEqual(await restarted.call(f.client.id, "works_save", requests[0]), first);
+  assert.equal(f.counts.save, 5);
+  await assert.rejects(
+    restarted.call(f.client.id, "works_save", { ...requests[0], patch: { item_name: "不同的旧请求" } }),
+    /幂等键/,
+  );
+  restarted.grant(f.client.id, { accounts: ["b"], defaultAccount: "b", permissions: [...mcpPermissions] });
+  await assert.rejects(restarted.call(f.client.id, "works_save", { ...requests[0], account: "a" }), /账号未授权/);
+  assert.equal(f.counts.save, 5);
+});
+
+test("idempotent replays still share the client's business call rate limit", async () => {
+  const f = fixture(false);
+  const args = { itemId: "123", patch: { item_name: "重复查询原结果" }, idempotencyKey: "rate-limited-replay" };
+  const result = await f.call("works_save", args);
+  for (let index = 0; index < 59; index++) assert.deepEqual(await f.call("works_save", args), result);
+  const auditCount = f.service.data.audit.length;
+  await assert.rejects(f.call("works_save", args), (error: McpError) => error.kind === "rate_limited");
+  assert.equal(f.service.data.audit.length, auditCount);
+  assert.equal(f.counts.save, 1);
+  assert.equal(f.service.requestCount(), 0);
+});
+
+test("business history remains writable beyond 5000 results and archives preserve business deduplication", async () => {
+  const f = fixture(false, 2);
+  let writes = 0;
+  f.ports.invoke = async (_method, _params, _guard, beforeWrite) => {
+    beforeWrite();
+    writes++;
+    return { accepted: true };
+  };
+  const args = { id: "comment-1", content: "历史回复", idempotencyKey: "old-business" };
+  const first = (await f.call("comments_reply", args)) as McpOperation;
+  const seed = f.service.data.operations[0];
+  assert.ok(seed);
+  f.service.data.operations.push(
+    ...Array.from({ length: 5000 }, (_, index) => ({
+      ...structuredClone(seed),
+      id: `old-${index}`,
+      key: `old-key-${index}`,
+    })),
+  );
+  await f.call("comments_reply", { ...args, idempotencyKey: "new-business" });
+  assert.equal(writes, 2);
+  assert.equal(f.service.data.operations.length, 2);
+  assert.equal(f.service.data.operationArchive?.length, 5000);
+  await f.call("comments_reply", { ...args, idempotencyKey: "newest-business" });
+  assert.deepEqual(await f.call("comments_reply", args), first);
+  assert.equal(writes, 3);
+  const restarted = new McpService(structuredClone(f.durable()), f.ports, 2);
+  restarted.status = "running";
+  assert.deepEqual(await restarted.call(f.client.id, "comments_reply", args), first);
+  assert.equal(writes, 3);
+});
+
+test("clearing audit persists across restart and preserves unresolved writes and replay protection", async () => {
+  const f = fixture(false, 1);
+  const savedArgs = { itemId: "123", patch: { item_name: "已保存" }, idempotencyKey: "clear-audit-saved" };
+  const saved = await f.call("works_save", savedArgs);
+  f.ports.saveWork = async (_draft, _patch, beforeWrite) => {
+    beforeWrite();
+    throw new McpError("network", "结果未知");
+  };
+  const unknownArgs = { itemId: "456", patch: { item_name: "待核实" }, idempotencyKey: "clear-audit-unknown" };
+  f.ports.editor = async (_account, itemId) => ({ ...structuredClone(f.remote), itemId });
+  const unknown = (await f.call("works_save", unknownArgs)) as McpOperation;
+  assert.equal(unknown.state, "unknown");
+  assert.ok(f.service.data.audit.length > 0);
+  const before = structuredClone(f.service.data);
+  let broadcasts = 0;
+  f.ports.changed = () => broadcasts++;
+
+  f.service.clearAudit();
+
+  assert.deepEqual(f.durable(), { ...before, audit: [] });
+  assert.deepEqual(f.service.snapshot().audit, []);
+  assert.equal(broadcasts, 1);
+  assert.equal(capabilities["mcp.clearAudit"].caller, "shell");
+  assert.equal(capabilities["mcp.clearAudit"].mcp, undefined);
+  const restarted = new McpService(parseMcpData(f.durable()), f.ports, 1);
+  restarted.status = "running";
+  assert.deepEqual(restarted.snapshot().audit, []);
+  assert.ok(restarted.snapshot().operations.some((operation) => operation.id === unknown.id && !operation.resolvedAt));
+  assert.deepEqual(await restarted.call(f.client.id, "works_save", savedArgs), saved);
+  assert.deepEqual(await restarted.call(f.client.id, "works_save", unknownArgs), unknown);
+  await assert.rejects(
+    restarted.call(f.client.id, "works_save", { ...unknownArgs, idempotencyKey: "clear-audit-new" }),
+    /待核实/,
+  );
+  assert.equal(f.counts.save, 1);
+});
+
+test("failed audit clearing retains records and does not broadcast success", async () => {
+  const f = fixture(false);
+  await f.call("analytics_overview");
+  const before = structuredClone(f.service.data.audit);
+  let broadcasts = 0;
+  f.ports.changed = () => broadcasts++;
+  f.ports.save = () => {
+    throw new Error("记录保存失败");
+  };
+
+  assert.throws(() => f.service.clearAudit(), /记录保存失败/);
+  assert.deepEqual(f.service.snapshot().audit, before);
+  assert.deepEqual(f.durable().audit, before);
+  assert.equal(broadcasts, 0);
+});
+
+test("history retention never hides unresolved writes and reconciliation never makes an old key executable", async () => {
+  const f = fixture(false, 1);
+  f.ports.editor = async (_account, itemId) => ({ ...structuredClone(f.remote), itemId });
+  const originalSave = f.ports.saveWork;
+  f.ports.saveWork = async (draft, patch, beforeWrite) => {
+    if (draft.itemId === "123") {
+      beforeWrite();
+      throw new McpError("network", "结果未知");
+    }
+    await originalSave(draft, patch, beforeWrite);
+  };
+  const args = { itemId: "123", patch: { item_name: "待核实" }, idempotencyKey: "retained-unknown" };
+  const unknown = (await f.call("works_save", args)) as McpOperation;
+  assert.equal(unknown.state, "unknown");
+  for (let index = 0; index < 4; index++)
+    await f.call("works_save", {
+      itemId: "456",
+      patch: { item_name: `其他作品 ${index}` },
+      idempotencyKey: `retained-success-${index}`,
+    });
+  assert.equal(f.service.data.operations.length, 2);
+  assert.equal(
+    f.service.data.operations.some((operation) => operation.id === unknown.id),
+    true,
+  );
+  assert.equal(
+    f.service.data.operationArchive?.some((operation) => operation.id === unknown.id),
+    false,
+  );
+  const restarted = new McpService(structuredClone(f.durable()), f.ports, 1);
+  restarted.status = "running";
+  await assert.rejects(restarted.call(f.client.id, "works_save", { ...args, idempotencyKey: "blocked-new" }), /待核实/);
+  assert.deepEqual(await restarted.call(f.client.id, "works_save", args), unknown);
+  restarted.resolveOperation(unknown.id);
+  const reconciled = (await restarted.call(f.client.id, "works_save", args)) as McpOperation;
+  assert.equal(reconciled.id, unknown.id);
+  assert.equal(reconciled.state, "unknown");
+  assert.ok(reconciled.resolvedAt);
+  assert.equal(
+    restarted.data.operationArchive?.some((operation) => operation.id === unknown.id),
+    true,
+  );
+  f.ports.saveWork = originalSave;
+  assert.equal(
+    (
+      (await restarted.call(f.client.id, "works_save", {
+        ...args,
+        idempotencyKey: "after-reconciliation",
+      })) as McpOperation
+    ).state,
+    "succeeded",
+  );
+  assert.equal(f.counts.save, 5);
+});
+
+test("history rollover protects unresolved creations, platform actions and saves whose later review failed", async () => {
+  const f = fixture(false, 0);
+  f.ports.editor = async (_account, itemId) => ({ ...structuredClone(f.remote), itemId });
+  f.ports.createWork = async (_draft, _fields, beforeWrite) => {
+    beforeWrite();
+    f.counts.create++;
+    throw new McpError("timeout", "创建结果待核实");
+  };
+  const createArgs = { fields: { item_name: "新建待核实" }, idempotencyKey: "protected-create" };
+  const created = (await f.call("works_create", createArgs)) as McpOperation;
+  f.ports.review = async (_account, _itemId, _expected, beforeWrite) => {
+    beforeWrite();
+    return { needCheckApply: true, queueLength: 0 };
+  };
+  const platformArgs = {
+    itemId: "123",
+    patch: { item_name: "需平台处理" },
+    submitReview: true,
+    idempotencyKey: "protected-platform",
+  };
+  const platform = (await f.call("works_save", platformArgs)) as McpOperation;
+  f.ports.review = async () => {
+    throw new McpError("business", "提审被平台拒绝");
+  };
+  const failedArgs = {
+    itemId: "456",
+    patch: { item_name: "保存已成功" },
+    submitReview: true,
+    idempotencyKey: "protected-partial",
+  };
+  const failed = (await f.call("works_save", failedArgs)) as McpOperation;
+  await f.call("works_save", { itemId: "789", patch: { item_name: "普通完成" }, idempotencyKey: "archived-success" });
+  assert.equal(created.state, "unknown");
+  assert.equal(platform.state, "platform_action");
+  assert.equal(failed.state, "failed");
+  assert.equal((failed.result as { saved: boolean }).saved, true);
+  assert.deepEqual(
+    new Set(f.service.snapshot().operations.map((operation) => operation.id)),
+    new Set([created.id, platform.id, failed.id]),
+  );
+  assert.equal(f.service.data.operationArchive?.length, 1);
+  const restarted = new McpService(structuredClone(f.durable()), f.ports, 0);
+  restarted.status = "running";
+  for (const [name, args] of [
+    ["works_create", createArgs],
+    ["works_save", platformArgs],
+    ["works_save", failedArgs],
+  ] as const)
+    await assert.rejects(
+      restarted.call(f.client.id, name, { ...args, idempotencyKey: `${args.idempotencyKey}-new` }),
+      /待核实/,
+    );
+  assert.equal(f.counts.create, 1);
+  assert.equal(f.counts.save, 3);
 });
 
 const appInputs: Record<string, Record<string, unknown>> = {

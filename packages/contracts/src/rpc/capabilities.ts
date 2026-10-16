@@ -24,6 +24,7 @@ const shellOnly = (permission: string | null, risk: Risk): Capability => ({ call
 
 export const capabilities: Record<RpcMethod, Capability> = {
   "mcp.snapshot": shellOnly(null, "read"),
+  "mcp.clearAudit": shellOnly(null, "write"),
   "mcp.resolveOperation": shellOnly(null, "write"),
   "mcp.setEnabled": shellOnly(null, "write"),
   "mcp.grant": shellOnly(null, "write"),

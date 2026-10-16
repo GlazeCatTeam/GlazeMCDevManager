@@ -6,10 +6,19 @@
   flex-direction: column;
 }
 
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
 .scroll {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  scrollbar-gutter: stable;
+  padding-inline-end: 12px;
   display: flex;
   flex-direction: column;
 }

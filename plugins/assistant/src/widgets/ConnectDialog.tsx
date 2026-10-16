@@ -2,6 +2,7 @@ import {
   Button,
   callHost,
   Dialog,
+  type McpClient,
   type McpConnectResult,
   type McpInstaller,
   type McpInstallerId,
@@ -16,8 +17,8 @@ import { examples } from "../examples";
 import { unwrap } from "../useMcp";
 import styles from "./ConnectDialog.module.css";
 
-/** Pick a tool and a permission level, then let the host write the tool's configuration */
-export function ConnectDialog({ onClose }: { onClose: () => void }) {
+/** Configure a tool and report a connection only after the host sees its live session */
+export function ConnectDialog({ clients, onClose }: { clients: McpClient[]; onClose: () => void }) {
   const [installers, setInstallers] = useState<McpInstaller[] | null>(null);
   const [tool, setTool] = useState<McpInstallerId | null>(null);
   const [level, setLevel] = useState<McpLevel>("assist");
@@ -42,6 +43,8 @@ export function ConnectDialog({ onClose }: { onClose: () => void }) {
   }, []);
 
   const selected = installers?.find((entry) => entry.id === tool);
+  const connected = !!result && clients.some((client) => client.id === result.clientId && client.connected);
+  const configurationFailed = !!result && !result.installed && tool !== "other";
   /** Create the client and write the configuration in one step */
   const connect = async () => {
     if (!tool) return;
@@ -67,7 +70,15 @@ export function ConnectDialog({ onClose }: { onClose: () => void }) {
     return (
       <Dialog
         className={styles.dialog}
-        title={result.installed ? `已连接 ${selected?.name ?? "AI 工具"}` : "还差一步"}
+        title={
+          configurationFailed
+            ? "连接配置未更新"
+            : connected
+              ? `已连接 ${selected?.name ?? "AI 工具"}`
+              : result.installed
+                ? `已写入 ${selected?.name ?? "AI 工具"} 配置`
+                : "等待 AI 工具连接"
+        }
         onClose={onClose}
         actions={
           <Button variant="primary" onClick={onClose}>
@@ -76,10 +87,18 @@ export function ConnectDialog({ onClose }: { onClose: () => void }) {
         }
       >
         <div className={styles.body}>
-          {result.installed ? (
+          {configurationFailed && <Notice>{result.message}</Notice>}
+          {connected || result.installed ? (
             <>
-              <p className={styles.success}>{result.message}</p>
-              <p className={styles.muted}>重启后可以试着对它说：</p>
+              <p className={styles.success}>
+                {connected
+                  ? configurationFailed
+                    ? "原连接仍在线，可以继续使用原有权限。"
+                    : "已检测到 AI 工具在线，可以开始使用。"
+                  : result.message}
+              </p>
+              {!connected && <p className={styles.muted}>等待 AI 工具连接。请重启该工具，连接成功后这里会自动更新。</p>}
+              <p className={styles.muted}>{connected ? "试着对它说：" : "连接后可以试着对它说："}</p>
               <ul className={styles.examples}>
                 {examples.slice(0, 3).map((text) => (
                   <li key={text}>「{text}」</li>
@@ -88,7 +107,6 @@ export function ConnectDialog({ onClose }: { onClose: () => void }) {
             </>
           ) : (
             <>
-              {tool !== "other" && <Notice>{result.message}</Notice>}
               <p>
                 把下面这段话<b>原样发给你的 AI 工具</b>，它会自己完成连接。连上后回到这里就能看到它。
               </p>

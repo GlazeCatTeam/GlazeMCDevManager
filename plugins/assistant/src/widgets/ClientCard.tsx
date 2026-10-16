@@ -24,7 +24,7 @@ const levelOptions = [
   { value: "custom", label: "自定义", disabled: true },
 ] as const;
 
-/** One connected tool: status, permission level and account scope at a glance */
+/** Show configured tools with their live connection, permission level and account scope */
 export function ClientCard({
   client,
   accounts,
@@ -42,7 +42,9 @@ export function ClientCard({
     ? "等待你允许"
     : client.connected
       ? "使用中"
-      : `离线 · 上次使用 ${ago(client.lastSeen)}`;
+      : client.lastSeen
+        ? `离线 · 上次使用 ${ago(client.lastSeen)}`
+        : "等待 AI 工具连接";
 
   /** Switch the level while keeping the account scope */
   const setLevel = (next: McpLevel) =>

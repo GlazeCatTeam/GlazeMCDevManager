@@ -53,6 +53,7 @@ export function ActivityPanel({
 }) {
   const [open, setOpen] = useState<McpOperation | null>(null);
   const [all, setAll] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
   const check = snapshot.operations.filter((entry) => attention.has(entry.state) && !entry.resolvedAt);
   const audit = snapshot.audit.filter((entry) => !entry.tool.startsWith("glaze_")).slice(0, all ? 200 : 30);
   const nickname = (id: string | null) => accounts.find((account) => account.id === id)?.nickname ?? "";
@@ -62,9 +63,21 @@ export function ActivityPanel({
       title="AI 最近做了什么"
       badge={check.length ? <Tag tone="warning">{check.length} 项待核实</Tag> : undefined}
       actions={
-        snapshot.audit.length > 30 ? (
-          <TextButton onClick={() => setAll(!all)}>{all ? "收起" : "查看更多"}</TextButton>
-        ) : undefined
+        <div className={styles.actions}>
+          {snapshot.audit.length > 30 && (
+            <TextButton onClick={() => setAll(!all)}>{all ? "收起" : "查看更多"}</TextButton>
+          )}
+          <TextButton
+            tone="danger"
+            disabled={action.busy || !snapshot.audit.length}
+            onClick={() => {
+              action.setMessage("");
+              setConfirmClear(true);
+            }}
+          >
+            清空记录
+          </TextButton>
+        </div>
       }
       className={styles.panel}
       aria-label="AI 操作记录"
@@ -95,6 +108,41 @@ export function ActivityPanel({
           <EmptyState title="还没有记录" hint="AI 帮你查询或修改内容后，会在这里留下记录" />
         )}
       </div>
+
+      {confirmClear && (
+        <Dialog
+          title="清空 AI 操作记录？"
+          onClose={() => {
+            if (!action.busy) setConfirmClear(false);
+          }}
+          actions={
+            <>
+              <Button disabled={action.busy} onClick={() => setConfirmClear(false)}>
+                取消
+              </Button>
+              <Button
+                variant="danger"
+                disabled={action.busy}
+                onClick={() =>
+                  void action.run(async () => {
+                    unwrap(await callHost("mcp.clearAudit"));
+                    setAll(false);
+                    setConfirmClear(false);
+                  })
+                }
+              >
+                {action.busy ? "正在清空…" : "确认清空"}
+              </Button>
+            </>
+          }
+        >
+          <div className={styles.detail}>
+            {action.message && <Notice>{action.message}</Notice>}
+            <p>将清空所有 AI 工具、所有账号的历史操作记录，此操作无法撤销。</p>
+            <p>待核实的操作会继续保留，清空记录不会撤销已执行的操作。</p>
+          </div>
+        </Dialog>
+      )}
 
       {open && (
         <Dialog

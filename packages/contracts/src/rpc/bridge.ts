@@ -85,6 +85,7 @@ export interface WindowState {
 
 export interface RpcMethods {
   "mcp.snapshot": { params: undefined; result: McpSnapshot };
+  "mcp.clearAudit": { params: undefined; result: undefined };
   "mcp.resolveOperation": { params: { operationId: string }; result: undefined };
   "mcp.setEnabled": { params: { enabled: boolean; port?: number }; result: McpSnapshot };
   "mcp.grant": { params: { clientId: string; grant: McpGrant }; result: McpSnapshot };

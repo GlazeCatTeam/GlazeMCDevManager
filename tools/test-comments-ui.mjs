@@ -69,9 +69,45 @@ try {
   await page.getByRole("button", { name: "切换测试账号", exact: true }).click();
   await page.getByText("共 1 条评论 · 当前页 1 条", { exact: true }).waitFor();
   await list.getByText("玩家乙1", { exact: true }).waitFor();
+
+  await page.goto(
+    `${server.resolvedUrls.local[0]}tests/fixtures/comments.html?sparse-ratings=1&progressive=1&fail-later=1`,
+  );
+  await page.getByText("共 230 条评论 · 当前页 20 条", { exact: true }).waitFor();
+  await rating(1).click();
+  await page.getByText("已检查 100 / 230 条评论，已找到 1 条匹配 · 继续加载中…", { exact: true }).waitFor();
+  await list.getByText("玩家甲1", { exact: true }).waitFor();
+  assert.equal(await list.getByRole("listitem").count(), 1);
+  await rating(5).click();
+  await page.getByText("已检查 100 / 230 条评论，已找到 100 条匹配 · 继续加载中…", { exact: true }).waitFor();
+  await rating(5).click();
+  await page.getByText("已检查 100 / 230 条评论，已找到 1 条匹配 · 继续加载中…", { exact: true }).waitFor();
+  assert.equal(await page.locator("#list-count").textContent(), "列表请求数：3");
+  await page.getByText("评论加载失败：离线测试网络失败", { exact: false }).waitFor();
+  await list.getByText("玩家甲1", { exact: true }).waitFor();
+  await page.getByText("已加载匹配 1 条评论 · 当前页 1 条", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "重试", exact: true }).click();
+  await page.getByText("筛选后共 2 条评论 · 当前页 2 条", { exact: true }).waitFor();
+  await list.getByText("玩家甲122", { exact: true }).waitFor();
+  assert.equal(await list.getByRole("listitem").count(), 2);
+
+  // Refresh must keep a selected comment and its detail visible before the first response
+  await list.getByText("玩家甲122", { exact: true }).click();
+  await page.getByRole("button", { name: "慢速请求", exact: true }).click();
+  await page.getByRole("button", { name: "刷新", exact: true }).click();
+  await list.getByText("玩家甲122", { exact: true }).waitFor();
+  await page.getByRole("heading", { name: "玩家甲122", exact: true }).waitFor();
+  await page
+    .getByText("已检查 100 / 230 条评论，已找到 1 条匹配 · 继续加载中，当前显示上次结果…", { exact: true })
+    .waitFor();
+  await page.getByRole("heading", { name: "玩家甲122", exact: true }).waitFor();
+  await page.getByRole("button", { name: "切换测试账号", exact: true }).click();
+  await page.getByText("共 1 条评论 · 当前页 1 条", { exact: true }).waitFor();
+  await list.getByText("玩家乙1", { exact: true }).waitFor();
+  assert.equal(await list.getByText("玩家甲122", { exact: true }).count(), 0);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: cross-page rating matches share one page, filtered totals, next/jump, multiselect, filter reset, empty results and account isolation",
+    "PASS: rating pagination, progressive matches before completion, partial failure/retry, refresh retention and account isolation",
   );
 } finally {
   await browser?.close();

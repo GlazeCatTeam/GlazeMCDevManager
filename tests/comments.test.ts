@@ -55,7 +55,7 @@ function ratingRows(length = 30): CommentPage["items"] {
 
 test("rating matches across server pages appear together on a single display page", async () => {
   const cache = new CommentPageCache();
-  const items = ratingRows();
+  const items = ratingRows(130).map((item, index) => ({ ...item, stars: index === 0 || index === 121 ? 1 : 5 }));
   const starts: number[] = [];
   const result = await loadCommentPage(cache, params, [1], async (input) => {
     starts.push(input.start);
@@ -63,11 +63,11 @@ test("rating matches across server pages appear together on a single display pag
     return { ok: true, value: { total: items.length, items: items.slice(input.start, input.start + input.span) } };
   });
   assert.ok(result.ok);
-  assert.deepEqual(starts, [0, 20]);
+  assert.deepEqual(starts, [0, 100]);
   assert.equal(result.value.total, 2);
   assert.deepEqual(
     result.value.items.map((item) => item.id),
-    ["comment-0", "comment-21"],
+    ["comment-0", "comment-121"],
   );
 });
 
@@ -88,27 +88,132 @@ test("rating pagination slices after filtering and shares the source snapshot be
   assert.equal(second.value.items.length, 8);
   assert.equal(new Set([...first.value.items, ...second.value.items].map((item) => item.id)).size, 28);
   assert.deepEqual(empty.value, { total: 0, items: [] });
-  assert.equal(calls, 2);
+  assert.equal(calls, 1);
   cache.expire();
   await loadCommentPage(cache, params, [1], load);
-  assert.equal(calls, 4);
+  assert.equal(calls, 2);
 });
 
-test("failed later source pages never display partial rating totals and can be retried", async () => {
-  const cache = new CommentPageCache();
+test("source offsets follow received rows when the platform caps the requested batch size", async () => {
   const items = ratingRows();
-  const failed = await loadCommentPage(cache, params, [1], async (input) =>
-    input.start === 0
-      ? { ok: true, value: { total: 30, items: items.slice(0, 20) } }
-      : { ok: false, error: { kind: "network", message: "offline" } },
+  const starts: number[] = [];
+  const result = await loadCommentPage(new CommentPageCache(), params, [1], async (input) => {
+    starts.push(input.start);
+    return { ok: true, value: { total: items.length, items: items.slice(input.start, input.start + 20) } };
+  });
+  assert.ok(result.ok);
+  assert.deepEqual(starts, [0, 20]);
+  assert.equal(result.value.total, 2);
+});
+
+test("failed later source pages preserve explicit partial progress and can be retried", async () => {
+  const cache = new CommentPageCache();
+  const items = ratingRows(130);
+  const progress: number[] = [];
+  const failed = await loadCommentPage(
+    cache,
+    params,
+    [1],
+    async (input) =>
+      input.start === 0
+        ? { ok: true, value: { total: 130, items: items.slice(0, 100) } }
+        : { ok: false, error: { kind: "network", message: "offline" } },
+    (value) => progress.push(value.scanned),
   );
   assert.equal(failed.ok, false);
+  assert.deepEqual(progress, [100]);
   const retry = await loadCommentPage(cache, params, [1], async (input) => ({
     ok: true,
-    value: { total: 30, items: items.slice(input.start, input.start + input.span) },
+    value: { total: 130, items: items.slice(input.start, input.start + input.span) },
   }));
   assert.ok(retry.ok);
   assert.equal(retry.value.total, 2);
+});
+
+test("rating matches publish before a slow later batch and new subscribers receive progress", async () => {
+  const cache = new CommentPageCache();
+  const items = ratingRows(130);
+  const deferred = deferredPage();
+  const progress: number[] = [];
+  let calls = 0;
+  const load = async (input: typeof params): Promise<RpcResult<CommentPage>> => {
+    calls++;
+    assert.equal(input.span, 100);
+    return input.start === 0 ? { ok: true, value: { total: 130, items: items.slice(0, 100) } } : deferred.promise;
+  };
+  const first = loadCommentPage(cache, params, [1], load, (value) => progress.push(value.scanned));
+  // Flush the first batch while deliberately leaving the second request unresolved
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(progress, [100]);
+  const joined: number[] = [];
+  const second = loadCommentPage(cache, { ...params, start: 20 }, [5], load, (value) => {
+    joined.push(value.scanned);
+    assert.equal(value.data.items.length, 20);
+  });
+  assert.deepEqual(joined, [100]);
+  assert.equal(calls, 2);
+  deferred.resolve({ ok: true, value: { total: 130, items: items.slice(100) } });
+  const results = await Promise.all([first, second]);
+  assert.ok(results.every((result) => result.ok));
+  assert.deepEqual(progress, [100, 130]);
+  assert.deepEqual(joined, [100, 130]);
+});
+
+test("a cached first page supplies immediate matches and invalidation stops obsolete scans", async () => {
+  const cache = new CommentPageCache();
+  const items = ratingRows(230);
+  await cache.read(JSON.stringify(params), async () => ({
+    ok: true,
+    value: { total: 230, items: items.slice(0, 20) },
+  }));
+  const deferred = deferredPage();
+  const progress: number[] = [];
+  let calls = 0;
+  const pending = loadCommentPage(
+    cache,
+    params,
+    [1],
+    async () => {
+      calls++;
+      return deferred.promise;
+    },
+    (value) => {
+      progress.push(value.scanned);
+      assert.equal(value.data.items[0]?.id, "comment-0");
+    },
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(progress, [20]);
+  cache.clear();
+  deferred.resolve({ ok: true, value: { total: 230, items: items.slice(0, 100) } });
+  assert.equal((await pending).ok, false);
+  assert.deepEqual(progress, [20]);
+  assert.equal(calls, 1);
+});
+
+test("leaving a rating query stops later batches while effect replay can rejoin the same scan", async () => {
+  const cache = new CommentPageCache();
+  const items = ratingRows(230);
+  const deferred = deferredPage();
+  const controller = new AbortController();
+  const next = new AbortController();
+  let calls = 0;
+  const load = async (): Promise<RpcResult<CommentPage>> => {
+    calls++;
+    return deferred.promise;
+  };
+  const first = loadCommentPage(cache, params, [1], load, () => {}, controller.signal);
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.abort();
+  const replay = loadCommentPage(cache, params, [1], load, () => {}, next.signal);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls, 1);
+  next.abort();
+  await new Promise((resolve) => setImmediate(resolve));
+  deferred.resolve({ ok: true, value: { total: 230, items: items.slice(0, 100) } });
+  const results = await Promise.all([first, replay]);
+  assert.ok(results.every((result) => !result.ok));
+  assert.equal(calls, 1);
 });
 
 test("rating query keys normalize multiselect order and isolate account and server filters", async () => {

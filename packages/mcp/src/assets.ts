@@ -1,11 +1,38 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { lstat, mkdir, readdir, realpath, rm, stat } from "node:fs/promises";
-import { basename, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, extname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { McpAsset } from "@glaze/contracts";
+import { workResourceExtensions } from "@glaze/contracts";
 import { McpError, type StoredAsset } from "./model";
+
+/** Resolve one explicitly supplied local material, rejecting network paths, streams and links */
+export async function resolveLocalMaterial(input: string, kind: McpAsset["kind"]): Promise<string> {
+  if (
+    !isAbsolute(input) ||
+    /^[\\/]{2}/.test(input) ||
+    (process.platform === "win32" && !/^[a-z]:[\\/]/i.test(input)) ||
+    input.slice(2).includes(":") ||
+    [...input].some((character) => character.charCodeAt(0) < 32) ||
+    input.split(/[\\/]/).some((part) => part === "." || part === "..")
+  )
+    throw new McpError("validation", "filePath 必须是本机文件的绝对路径，不支持网络路径、设备路径或路径跳转");
+  const extensions: readonly string[] =
+    kind === "resource" ? workResourceExtensions : kind === "video" ? ["mp4"] : ["png", "jpg", "jpeg"];
+  if (!extensions.includes(extname(input).slice(1).toLowerCase()))
+    throw new McpError("validation", "素材文件格式与上传用途不匹配");
+  try {
+    const root = parse(input).root;
+    const actual = await resolveMaterial(root, relative(root, input));
+    if (!(await stat(actual)).isFile()) throw new McpError("validation", "素材必须是普通文件");
+    return actual;
+  } catch (error) {
+    if (error instanceof McpError) throw error;
+    throw new McpError("validation", "无法读取指定素材文件，请检查文件是否存在且可访问");
+  }
+}
 
 /** Resolve only regular files beneath the granted directory, rejecting reparse-point escapes */
 export async function resolveMaterial(directory: string, input: string): Promise<string> {

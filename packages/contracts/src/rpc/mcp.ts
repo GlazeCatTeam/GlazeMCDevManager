@@ -165,7 +165,15 @@ export type McpOperationState =
   | "unknown"
   | "platform_action"
   | "created_id_unresolved";
-export type McpAction = "import" | "upload" | "create" | "save" | "save_review" | "review" | "business";
+export type McpAction =
+  | "import"
+  | "upload"
+  | "create"
+  | "create_review"
+  | "save"
+  | "save_review"
+  | "review"
+  | "business";
 export interface McpOperation {
   method?: string;
   /** Human-readable name of the tool that started this operation */

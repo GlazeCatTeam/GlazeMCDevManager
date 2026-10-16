@@ -227,7 +227,7 @@ AI 的字段修改引用材料 ID；主进程内部解析平台签名回执，�
 
 请求使用按客户端与账号隔离的操作 ID/幂等键和持久化执行记录，避免 AI 重试或应用重启重复创建/提审。写请求发出前记录状态；重启时未完成记录按结果未知处理。对外返回待确认状态并通过 `works_operation_get` 查询，不让一次调用无限等待用户确认。
 
-平台没有原子 revision/If-Match 协议，本地基线检查仍存在读写间的短暂竞态。新建接口也不保证返回 ID：创建成功后若无法确定 ID，应返回 `created_id_unresolved` 并由用户确认列表中的作品，不按名称猜 ID，不自动对猜测对象提审。
+平台没有原子 revision/If-Match 协议，本地基线检查仍存在读写间的短暂竞态。2026-10-17 按 [ADR-0017](../adr/0017-mcp-create-and-review.md) 更新：`works_create { fields, submitReview?, idempotencyKey }` 默认仅创建，明确要求新增并提审时在同一次创建请求中设置提审标志，同时核验保存和提审两项授权。平台确认成功即返回 `succeeded`，未返回 ID 时结果的 `itemId` 为 null，单纯创建不要求人工核对；后续修改仍须准确 ID。旧版 `created_id_unresolved` 及未知写入保留核实要求，不按名称猜 ID。
 
 ### 验收与边界
 

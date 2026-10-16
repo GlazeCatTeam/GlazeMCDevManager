@@ -41,6 +41,7 @@ import { ReferencePicker } from "./ReferencePicker";
 import { ResourceFileField } from "./ResourceFileField";
 import { RichEditor } from "./RichEditor";
 import { workHtmlLength } from "./rich-html";
+import { TagInput } from "./TagInput";
 import styles from "./WorkEditor.module.css";
 
 const tabs = [
@@ -646,31 +647,13 @@ function Editor({
                 </div>
                 {peType !== 9 && (
                   <Field label="模组标签">
-                    <div className={styles.tagInput}>
-                      <input
-                        className={styles.input}
-                        aria-label="搜索或输入模组标签"
-                        value={tagInput}
-                        list="work-tag-options"
-                        disabled={disabled}
-                        placeholder="搜索标签 / 输入自定义标签"
-                        onChange={(e) => setTagInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            addTag();
-                          }
-                        }}
-                      />
-                      <datalist id="work-tag-options">
-                        {choices?.tags.map((tag) => (
-                          <option key={tag}>{tag}</option>
-                        ))}
-                      </datalist>
-                      <Button disabled={disabled || !tagInput.trim()} onClick={addTag}>
-                        添加
-                      </Button>
-                    </div>
+                    <TagInput
+                      value={tagInput}
+                      options={choices?.tags ?? []}
+                      disabled={disabled}
+                      onChange={setTagInput}
+                      onAdd={addTag}
+                    />
                     <div className={styles.tags}>
                       {rows(value.tag).map((tag, i) => (
                         <span className={styles.tag} key={text(tag.name)}>
@@ -957,7 +940,7 @@ function Editor({
                   <Select
                     label="次级分类"
                     value={number(value.mod_second_type)}
-                    choices={choices?.secondTypes[String(value.sub_type)] ?? []}
+                    choices={choices?.secondTypes[String(peType)] ?? []}
                     disabled={disabled}
                     onChange={(v) => change("mod_second_type", v)}
                   />

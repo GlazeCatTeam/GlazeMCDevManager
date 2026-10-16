@@ -57,10 +57,10 @@ export const readSchemas: Partial<Record<RpcMethod, z.ZodObject>> = {
   "works.list": z.strictObject({ ...account, platform: platform.optional() }),
   "works.get": z.strictObject(work),
   "works.reviewFeedback": z.strictObject(work),
-  "promotion.activities": z.strictObject({ ...account, page: z.number().int().min(0).max(10000).optional() }),
+  "promotion.activities": z.strictObject({ ...account, page: z.number().int().min(0).max(10000).default(0) }),
   "promotion.discount": z.strictObject(account),
   "promotion.dates": z.strictObject(account),
-  "promotion.applications": z.strictObject({ ...account, page: z.number().int().min(0).max(10000).optional() }),
+  "promotion.applications": z.strictObject({ ...account, page: z.number().int().min(0).max(10000).default(0) }),
   "promotion.module": z.strictObject({
     ...account,
     kind: z.enum(["review", "discount"]),
@@ -201,8 +201,8 @@ const editingTools = [
     "works_create",
     "创建作品",
     "works:save",
-    z.strictObject(request),
-    "获得保存权限后直接创建平台作品，无需二次确认。平台未返回作品 ID 时返回 created_id_unresolved，禁止猜测 ID 或自动提审。",
+    z.strictObject({ ...request, submitReview: z.boolean().default(false) }),
+    "直接创建平台作品。submitReview 默认为 false，仅明确要求新增并提审时设为 true，额外需要提审权限；同一次请求完成，成功不依赖返回 ID，后续修改仍需准确 ID。",
   ),
   edit(
     "works_save",

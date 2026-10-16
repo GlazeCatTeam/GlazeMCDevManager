@@ -59,6 +59,7 @@ import type { UpdateService } from "../update/service";
 import { appWindows } from "../windows/main-window";
 import { createMcpApplication } from "./application";
 import { createMcpBusiness } from "./business";
+import { connectClient, migrateConnections } from "./connections";
 import { checkTool, connectPrompt, installTool, listInstallers, uninstallTool } from "./installers";
 import { PluginToolCalls } from "./plugin-calls";
 import { loadMcpData, saveMcpData } from "./store";
@@ -297,9 +298,9 @@ export function createMcpHost(
           ),
         ),
       ),
-    createWork: (draft, fields, guard) =>
+    createWork: (draft, fields, guard, submitReview = false) =>
       sessions.request(draft.account, async (session) =>
-        writeResult(await createPlatformWork(session, { account: draft.account, fields }, guard)),
+        writeResult(await createPlatformWork(session, { account: draft.account, fields, submitReview }, guard)),
       ),
     review: (account, itemId, expected, guard) =>
       sessions.request(account, async (session) =>
@@ -396,6 +397,7 @@ export function createMcpHost(
       if (!wasRunning) service.status = "starting";
       service.error = null;
       service.commit();
+      const previousEndpoint = service.endpoint;
       const next = new McpHttpServer(service);
       try {
         await next.start(port);
@@ -411,27 +413,44 @@ export function createMcpHost(
         service.commit();
         return service.snapshot();
       }
+      // Starting a candidate listener updates the shared endpoint before the transaction commits
+      service.endpoint = previousEndpoint;
+      const portChanged = service.data.port !== port;
+      if (portChanged) {
+        try {
+          await migrateConnections(
+            service.data.clients,
+            previousEndpoint ?? `http://127.0.0.1:${service.data.port}/mcp`,
+            next.endpoint,
+          );
+        } catch (error) {
+          await next.stop();
+          service.endpoint = previousEndpoint;
+          service.status = wasRunning ? "running" : "error";
+          service.error = `${error instanceof McpError ? error.message : "端口切换失败"}${wasRunning ? "；服务仍在原端口运行" : ""}`;
+          service.commit();
+          return service.snapshot();
+        }
+      }
       service.disable();
       await transport.stop();
       transport = next;
       http = next;
       service.endpoint = next.endpoint;
-      const portChanged = service.data.port !== port;
       service.data.port = port;
       service.data.enabled = true;
       service.status = "running";
       service.commit();
-      // One-click configs embed the address, so rewrite them when the port moves
-      if (portChanged)
-        for (const client of service.data.clients)
-          if (client.key && client.tool && client.tool !== "other")
-            await installTool(client.tool, `${next.endpoint}?key=${client.key}`).catch(() => undefined);
       return service.snapshot();
     } finally {
       changing = false;
     }
   };
   const handlers = {
+    "mcp.clearAudit": () => {
+      service.clearAudit();
+      return undefined;
+    },
     "mcp.resolveOperation": (params: { operationId: string }) => {
       service.resolveOperation(params?.operationId);
       return undefined;
@@ -442,7 +461,10 @@ export function createMcpHost(
       const missing = await Promise.all(
         service.data.clients.map(async (client) =>
           client.key && client.tool && client.tool !== "other"
-            ? (await checkTool(client.tool, client.key)) === false
+            ? (await checkTool(
+                client.tool,
+                `${snapshot.endpoint ?? `http://127.0.0.1:${snapshot.port}/mcp`}?key=${client.key}`,
+              )) !== true
             : false,
         ),
       );
@@ -488,21 +510,13 @@ export function createMcpHost(
         const state = await setEnabled(true);
         if (state.status !== "running") throw new McpError("unavailable", state.error ?? "AI 连接服务启动失败");
       }
-      // Reconnecting a tool replaces its previous key instead of piling up entries
-      if (installer.id !== "other")
-        for (const old of service.data.clients.filter((client) => client.tool === installer.id)) service.revoke(old.id);
-      const { client, key } = service.createKeyedClient(installer.name, installer.id, params.level);
+      const { client, key, installed, message } = await connectClient(
+        service,
+        installer.name,
+        installer.id,
+        params.level,
+      );
       const endpoint = `${service.endpoint}?key=${key}`;
-      let installed = false;
-      let message = "把下面这句话发给你的 AI 工具，它会自己完成连接。";
-      if (installer.id !== "other")
-        try {
-          await installTool(installer.id, endpoint);
-          installed = true;
-          message = `已写入 ${installer.name} 的配置。重启 ${installer.name} 后，直接用中文告诉它你想做什么即可。`;
-        } catch (error) {
-          message = error instanceof McpError ? error.message : `写入 ${installer.name} 配置失败`;
-        }
       return { clientId: client.id, installed, message, endpoint, prompt: connectPrompt(endpoint) };
     },
     "mcp.answer": (params: { requestId: string; decision: McpDecision }) => {

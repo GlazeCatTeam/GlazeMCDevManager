@@ -95,7 +95,7 @@
 }
 
 .tablePanel {
-  height: 280px;
+  height: auto;
   flex: none;
   gap: 12px;
 }

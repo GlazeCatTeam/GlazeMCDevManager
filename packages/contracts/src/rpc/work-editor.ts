@@ -80,6 +80,7 @@ export interface WorkEditorOptions {
   peSubTypes: Record<string, WorkOption[]>;
   peResourceFileTypes?: Record<string, string[]>;
   pcSubTypes: Record<string, WorkOption[]>;
+  /** Detail categories grouped by PE primary category id (pri_type) */
   secondTypes: Record<string, WorkOption[]>;
   recommendTags: Record<string, WorkOption[]>;
   versions: string[];

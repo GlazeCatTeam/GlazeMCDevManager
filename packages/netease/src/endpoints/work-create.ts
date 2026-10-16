@@ -12,7 +12,7 @@ import { normalizeWorkAdvanced, validateWorkAdvanced } from "./work-advanced";
 import { workCreateDefaults } from "./work-create-defaults";
 import { getWorkEditorOptions, validateWorkPatch } from "./work-editor";
 
-/** Validate a new PE work against live platform dictionaries and signed upload receipts */
+/** Validate a new PE work using primary-category detail groups and signed upload receipts */
 export function validateWorkCreate(fields: WorkRecord, options: WorkEditorOptions): string | null {
   const invalid = validateWorkPatch(fields, fields);
   if (invalid) return invalid;
@@ -28,7 +28,7 @@ export function validateWorkCreate(fields: WorkRecord, options: WorkEditorOption
     return "请选择有效的资源类别";
   for (const [key, choices] of [
     ["sub_type", options.peSubTypes[String(fields.pri_type)] ?? []],
-    ["mod_second_type", options.secondTypes[String(fields.sub_type)] ?? []],
+    ["mod_second_type", options.secondTypes[String(fields.pri_type)] ?? []],
   ] as const) {
     if (choices.length && !choices.some((option) => option.id === fields[key])) return "请完整选择资源分类";
     if (!choices.length && fields[key] !== 0) return "资源分类已变化，请刷新平台选项";
@@ -76,15 +76,15 @@ export function validateWorkCreate(fields: WorkRecord, options: WorkEditorOption
   return null;
 }
 
-/** Construct only the documented create DTO, without identifiers or update-only metadata */
-export function buildWorkCreate(fields: WorkRecord): WorkRecord {
+/** Construct the documented create DTO with an explicit, separately authorized review choice */
+export function buildWorkCreate(fields: WorkRecord, submitReview = false): WorkRecord {
   fields = normalizeWorkAdvanced(fields);
   const body: WorkRecord = {
     ...structuredClone(workCreateDefaults),
     ...Object.fromEntries(Object.entries(fields).filter(([key]) => Object.hasOwn(workCreateDefaults, key))),
     item_name: String(fields.item_name).trim(),
     item_version: "0.1",
-    is_check_apply: false,
+    is_check_apply: submitReview,
     sync_pc_flag: false,
     dlc_info: { dlc_switch: false, dlc_type: "off", master: {}, slave_list: [] },
   };
@@ -101,7 +101,7 @@ export function buildWorkCreate(fields: WorkRecord): WorkRecord {
   return body;
 }
 
-/** Create once; the upstream endpoint succeeds without returning a work id */
+/** Create and optionally submit review in one POST, without depending on a returned work id */
 export async function createWork(
   session: NeteaseSession,
   params: WorkCreateParams,
@@ -119,7 +119,7 @@ export async function createWork(
     "/items/categories/pe/upload",
     session,
     "POST",
-    JSON.stringify(buildWorkCreate(fields)),
+    JSON.stringify(buildWorkCreate(fields, params.submitReview ?? false)),
   );
   return result.ok ? ok(undefined) : result;
 }
