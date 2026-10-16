@@ -2,7 +2,7 @@ import type { AnalyticsMetric, AnalyticsRecord, AnalyticsValues, IncomePlatform,
 
 export type Metric = AnalyticsMetric;
 export type DayRange = 7 | 14 | 30;
-export type MonthRange = 3 | 6 | 12;
+export type MonthRange = 1 | 3 | 6 | 12;
 export type RealtimeDay = "today" | "yesterday";
 export interface Resource {
   id: string;

@@ -7,9 +7,9 @@ export const dayRangeOptions = ([7, 14, 30] as const).map((value) => ({
   label: `近 ${value} 天`,
 }));
 
-export const monthRangeOptions = ([3, 6, 12] as const).map((value) => ({
+export const monthRangeOptions = ([1, 3, 6, 12] as const).map((value) => ({
   value: value as MonthRange,
-  label: `近 ${value} 个月`,
+  label: value === 1 ? "当月" : `近 ${value} 个月`,
 }));
 
 export const chartKindOptions = [

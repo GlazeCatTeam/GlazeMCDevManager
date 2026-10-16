@@ -28,12 +28,12 @@ const summaryMetrics: { id: Metric; label: string; unit: string }[] = [
 const metricOptions = summaryMetrics.map((item) => ({ value: item.id, label: item.label }));
 const PAGE_SIZE = 12;
 
-/** Native calendar-month totals and trends, including historical resources */
+/** Native calendar-month totals and trends, defaulting to the current Beijing month */
 export function SummaryView({ refreshVersion }: { refreshVersion: number }) {
   const today = todayKey();
   const currentMonth = today.slice(0, 7);
   const endDate = shiftDay(today, -1);
-  const [months, setMonths] = useState<MonthRange>(6);
+  const [months, setMonths] = useState<MonthRange>(1);
   const [metric, setMetric] = useState<Metric>("diamonds");
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
   const [search, setSearch] = useState("");
@@ -41,7 +41,9 @@ export function SummaryView({ refreshVersion }: { refreshVersion: number }) {
   const [chartScope, setChartScope] = useState<"total" | "resources">("total");
   const monthKeys = monthsInRange(months);
   const activeMonth = monthKeys.includes(selectedMonth) ? selectedMonth : currentMonth;
-  const result = useAnalyticsQuery("analytics.monthly", { startDate: `${monthKeys[0]}-01`, endDate });
+  const startDate = `${monthKeys[0]}-01`;
+  const hasCompletedDays = startDate <= endDate;
+  const result = useAnalyticsQuery("analytics.monthly", { startDate, endDate }, hasCompletedDays);
   useRefresh(result.reload, refreshVersion);
   const records = result.data ?? [];
   const resources = useMemo(
@@ -72,11 +74,12 @@ export function SummaryView({ refreshVersion }: { refreshVersion: number }) {
           <span className={styles.filterLabel}>时间</span>
           <SegmentedControl label="汇总月份范围" options={monthRangeOptions} value={months} onChange={setMonths} />
           <span className={styles.dateRange}>
-            {rangeText(monthKeys)} · 截至 {endDate}
+            {months === 1 ? currentMonth : rangeText(monthKeys)} · 截至 {endDate}
           </span>
         </div>
       </Panel>
       <QueryState query={result} />
+      {!hasCompletedDays && <p className={styles.muted}>当月暂无已完成日期的数据，请于明日查看或切换时间范围</p>}
       <QuerySkeleton loading={result.loading && result.data === null} />
       {result.data !== null && (
         <>
@@ -84,7 +87,7 @@ export function SummaryView({ refreshVersion }: { refreshVersion: number }) {
             items={summaryMetrics.map((item) => ({
               label: item.label,
               value: formatValue(aggregate(records, item.id)),
-              note: `近 ${months} 个月已返回数据 · ${item.unit}`,
+              note: `${months === 1 ? "当月" : `近 ${months} 个月`}已返回数据 · ${item.unit}`,
             }))}
           />
           <Panel
