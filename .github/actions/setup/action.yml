@@ -6,6 +6,8 @@ runs:
     - uses: actions/setup-node@v5
       with:
         node-version-file: .nvmrc
+        # pnpm is installed below; its store is cached explicitly after installation
+        package-manager-cache: false
     - name: Install pnpm
       shell: pwsh
       # Same version as packageManager in package.json
