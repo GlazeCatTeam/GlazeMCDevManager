@@ -7,6 +7,7 @@ import {
   type McpLevel,
   mcpLevelOf,
   mcpLevels,
+  Notice,
   SegmentedControl,
   Tag,
   TextButton,
@@ -68,6 +69,24 @@ export function ClientCard({
         </div>
         {!client.persistent && <Tag tone="warning">临时连接</Tag>}
       </div>
+      {client.configMissing && (
+        <Notice
+          action={
+            <TextButton
+              disabled={action.busy}
+              onClick={() =>
+                void action.run(async () => {
+                  unwrap(await callHost("mcp.repair", { clientId: client.id }));
+                })
+              }
+            >
+              重新写入
+            </TextButton>
+          }
+        >
+          {client.name} 的连接配置被移除或覆盖了，重启后会连不上。
+        </Notice>
+      )}
       {client.approved ? (
         <>
           <SegmentedControl

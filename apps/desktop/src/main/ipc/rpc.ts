@@ -68,6 +68,7 @@ import { BrowserWindow, type IpcMainInvokeEvent, ipcMain } from "electron";
 import type { LogService } from "../logs/service";
 import type { McpHost } from "../mcp/host";
 import type { PluginRegistry } from "../plugins/registry";
+import { createApplicationActions } from "../preferences/actions";
 import type { AppearanceService } from "../preferences/appearance";
 import type { CacheService } from "../preferences/cache";
 import type { GeneralService } from "../preferences/general";
@@ -160,6 +161,12 @@ function createHandlers(
   sessionSettings: SessionSettingsService,
   mcp: McpHost,
 ): HandlerTable {
+  const actions = createApplicationActions(
+    { sessions, appearance, general, cache, plugins, sessionSettings },
+    (event, payload) => {
+      for (const win of appWindows()) sendEvent(win, event, payload);
+    },
+  );
   let lastRendererError = 0;
   /** Pin mailbox writes and detail reads to the account that initiated them */
   const messageAccount = (params: unknown): string => {
@@ -174,11 +181,7 @@ function createHandlers(
     "app.openProjectLink": (params) => openProjectLink(params?.link),
     "app.openRuntimeNotices": () => openRuntimeNotices(),
     "sessionSettings.get": () => sessionSettings.get(),
-    "sessionSettings.set": (params) => {
-      const saved = sessionSettings.set(params);
-      for (const win of appWindows()) sendEvent(win, "sessionSettings.changed", saved);
-      return saved;
-    },
+    "sessionSettings.set": (params) => actions.session(params),
     ...createWorkOperationHandlers(sessions),
     ...createPromotionHandlers(sessions),
     "app.reportRendererError": (params) => {
@@ -191,7 +194,7 @@ function createHandlers(
       return undefined;
     },
     "plugins.list": () => plugins.snapshot(),
-    "plugins.setEnabled": (params) => plugins.setEnabled(params?.id, params?.enabled),
+    "plugins.setEnabled": (params) => actions.setEnabled(params),
     "plugins.pickInstall": (_params, event) => {
       const window = senderWindow(event);
       if (!window) throw new Error("找不到应用窗口");
@@ -217,34 +220,18 @@ function createHandlers(
       return undefined;
     },
     "general.get": () => general.get(),
-    "general.set": (params) => {
-      const saved = general.set(params);
-      for (const win of appWindows()) sendEvent(win, "general.changed", saved);
-      return saved;
-    },
-    "general.clearCache": () => cache.clear(),
+    "general.set": (params) => actions.general(params),
+    "general.clearCache": () => actions.clearCache(),
     "app.rememberRoute": (params) => {
       const current = sessions.current();
       if (current && current.status !== "expired") general.rememberRoute(requireString(params, "route"));
       return undefined;
     },
     "appearance.get": () => appearance.get(),
-    "appearance.set": (params) => {
-      const saved = appearance.set(params);
-      for (const win of appWindows()) sendEvent(win, "appearance.changed", saved);
-      return saved;
-    },
+    "appearance.set": (params) => actions.appearance(params),
     "layout.getRanking": () => appearance.getRanking(),
-    "layout.setRanking": (params) => {
-      const saved = appearance.setRanking(params);
-      for (const win of appWindows()) sendEvent(win, "layout.rankingChanged", saved);
-      return saved;
-    },
-    "layout.reset": () => {
-      const saved = appearance.resetLayouts();
-      for (const win of appWindows()) sendEvent(win, "layout.rankingChanged", saved);
-      return saved;
-    },
+    "layout.setRanking": (params) => actions.ranking(params),
+    "layout.reset": () => actions.reset(),
     "messages.list": (params) => {
       if (!isMessageListParams(params)) throw new CapabilityError("validation", "消息筛选参数无效");
       return sessions.request(optionalString(params, "account"), (session) => listMessages(session, params));
@@ -417,7 +404,7 @@ function createHandlers(
     },
     "account.loginWithCookie": (params) => sessions.loginWithCookie(requireString(params, "cookie")),
     "account.verify": () => sessions.verify(),
-    "account.switch": (params) => sessions.switchTo(requireString(params, "id")),
+    "account.switch": (params) => actions.switchAccount(requireString(params, "id")),
     "account.logout": () => {
       sessions.logout();
       return undefined;

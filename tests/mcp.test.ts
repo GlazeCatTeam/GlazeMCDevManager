@@ -5,13 +5,28 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
+import { LogService } from "../apps/desktop/src/main/logs/service";
+import { createMcpApplication, type NavigationWindow } from "../apps/desktop/src/main/mcp/application";
 import { createMcpBusiness } from "../apps/desktop/src/main/mcp/business";
 import { withoutTomlServer } from "../apps/desktop/src/main/mcp/installers";
+import { type BuiltinPlugin, PluginRegistry } from "../apps/desktop/src/main/plugins/registry";
+import { createApplicationActions } from "../apps/desktop/src/main/preferences/actions";
+import { AppearanceService } from "../apps/desktop/src/main/preferences/appearance";
+import { CacheService } from "../apps/desktop/src/main/preferences/cache";
+import { GeneralService } from "../apps/desktop/src/main/preferences/general";
+import { SessionSettingsService } from "../apps/desktop/src/main/preferences/session-settings";
+import { SessionManager } from "../apps/desktop/src/main/session/session-manager";
 import {
   type AccountSummary,
+  capabilities,
+  defaultAppearance,
+  defaultGeneral,
+  defaultRankingBoards,
+  defaultSessionSettings,
   emptyWorkCreateFields,
   type McpDraft,
   type McpOperation,
+  mcpLevelOf,
   mcpLevels,
   mcpPermissions,
 } from "../packages/contracts/src";
@@ -19,11 +34,14 @@ import { Client } from "../packages/mcp/node_modules/@modelcontextprotocol/sdk/d
 import { StreamableHTTPClientTransport } from "../packages/mcp/node_modules/@modelcontextprotocol/sdk/dist/esm/client/streamableHttp.js";
 import { InMemoryTransport } from "../packages/mcp/node_modules/@modelcontextprotocol/sdk/dist/esm/inMemory.js";
 import { ToolListChangedNotificationSchema } from "../packages/mcp/node_modules/@modelcontextprotocol/sdk/dist/esm/types.js";
+import { appTools } from "../packages/mcp/src/app-tools";
 import { resolveMaterial, snapshotMaterial, verifyMaterial } from "../packages/mcp/src/assets";
 import { emptyMcpData, McpError, type McpPorts } from "../packages/mcp/src/model";
 import { createMcpServer, McpHttpServer } from "../packages/mcp/src/server";
 import { McpService } from "../packages/mcp/src/service";
 import { legacyToolDefinitions } from "../packages/mcp/src/tools";
+import type { PreferenceStore } from "../packages/storage/src";
+import { themeFixture } from "./fixtures/theme-package.mjs";
 
 /** Build an isolated service with explicit network stubs and a durable-state spy */
 function fixture(legacy = true) {
@@ -1175,4 +1193,426 @@ test("an advance one-time approval from glaze_request_access is used by the next
     f.call("comments_reply", { id: "comment-1", content: "谢谢", idempotencyKey: "second" }),
     /权限/,
   );
+});
+
+const appInputs: Record<string, Record<string, unknown>> = {
+  app_settings_get: {},
+  app_appearance_set: { settings: { ...defaultAppearance, scale: 110 } },
+  app_general_set: { settings: { ...defaultGeneral, startPage: "works" } },
+  app_layout_ranking_set: { boards: ["pe_sell", "pe_hot"] },
+  app_layout_reset: {},
+  app_session_settings_set: { settings: { autoLogin: false, notifyOnExpire: false } },
+  app_cache_clear: {},
+  app_plugins_list: {},
+  app_plugins_set_enabled: { id: "glaze.works", enabled: false },
+  app_logs_list: {},
+  app_open_page: { route: "glaze.home/home" },
+  app_switch_account: { account: "a" },
+};
+
+for (const tool of appTools) {
+  test(`${tool.name}: strict inputs precede permission requests and one-time approval reaches the host`, async () => {
+    const f = fixture(false);
+    f.service.grant(f.client.id, { accounts: ["a"], defaultAccount: "a", permissions: [] });
+    const input = { ...appInputs[tool.name], ...(tool.readOnly ? {} : { idempotencyKey: tool.name }) };
+    await assert.rejects(f.call(tool.name, { ...input, unknown: true }), /Unrecognized/);
+    assert.equal(f.service.snapshot().requests.length, 0);
+    const invoked: string[] = [];
+    f.ports.invoke = async (method, params, guard, beforeWrite) => {
+      guard();
+      if (!tool.readOnly) beforeWrite();
+      assert.equal(params.account, tool.name === "app_switch_account" ? "a" : null);
+      invoked.push(method);
+      return { value: "完成", token: "secret" };
+    };
+    await assert.rejects(f.call(tool.name, input), (error: McpError) => error.kind === "permission_pending");
+    assert.equal(invoked.length, 0);
+    const request = f.service.snapshot().requests[0];
+    assert.deepEqual(request?.permissions, [tool.permission]);
+    f.service.answer(request?.id ?? "", "once");
+    const result = await f.call(tool.name, input);
+    assert.deepEqual(invoked, [tool.invoke]);
+    assert.equal(JSON.stringify(result).includes("secret"), false);
+    assert.equal(f.service.data.audit[0]?.tool, tool.name);
+    assert.equal(f.service.data.audit[0]?.result, "succeeded");
+    assert.equal(f.service.data.audit[0]?.account, tool.name === "app_switch_account" ? "a" : null);
+  });
+}
+
+/** Compose real preference, registry and log services with isolated storage and native stubs */
+async function applicationFixture(t: { after(callback: () => Promise<void>): void }) {
+  const f = fixture(false);
+  const root = await mkdtemp(join(tmpdir(), "glaze-mcp-application-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const values = new Map<string, unknown>();
+  const layouts = new Map<string, unknown>();
+  const store = {
+    get: (key: string) => values.get(key),
+    set: (key: string, value: unknown) => values.set(key, value),
+    getLayout: (key: string) => layouts.get(key),
+    setLayout: (key: string, value: unknown) => layouts.set(key, value),
+    resetLayouts: () => layouts.clear(),
+  } as unknown as PreferenceStore;
+  const events: { name: string; payload?: unknown }[] = [];
+  const manifests: BuiltinPlugin[] = [
+    {
+      id: "glaze.home",
+      name: "首页",
+      version: "1",
+      description: "",
+      contributes: { pages: [{ id: "home", title: "首页" }] },
+    },
+    {
+      id: "glaze.account",
+      name: "账号",
+      version: "1",
+      description: "",
+      contributes: {
+        pages: [
+          { id: "account", title: "账号管理" },
+          { id: "login", title: "登录", chrome: "none" },
+          { id: "login-expired", title: "重新登录", chrome: "none" },
+        ],
+      },
+    },
+    {
+      id: "glaze.works",
+      name: "作品",
+      version: "1",
+      description: "",
+      contributes: { pages: [{ id: "works", title: "作品管理" }] },
+    },
+  ];
+  const logs = new LogService(join(root, "logs"));
+  const plugins = new PluginRegistry(store, join(root, "plugins"), manifests, [], logs, () =>
+    events.push({ name: "plugins.changed" }),
+  );
+  let loginItem = false;
+  const general = new GeneralService(store, {
+    readLoginItem: () => ({ supported: true, enabled: loginItem, warning: null }),
+    setLoginItem: (enabled) => {
+      loginItem = enabled;
+    },
+    ensureTray: () => {},
+  });
+  const cache = new CacheService(
+    { getCacheSize: async () => 0, clearCache: async () => {}, clearCodeCaches: async () => {} },
+    () => {},
+    () => events.push({ name: "cache.cleared" }),
+  );
+  const actions = createApplicationActions(
+    {
+      appearance: new AppearanceService(store),
+      general,
+      cache,
+      plugins,
+      sessionSettings: new SessionSettingsService(store),
+      sessions: {
+        /** Simulate asynchronous session validation before the actual account selection */
+        switchTo: async (id, beforeSwitch) => {
+          await Promise.resolve();
+          beforeSwitch?.();
+          const selected = f.accounts.find((account) => account.id === id);
+          assert.ok(selected);
+          for (const account of f.accounts) account.current = account.id === id;
+          events.push({ name: "account.changed" });
+          return selected;
+        },
+      },
+    },
+    (name, payload) => events.push({ name, payload }),
+  );
+  let windowAvailable = true;
+  const win: NavigationWindow = {
+    isMinimized: () => true,
+    restore: () => events.push({ name: "restore" }),
+    show: () => events.push({ name: "show" }),
+    focus: () => events.push({ name: "focus" }),
+    navigate: (payload) => events.push({ name: "app.navigate", payload }),
+  };
+  const application = createMcpApplication(actions, plugins, logs, manifests, () => {
+    if (!windowAvailable) throw new McpError("unavailable", "请先打开应用窗口");
+    return win;
+  });
+  f.ports.invoke = createMcpBusiness(
+    {
+      request: async () => {
+        throw new Error("Unexpected network request");
+      },
+    },
+    application,
+  );
+  return {
+    ...f,
+    actions,
+    values,
+    events,
+    plugins,
+    logs,
+    application,
+    closeWindow: () => {
+      windowAvailable = false;
+    },
+  };
+}
+
+test("application permission levels exclude logs from view and preserve shell-only RPC metadata", () => {
+  for (const level of ["view", "assist", "full"] as const)
+    assert.equal(mcpLevelOf(mcpLevels[level].permissions), level);
+  assert.ok(mcpLevels.view.permissions.includes("app:settings.read"));
+  assert.ok(mcpLevels.view.permissions.includes("app:plugins.read"));
+  assert.equal(mcpLevels.view.permissions.includes("app:logs.read"), false);
+  assert.ok(mcpLevels.assist.permissions.includes("app:logs.read"));
+  assert.ok(mcpLevels.assist.permissions.includes("app:navigate"));
+  assert.equal(mcpLevels.assist.permissions.includes("app:settings.write"), false);
+  for (const method of [
+    "appearance.set",
+    "general.set",
+    "layout.setRanking",
+    "layout.reset",
+    "sessionSettings.set",
+    "plugins.setEnabled",
+    "logs.list",
+    "account.switch",
+  ] as const)
+    assert.equal(capabilities[method].caller, "shell");
+});
+
+test("application settings read real services and every mutation broadcasts once despite retries", async (t) => {
+  const f = await applicationFixture(t);
+  assert.deepEqual(await f.call("app_settings_get"), {
+    appearance: defaultAppearance,
+    general: { settings: defaultGeneral, launchAtLoginSupported: true, launchAtLoginWarning: null },
+    ranking: defaultRankingBoards,
+    session: defaultSessionSettings,
+  });
+  const writes = [
+    ["app_appearance_set", "appearance.changed"],
+    ["app_general_set", "general.changed"],
+    ["app_layout_ranking_set", "layout.rankingChanged"],
+    ["app_layout_reset", "layout.rankingChanged"],
+    ["app_session_settings_set", "sessionSettings.changed"],
+    ["app_cache_clear", "cache.cleared"],
+    ["app_plugins_set_enabled", "plugins.changed"],
+  ];
+  for (const [name, event] of writes) {
+    assert.ok(name && event);
+    const before = f.events.filter((entry) => entry.name === event).length;
+    const input = { ...appInputs[name], idempotencyKey: name };
+    const result = (await f.call(name, input)) as McpOperation;
+    assert.equal(result.state, "succeeded");
+    assert.equal(((await f.call(name, input)) as McpOperation).id, result.id);
+    assert.equal(f.events.filter((entry) => entry.name === event).length, before + 1);
+  }
+  assert.deepEqual(f.values.get("appearance"), appInputs.app_appearance_set?.settings);
+  assert.deepEqual(f.values.get("sessionSettings"), appInputs.app_session_settings_set?.settings);
+  assert.deepEqual(
+    f.events.find((event) => event.name === "appearance.changed")?.payload,
+    appInputs.app_appearance_set?.settings,
+  );
+  assert.equal(f.plugins.snapshot().plugins.find((plugin) => plugin.id === "glaze.works")?.enabled, false);
+  await assert.rejects(
+    f.call("app_appearance_set", { settings: defaultAppearance, idempotencyKey: "app_appearance_set" }),
+    /幂等键/,
+  );
+});
+
+test("application schemas reject invalid values and never request permissions for malformed settings", async () => {
+  const f = fixture(false);
+  f.service.grant(f.client.id, { accounts: ["a"], defaultAccount: "a", permissions: [] });
+  const badInputs: [string, unknown][] = [
+    ["app_appearance_set", { settings: { ...defaultAppearance, scale: 99 } }],
+    ["app_appearance_set", { settings: { ...defaultAppearance, token: "secret" } }],
+    ["app_general_set", { settings: { ...defaultGeneral, launchAtLogin: "true" } }],
+    ["app_layout_ranking_set", { boards: ["pe_hot", "pe_hot"] }],
+    ["app_layout_ranking_set", { boards: [] }],
+    ["app_session_settings_set", { settings: { autoLogin: true } }],
+    ["app_plugins_set_enabled", { id: "glaze.works", enabled: "false" }],
+    ["app_logs_list", { limit: 201 }],
+    ["app_logs_list", { level: "debug" }],
+    ["app_open_page", { route: "glaze.works/works", params: { itemId: "123" } }],
+    ["app_switch_account", { account: "" }],
+  ];
+  for (const [name, input] of badInputs)
+    await assert.rejects(
+      f.call(name, { ...(input as object), ...(name === "app_logs_list" ? {} : { idempotencyKey: "bad" }) }),
+      (error: McpError) => error.kind === "validation",
+    );
+  for (const tool of appTools.filter((tool) => !tool.readOnly))
+    await assert.rejects(f.call(tool.name, appInputs[tool.name]), (error: McpError) => error.kind === "validation");
+  assert.equal(f.service.snapshot().requests.length, 0);
+});
+
+test("navigation only opens enabled bundled pages and reports unavailable windows", async (t) => {
+  const f = await applicationFixture(t);
+  const listed = (await f.call("app_plugins_list")) as { id: string; pages: { route: string; title: string }[] }[];
+  assert.deepEqual(listed.find((plugin) => plugin.id === "glaze.account")?.pages, [
+    { route: "glaze.account/account", title: "账号管理" },
+  ]);
+  for (const route of [
+    "glaze.account/login",
+    "glaze.account/login-expired",
+    "glaze.unknown/page",
+    "https://example.invalid",
+  ]) {
+    const result = (await f.call("app_open_page", { route, idempotencyKey: route })) as McpOperation;
+    assert.equal(result.state, "failed");
+    assert.match(result.message, /页面不存在/);
+  }
+  f.plugins.setEnabled("glaze.works", false);
+  assert.equal(
+    ((await f.call("app_open_page", { route: "glaze.works/works", idempotencyKey: "disabled" })) as McpOperation).state,
+    "failed",
+  );
+  assert.equal(
+    f.events.some((event) => event.name === "app.navigate"),
+    false,
+  );
+  const input = { route: "glaze.home/home", idempotencyKey: "home" };
+  const opened = (await f.call("app_open_page", input)) as McpOperation;
+  assert.deepEqual(opened.result, { route: "glaze.home/home", title: "首页" });
+  assert.deepEqual(f.events.slice(-4), [
+    { name: "restore" },
+    { name: "show" },
+    { name: "focus" },
+    { name: "app.navigate", payload: { route: "glaze.home/home", params: {} } },
+  ]);
+  await f.call("app_open_page", input);
+  assert.equal(f.events.filter((event) => event.name === "app.navigate").length, 1);
+  f.closeWindow();
+  const missing = (await f.call("app_open_page", { ...input, idempotencyKey: "closed" })) as McpOperation;
+  assert.equal(missing.state, "failed");
+  assert.match(missing.message, /打开应用窗口/);
+});
+
+test("account switching rejects unauthorized and expired accounts without changing the client default", async (t) => {
+  const f = await applicationFixture(t);
+  await assert.rejects(f.call("app_switch_account", { account: "b", idempotencyKey: "foreign" }), /账号未授权/);
+  f.service.grant(f.client.id, { accounts: ["a", "b"], defaultAccount: "a", permissions: [...mcpPermissions] });
+  f.accounts[1].status = "expired";
+  await assert.rejects(f.call("app_switch_account", { account: "b", idempotencyKey: "expired" }), /已过期/);
+  assert.equal(f.events.length, 0);
+  f.accounts[1].status = "active";
+  const result = (await f.call("app_switch_account", { account: "b", idempotencyKey: "switch" })) as McpOperation;
+  assert.equal(result.state, "succeeded");
+  assert.equal(f.accounts[1].current, true);
+  assert.equal(f.service.data.clients[0]?.defaultAccount, "a");
+  assert.equal(f.events[0]?.name, "account.changed");
+  f.accounts[0].status = "expired";
+  assert.ok(await f.call("app_settings_get"));
+  assert.ok(await f.call("app_plugins_list"));
+});
+
+test("session switching rechecks authorization after async verification and before changing selection", async () => {
+  let selected = false;
+  let verified = false;
+  const context = {
+    exclusive: async (run: () => Promise<unknown>) => run(),
+    check: async () => {
+      verified = true;
+      return { id: "b" };
+    },
+    accounts: {
+      setCurrent: () => {
+        selected = true;
+      },
+    },
+    emit: () => {},
+  };
+  await assert.rejects(
+    SessionManager.prototype.switchTo.call(context as unknown as SessionManager, "b", () => {
+      assert.equal(verified, true);
+      throw new McpError("forbidden", "授权已撤销");
+    }),
+    /授权已撤销/,
+  );
+  assert.equal(selected, false);
+});
+
+test("application guards stop writes when permission or account scope changes while switching", async (t) => {
+  const f = await applicationFixture(t);
+  const invoke = f.ports.invoke;
+  assert.ok(invoke);
+  f.ports.invoke = (method, params, guard, beforeWrite) =>
+    invoke(method, params, guard, () => {
+      f.service.revoke(f.client.id);
+      beforeWrite();
+    });
+  await assert.rejects(f.call("app_switch_account", { account: "a", idempotencyKey: "revoked" }), /批准|授权/);
+  assert.equal(
+    f.events.some((event) => event.name === "account.changed"),
+    false,
+  );
+});
+
+test("logs are filtered, capped, redacted and passed through publicValue", async (t) => {
+  const f = await applicationFixture(t);
+  f.logs.write("info", "test", "普通日志");
+  for (let index = 0; index < 205; index++) f.logs.write("warn", "test", `警告 ${index} token=super-secret`);
+  const result = (await f.call("app_logs_list", { level: "warn", limit: 200 })) as {
+    entries: { level: string; message: string }[];
+    truncated: boolean;
+  };
+  assert.equal(result.entries.length, 200);
+  assert.equal(result.truncated, true);
+  assert.ok(result.entries.every((entry) => entry.level === "warn" && !entry.message.includes("super-secret")));
+  assert.equal(((await f.call("app_logs_list")) as { entries: unknown[] }).entries.length, 100);
+  assert.equal(((await f.call("app_logs_list", { level: "error" })) as { entries: unknown[] }).entries.length, 0);
+  f.ports.invoke = async () => ({
+    entries: [{ message: "脱敏日志", cookie: "must-not-leak", nested: { authorization: "must-not-leak", safe: "ok" } }],
+  });
+  assert.equal(JSON.stringify(await f.call("app_logs_list")).includes("must-not-leak"), false);
+});
+
+test("required plugins and unsupported themes fail without broadcasts or uncertain writes", async (t) => {
+  const f = await applicationFixture(t);
+  const plugin = (await f.call("app_plugins_set_enabled", {
+    id: "glaze.home",
+    enabled: false,
+    idempotencyKey: "required",
+  })) as McpOperation;
+  assert.equal(plugin.state, "failed");
+  assert.match(plugin.message, /不能更改/);
+  const appearance = (await f.call("app_appearance_set", {
+    settings: { ...defaultAppearance, themeId: "missing" },
+    idempotencyKey: "missing",
+  })) as McpOperation;
+  assert.equal(appearance.state, "failed");
+  assert.match(appearance.message, /主题未启用/);
+  assert.equal(f.events.length, 0);
+});
+
+test("the active optional theme cannot be disabled through MCP", async (t) => {
+  const f = await applicationFixture(t);
+  const preview = f.plugins.preview(themeFixture().bytes);
+  f.plugins.install(preview.token);
+  f.values.set("appearance", { ...defaultAppearance, themeId: "demo.ocean" });
+  f.events.length = 0;
+  const result = (await f.call("app_plugins_set_enabled", {
+    id: "demo.ocean",
+    enabled: false,
+    idempotencyKey: "active-theme",
+  })) as McpOperation;
+  assert.equal(result.state, "failed");
+  assert.match(result.message, /切换主题/);
+  assert.equal(f.plugins.snapshot().plugins.find((plugin) => plugin.id === "demo.ocean")?.enabled, true);
+  assert.equal(f.events.length, 0);
+});
+
+test("application tools retain plugin guards and account-independent write deduplication", async (t) => {
+  const f = await applicationFixture(t);
+  const checked: string[] = [];
+  f.ports.assertEnabled = (method) => {
+    checked.push(method);
+  };
+  const input = { settings: { ...defaultAppearance, scale: 110 }, idempotencyKey: "same-setting" };
+  const first = (await f.call("app_appearance_set", input)) as McpOperation;
+  assert.ok(checked.length >= 2 && checked.every((method) => method === "app.appearance_set"));
+  f.service.grant(f.client.id, { accounts: ["b"], defaultAccount: "b", permissions: [...mcpPermissions] });
+  assert.equal(((await f.call("app_appearance_set", input)) as McpOperation).id, first.id);
+  assert.equal(f.events.filter((event) => event.name === "appearance.changed").length, 1);
+  f.ports.assertEnabled = () => {
+    throw new McpError("forbidden", "对应插件已停用");
+  };
+  await assert.rejects(f.call("app_settings_get"), /停用/);
 });

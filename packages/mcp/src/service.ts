@@ -584,10 +584,13 @@ export class McpService {
       const client = this.authorize(id, tool.permission);
       const epoch = this.epochs.get(id) ?? 0;
       const draft = typeof params.draftId === "string" ? this.draft(id, params.draftId) : undefined;
-      account = draft?.account ?? (typeof params.account === "string" ? params.account : client.defaultAccount);
-      if (!name.startsWith("app_")) this.authorize(id, tool.permission, account);
+      const accountRequired = !name.startsWith("app_") || name === "app_switch_account";
+      account = accountRequired
+        ? (draft?.account ?? (typeof params.account === "string" ? params.account : client.defaultAccount))
+        : null;
+      if (accountRequired) this.authorize(id, tool.permission, account ?? undefined);
       const guard = () => {
-        this.authorize(id, tool.permission, name.startsWith("app_") ? undefined : (account ?? undefined));
+        this.authorize(id, tool.permission, account ?? undefined);
         if ((this.epochs.get(id) ?? 0) !== epoch) throw new McpError("forbidden", "请求期间授权发生变化");
       };
       let result: unknown;
@@ -761,7 +764,7 @@ export class McpService {
   ): Promise<unknown> {
     this.ports.assertEnabled(method);
     if (!this.ports.invoke) throw new McpError("unavailable", "业务适配器未注册");
-    const account = params.account as string;
+    const account = (params.account as string | null) ?? "";
     if (readOnly) return this.ports.invoke(method, params, guard, guard);
     const key = `business:${client.id}:${account}:${method}:${params.idempotencyKey}`;
     const fingerprint = createHash("sha256").update(canonical(params)).digest("hex");

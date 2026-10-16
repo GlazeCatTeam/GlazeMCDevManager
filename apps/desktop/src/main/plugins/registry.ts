@@ -19,6 +19,7 @@ import {
 } from "@glaze/contracts";
 import type { PreferenceStore } from "@glaze/storage";
 import { ensureOwnedDirectory, ownedPath } from "../files/owned-directory";
+import { CapabilityError } from "../ipc/errors";
 import type { LogService } from "../logs/service";
 import {
   isPluginId,
@@ -33,6 +34,7 @@ export interface BuiltinPlugin {
   name: string;
   version: string;
   description: string;
+  contributes?: { pages?: { id: string; title: string; chrome?: string }[] };
 }
 type Candidate = ReturnType<typeof parseThemeArchive>;
 
@@ -150,12 +152,13 @@ export class PluginRegistry {
 
   /** Disable optional modules only; a currently selected theme must be switched before disabling */
   setEnabled(id: unknown, enabled: unknown): PluginSnapshot {
-    if (typeof id !== "string" || typeof enabled !== "boolean") throw new Error("插件状态参数无效");
+    if (typeof id !== "string" || typeof enabled !== "boolean")
+      throw new CapabilityError("validation", "插件状态参数无效");
     const plugin = this.snapshot().plugins.find((item) => item.id === id);
-    if (!plugin || plugin.required || plugin.error) throw new Error("此插件不能更改启用状态");
+    if (!plugin || plugin.required || plugin.error) throw new CapabilityError("validation", "此插件不能更改启用状态");
     const appearance = this.store.get("appearance") as { themeId?: unknown } | undefined;
     if (!enabled && plugin.kind === "theme" && appearance?.themeId === id)
-      throw new Error("请先在外观设置中切换主题，再停用当前主题");
+      throw new CapabilityError("validation", "请先在外观设置中切换主题，再停用当前主题");
     this.store.set("plugins.enabled", { ...this.switches(), [id]: enabled });
     this.logs.write("info", "plugins", `${enabled ? "启用" : "停用"}插件 ${id}`);
     this.changed();

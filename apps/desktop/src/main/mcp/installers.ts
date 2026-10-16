@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { McpInstaller, McpInstallerId } from "@glaze/contracts";
@@ -17,6 +17,8 @@ interface Installer {
   install(url: string): Promise<void>;
   /** Remove the glaze entry only when it still points at this key */
   uninstall(key: string): Promise<void>;
+  /** Whether the configuration still holds an entry with this key; null when it cannot be read */
+  has(key: string): Promise<boolean | null>;
 }
 
 const home = homedir();
@@ -77,6 +79,14 @@ function jsonInstaller(
       delete servers[NAME];
       writeConfig(file, `${JSON.stringify(config, null, 2)}\n`);
     },
+    has: async (key) => {
+      try {
+        const servers = readJson(file)[section] as Record<string, unknown> | undefined;
+        return JSON.stringify(servers?.[NAME] ?? "").includes(key);
+      } catch {
+        return null;
+      }
+    },
   };
 }
 
@@ -122,6 +132,12 @@ const codex: Installer = {
     const next = withoutTomlServer(current, (block) => !block.includes(key));
     if (next !== current) writeConfig(codexFile, next);
   },
+  has: async (key) => {
+    if (!existsSync(codexFile)) return false;
+    // A block that keeps the key survives removal only when it is the glaze server holding this key
+    const current = readFileSync(codexFile, "utf8");
+    return withoutTomlServer(current, (block) => block.includes(key)) !== withoutTomlServer(current);
+  },
 };
 
 /** Run a command and return stdout, rejecting on non-zero exit */
@@ -138,15 +154,49 @@ function run(file: string, args: string[]): Promise<string> {
   });
 }
 
-/** Locate the Claude Code CLI from PATH or the native installer's default folder */
+/** Newest claude.exe under a Claude desktop "claude-code/<version>/<build>/" folder */
+function bundledClaude(root: string): string | null {
+  try {
+    const versions = readdirSync(root)
+      .filter((name) => /^\d+(\.\d+)*$/.test(name))
+      .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+    for (const version of versions)
+      for (const build of readdirSync(join(root, version))) {
+        const file = join(root, version, build, "claude.exe");
+        if (existsSync(file)) return file;
+      }
+  } catch {
+    // Folder missing or unreadable
+  }
+  return null;
+}
+
+/** Locate the Claude Code CLI from PATH, the native installer or the copy bundled with the Claude desktop app */
 async function claudeCli(): Promise<string | null> {
   try {
     const found = (await run("where.exe", ["claude"])).split(/\r?\n/).filter(Boolean);
-    return found.find((path) => /\.(exe|cmd)$/i.test(path)) ?? found[0] ?? null;
+    const path = found.find((entry) => /\.(exe|cmd)$/i.test(entry)) ?? found[0];
+    if (path) return path;
   } catch {
-    const native = join(home, ".local", "bin", "claude.exe");
-    return existsSync(native) ? native : null;
+    // Not on PATH
   }
+  const native = join(home, ".local", "bin", "claude.exe");
+  if (existsSync(native)) return native;
+  const local = process.env.LOCALAPPDATA ?? join(home, "AppData", "Local");
+  const packaged = (() => {
+    try {
+      return readdirSync(join(local, "Packages"))
+        .filter((name) => name.startsWith("Claude_"))
+        .map((name) => join(local, "Packages", name, "LocalCache", "Roaming", "Claude", "claude-code"));
+    } catch {
+      return [];
+    }
+  })();
+  for (const root of [join(appData, "Claude", "claude-code"), ...packaged]) {
+    const file = bundledClaude(root);
+    if (file) return file;
+  }
+  return null;
 }
 
 const claudeFile = join(home, ".claude.json");
@@ -179,6 +229,7 @@ const claudeCode: Installer = {
     if (cli) await run(cli, ["mcp", "remove", NAME, "--scope", "user"]).catch(() => claudeJson.uninstall(key));
     else await claudeJson.uninstall(key);
   },
+  has: (key) => claudeJson.has(key),
 };
 
 const installers: Installer[] = [
@@ -237,6 +288,12 @@ export async function installTool(id: McpInstallerId, url: string): Promise<void
     if (error instanceof McpError) throw error;
     throw new McpError("config", `写入 ${installer.name} 配置失败，请用「复制给 AI 的一句话」手动连接`);
   }
+}
+
+/** Check whether a one-click configuration still points at this key */
+export async function checkTool(id: McpInstallerId, key: string): Promise<boolean | null> {
+  const installer = installers.find((entry) => entry.id === id);
+  return installer ? installer.has(key).catch(() => null) : null;
 }
 
 /** Best-effort cleanup when the user removes a one-click connection */

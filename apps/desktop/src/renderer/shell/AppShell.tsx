@@ -99,6 +99,12 @@ export function AppShell() {
     [location],
   );
 
+  // Follow host-validated navigation requests through the existing shell navigation
+  useEffect(() => {
+    if (!navigation) return;
+    return onHostEvent("app.navigate", ({ route, params }) => navigation.navigate(route, params));
+  }, [navigation]);
+
   if (!location || !navigation || (registry && !registry.snapshot)) {
     return (
       <div className={styles.shell}>

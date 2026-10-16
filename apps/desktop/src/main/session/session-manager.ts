@@ -115,10 +115,11 @@ export class SessionManager {
     return this.check(current.id);
   }
 
-  /** Switch to a saved account after verifying it; on failure the current account stays */
-  async switchTo(id: string): Promise<AccountSummary> {
+  /** Verify a saved account and recheck the caller before changing the current account */
+  async switchTo(id: string, beforeSwitch?: () => void): Promise<AccountSummary> {
     return this.exclusive(async () => {
       const summary = await this.check(id);
+      beforeSwitch?.();
       this.accounts.setCurrent(id);
       this.useSavedCurrent = true;
       this.emit();

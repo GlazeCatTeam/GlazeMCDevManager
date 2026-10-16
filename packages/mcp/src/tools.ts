@@ -1,5 +1,6 @@
 import { capabilities, type RpcMethod, workSections } from "@glaze/contracts";
 import { z } from "zod";
+import { appTools } from "./app-tools";
 import { businessTools } from "./business-tools";
 import { directTools } from "./direct-tools";
 
@@ -103,7 +104,12 @@ export function legacyToolDefinitions(): ToolDefinition[] {
 
 /** Publish the direct API; legacy snapshot helpers are never listed or callable by MCP clients */
 export function toolDefinitions(): ToolDefinition[] {
-  return [...legacyToolDefinitions().filter((tool) => tool.method.includes(".")), ...directTools, ...businessTools];
+  return [
+    ...legacyToolDefinitions().filter((tool) => tool.method.includes(".")),
+    ...directTools,
+    ...businessTools,
+    ...appTools,
+  ];
 }
 
 /** Declare editing schemas separately from shell-only platform write endpoints */

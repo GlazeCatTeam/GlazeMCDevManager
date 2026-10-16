@@ -26,6 +26,7 @@ import {
   searchWorks,
 } from "@glaze/netease";
 import type { SessionManager } from "../session/session-manager";
+import type { createMcpApplication } from "./application";
 
 type Handler = (session: NeteaseSession, params: Record<string, unknown>) => Promise<Result<unknown>>;
 
@@ -60,13 +61,17 @@ const handlers = new Map<string, Handler>([
 ]);
 
 /** Inject fixed account sessions and write guards without synthesizing renderer IPC events */
-export function createMcpBusiness(sessions: Pick<SessionManager, "request">) {
+export function createMcpBusiness(
+  sessions: Pick<SessionManager, "request">,
+  application?: ReturnType<typeof createMcpApplication>,
+) {
   return async (
     method: string,
     params: Record<string, unknown>,
     guard: () => void,
     beforeWrite: () => void,
   ): Promise<unknown> => {
+    if (method.startsWith("app.") && application) return application(method, params, guard, beforeWrite);
     const handler = handlers.get(method);
     if (!handler) throw new McpError("unknown_tool", "业务方法未注册");
     guard();

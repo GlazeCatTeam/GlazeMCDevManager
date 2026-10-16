@@ -92,6 +92,7 @@ export interface RpcMethods {
   "mcp.installers": { params: undefined; result: McpInstaller[] };
   "mcp.connect": { params: { tool: McpInstallerId; level: McpLevel }; result: McpConnectResult };
   "mcp.answer": { params: { requestId: string; decision: McpDecision }; result: undefined };
+  "mcp.repair": { params: { clientId: string }; result: undefined };
   "promotion.activities": { params: PromotionPageParams; result: { records: PromotionActivity[]; total: number } };
   "promotion.discount": { params: AccountParams | undefined; result: { activity: PromotionActivity | null } };
   "promotion.module": { params: PromotionModuleParams; result: PromotionModuleData };
@@ -191,6 +192,7 @@ export interface RpcMethods {
 }
 
 export interface EventPayloads {
+  "app.navigate": { route: string; params: Record<string, string> };
   "mcp.changed": { pendingCount: number; requestCount: number; connectedCount: number };
   "sessionSettings.changed": SessionSettings;
   "plugins.changed": PluginSnapshot;

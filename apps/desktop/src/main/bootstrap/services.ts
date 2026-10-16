@@ -71,21 +71,30 @@ export function createServices(ensureTray: () => void, showWindow: () => void) {
   logs.write("info", "app", `应用启动，已发现 ${plugins.snapshot().plugins.length} 个插件与主题`);
   process.on("uncaughtExceptionMonitor", () => logs.write("error", "app", "主进程发生未捕获异常"));
   app.on("render-process-gone", () => logs.write("error", "renderer", "界面进程意外退出"));
-  mcp = createMcpHost(sessions, plugins, () =>
-    broadcast("mcp.changed", {
-      pendingCount: mcp?.service.data.operations.filter((operation) => operation.state === "pending").length ?? 0,
-      requestCount: mcp?.service.requestCount() ?? 0,
-      connectedCount: mcp?.service.connections.size ?? 0,
-    }),
+  const settings = {
+    appearance: new AppearanceService(preferences, () => plugins.snapshot().themes),
+    general: new GeneralService(preferences, { readLoginItem, setLoginItem, ensureTray }),
+    cache: new CacheService(session.defaultSession, clearRemoteImageCache, () => broadcast("cache.cleared", undefined)),
+    sessionSettings,
+  };
+  mcp = createMcpHost(
+    sessions,
+    plugins,
+    () =>
+      broadcast("mcp.changed", {
+        pendingCount: mcp?.service.data.operations.filter((operation) => operation.state === "pending").length ?? 0,
+        requestCount: mcp?.service.requestCount() ?? 0,
+        connectedCount: mcp?.service.connections.size ?? 0,
+      }),
+    settings,
+    logs,
+    broadcast,
   );
   return {
     mcp,
     sessions,
-    sessionSettings,
     logs,
     plugins,
-    appearance: new AppearanceService(preferences, () => plugins.snapshot().themes),
-    general: new GeneralService(preferences, { readLoginItem, setLoginItem, ensureTray }),
-    cache: new CacheService(session.defaultSession, clearRemoteImageCache, () => broadcast("cache.cleared", undefined)),
+    ...settings,
   };
 }

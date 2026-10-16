@@ -33,6 +33,7 @@ export const capabilities: Record<RpcMethod, Capability> = {
   "mcp.installers": shellOnly(null, "read"),
   "mcp.connect": shellOnly(null, "write"),
   "mcp.answer": shellOnly(null, "write"),
+  "mcp.repair": shellOnly(null, "write"),
   "promotion.activities": {
     caller: "any",
     permission: "netease:promotion.read",

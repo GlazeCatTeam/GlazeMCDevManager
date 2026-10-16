@@ -46,12 +46,17 @@ import {
 } from "@glaze/netease";
 import { app, BrowserWindow, dialog, Notification, safeStorage } from "electron";
 import { getAboutInfo, getDependencyLicenses } from "../ipc/about";
+import { sendEvent } from "../ipc/rpc";
 import { uploadSelectedWorkFile } from "../ipc/work-files";
+import type { LogService } from "../logs/service";
+import { bundledPlugins } from "../plugins/bundled";
 import type { PluginRegistry } from "../plugins/registry";
+import { type ApplicationServices, type Broadcast, createApplicationActions } from "../preferences/actions";
 import type { SessionManager } from "../session/session-manager";
 import { appWindows } from "../windows/main-window";
+import { createMcpApplication } from "./application";
 import { createMcpBusiness } from "./business";
-import { connectPrompt, installTool, listInstallers, uninstallTool } from "./installers";
+import { checkTool, connectPrompt, installTool, listInstallers, uninstallTool } from "./installers";
 import { loadMcpData, saveMcpData } from "./store";
 
 /** Keep ambiguous platform responses distinguishable from an explicit business rejection */
@@ -61,7 +66,14 @@ function writeResult<T>(result: Result<T>): Result<T> {
 }
 
 /** Host adapter injects business services; no synthetic Electron IPC event is used */
-export function createMcpHost(sessions: SessionManager, plugins: PluginRegistry, changed: () => void) {
+export function createMcpHost(
+  sessions: SessionManager,
+  plugins: PluginRegistry,
+  changed: () => void,
+  settings: Omit<ApplicationServices, "sessions" | "plugins">,
+  logs: LogService,
+  broadcast: Broadcast,
+) {
   const root = join(app.getPath("userData"), "mcp");
   const file = join(root, "state.bin");
   let persistenceError: string | null = null;
@@ -142,9 +154,26 @@ export function createMcpHost(sessions: SessionManager, plugins: PluginRegistry,
   /** Require an existing main window for every native choice and trusted approval */
   const window = () => {
     const win = appWindows()[0];
-    if (!win) throw new McpError("unavailable", "请先打开应用窗口");
+    if (!win || win.isDestroyed() || win.webContents.isDestroyed())
+      throw new McpError("unavailable", "请先打开应用窗口");
     return win;
   };
+  const application = createMcpApplication(
+    createApplicationActions({ ...settings, sessions, plugins }, broadcast),
+    plugins,
+    logs,
+    bundledPlugins,
+    () => {
+      const win = window();
+      return {
+        isMinimized: () => win.isMinimized(),
+        restore: () => win.restore(),
+        show: () => win.show(),
+        focus: () => win.focus(),
+        navigate: (payload) => sendEvent(win, "app.navigate", payload),
+      };
+    },
+  );
   /** Recheck grants during long uploads without depending on the UI's selected account */
   const assertUpload = (clientId: string, account: string, promotion = false) => {
     const client = service.data.clients.find((entry) => entry.id === clientId);
@@ -159,7 +188,7 @@ export function createMcpHost(sessions: SessionManager, plugins: PluginRegistry,
     plugins.assertMethodEnabled(promotion ? "promotion.upload" : "works.save");
   };
   const ports: McpPorts = {
-    invoke: createMcpBusiness(sessions),
+    invoke: createMcpBusiness(sessions, application),
     save: (state) => {
       if (persistenceError) return;
       saveMcpData(file, state);
@@ -356,7 +385,32 @@ export function createMcpHost(sessions: SessionManager, plugins: PluginRegistry,
       service.resolveOperation(params?.operationId);
       return undefined;
     },
-    "mcp.snapshot": () => service.snapshot(),
+    "mcp.snapshot": async () => {
+      const snapshot = service.snapshot();
+      // Other programs may rewrite their own config files and drop the entry Glaze added
+      const missing = await Promise.all(
+        service.data.clients.map(async (client) =>
+          client.key && client.tool && client.tool !== "other"
+            ? (await checkTool(client.tool, client.key)) === false
+            : false,
+        ),
+      );
+      const flagged = new Set(service.data.clients.filter((_, index) => missing[index]).map((client) => client.id));
+      return {
+        ...snapshot,
+        clients: snapshot.clients.map((client) =>
+          flagged.has(client.id) ? { ...client, configMissing: true } : client,
+        ),
+      };
+    },
+    "mcp.repair": async (params: { clientId: string }) => {
+      const client = service.data.clients.find((entry) => entry.id === params?.clientId);
+      if (!client?.key || !client.tool || client.tool === "other" || !service.endpoint)
+        throw new McpError("validation", "这个连接不能自动修复，请重新连接");
+      await installTool(client.tool, `${service.endpoint}?key=${client.key}`);
+      changed();
+      return undefined;
+    },
     "mcp.setEnabled": (params: RpcMethods["mcp.setEnabled"]["params"]) => setEnabled(params?.enabled, params?.port),
     "mcp.grant": (params: { clientId: string; grant: McpGrant }) => {
       service.grant(params?.clientId, params?.grant);

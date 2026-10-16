@@ -24,6 +24,12 @@ export const mcpPermissions = [
   "works:upload",
   "works:save",
   "works:review",
+  "app:settings.read",
+  "app:settings.write",
+  "app:plugins.read",
+  "app:plugins.write",
+  "app:logs.read",
+  "app:navigate",
 ] as const;
 export type McpPermission = (typeof mcpPermissions)[number];
 
@@ -45,6 +51,12 @@ export const mcpPermissionLabels: Record<McpPermission, string> = {
   "works:upload": "上传作品素材",
   "works:save": "新建与修改作品",
   "works:review": "提交作品审核",
+  "app:settings.read": "查看应用设置",
+  "app:settings.write": "修改应用设置",
+  "app:plugins.read": "查看插件",
+  "app:plugins.write": "启用或停用插件",
+  "app:logs.read": "查看运行日志",
+  "app:navigate": "打开页面与切换当前账号",
 };
 
 /** Permissions a user can toggle; legacy draft access is kept only for stored grants */
@@ -56,6 +68,7 @@ export type McpLevel = "view" | "assist" | "full";
 const readPermissions = mcpSelectablePermissions.filter((permission) => permission.endsWith(".read"));
 const assistPermissions: McpPermission[] = [
   ...readPermissions,
+  "app:navigate",
   "netease:community.write",
   "netease:messages.write",
   "works:upload",
@@ -66,16 +79,16 @@ export const mcpLevels: Record<McpLevel, { title: string; description: string; p
   view: {
     title: "只看数据",
     description: "查询作品、数据、评论和消息，不查看收益，不做任何修改",
-    permissions: readPermissions.filter((permission) => permission !== "netease:income.read"),
+    permissions: readPermissions.filter((permission) => !["netease:income.read", "app:logs.read"].includes(permission)),
   },
   assist: {
     title: "帮我打理",
-    description: "查看全部数据和收益，修改作品、上传素材、回复玩家、处理消息",
+    description: "查看全部数据、收益与日志，修改作品、上传素材、回复玩家、处理消息、打开页面与切换账号",
     permissions: assistPermissions,
   },
   full: {
     title: "完全托管",
-    description: "在帮我打理的基础上，还可以提审、上架、调价、删除作品和报名活动",
+    description: "在帮我打理的基础上，还可以提审、上架、调价、删除作品、报名活动、修改应用设置与启停插件",
     permissions: [...mcpSelectablePermissions],
   },
 };
@@ -139,6 +152,8 @@ export interface McpClient extends McpGrant {
   tool?: McpInstallerId;
   /** Keyed clients keep their grant across reconnects */
   persistent?: boolean;
+  /** The one-click configuration no longer holds this client's key, e.g. another program rewrote it */
+  configMissing?: boolean;
 }
 export type McpOperationState =
   | "pending"
