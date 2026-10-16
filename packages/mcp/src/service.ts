@@ -450,7 +450,8 @@ export class McpService {
   /** Include every permission required by the requested phases of a tool call */
   private requiredPermissions(tool: ToolDefinition, params: Record<string, unknown>): McpPermission[] {
     const permissions = tool.permission ? [tool.permission as McpPermission] : [];
-    if (tool.name === "works_save" && params.submitReview === true) permissions.push("works:review");
+    if (["works_save", "works_create"].includes(tool.name) && params.submitReview === true)
+      permissions.push("works:review");
     return [...new Set(permissions)];
   }
 
@@ -741,7 +742,16 @@ export class McpService {
     const fingerprint = createHash("sha256")
       .update(canonical(tool.invoke ? params : { name: tool.name, params }))
       .digest("hex");
-    if (previous.fingerprint !== fingerprint) throw new McpError("conflict", "幂等键已用于其他内容");
+    if (previous.fingerprint !== fingerprint) {
+      const { submitReview, ...legacyParams } = params;
+      const legacyCreate = tool.name === "works_create" && submitReview === false;
+      const legacyFingerprint = legacyCreate
+        ? createHash("sha256")
+            .update(canonical({ name: tool.name, params: legacyParams }))
+            .digest("hex")
+        : null;
+      if (previous.fingerprint !== legacyFingerprint) throw new McpError("conflict", "幂等键已用于其他内容");
+    }
     let owner = tool.invoke ?? tool.method;
     if (tool.plugin) owner = `plugin:${tool.plugin.pluginId}`;
     else if (!owner.includes(".")) owner = tool.name === "promotion_upload" ? "promotion.upload" : "works.save";
@@ -1251,7 +1261,7 @@ export class McpService {
     const actions: Record<string, McpAction> = {
       works_asset_import: "import",
       works_asset_upload: "upload",
-      works_create: "create",
+      works_create: params.submitReview ? "create_review" : "create",
       works_save: params.submitReview ? "save_review" : "save",
       works_submit_review: "review",
     };
@@ -1354,7 +1364,7 @@ export class McpService {
             : "works:save",
       draft.account,
     );
-    if (action === "save_review") this.authorize(id, "works:review", draft.account);
+    if (action === "save_review" || action === "create_review") this.authorize(id, "works:review", draft.account);
     const unresolved = this.data.operations.some((operation) => {
       if (
         operation.resolvedAt ||
@@ -1369,7 +1379,8 @@ export class McpService {
       return draft.itemId ? (operation.itemId ?? previous?.itemId) === draft.itemId : previous?.itemId === null;
     });
     if (unresolved) throw new McpError("conflict", "此账号作品存在待核实的写入，请先在应用内核对平台结果");
-    if (action === "create" && draft.itemId) throw new McpError("validation", "已有作品不能再次创建");
+    if (["create", "create_review"].includes(action) && draft.itemId)
+      throw new McpError("validation", "已有作品不能再次创建");
     if (["save", "save_review", "review"].includes(action) && !draft.itemId)
       throw new McpError("validation", "先创建作品并核实准确 ID");
     if (action === "review" && Object.keys(draft.patch).length)
@@ -1501,13 +1512,17 @@ export class McpService {
             throw new McpError("conflict", "作品状态已变化，请重新创建草稿");
           expected = { ...current.fields, ...patch };
         }
-        if (operation.action === "create") {
-          operation.phase = "creating";
+        if (operation.action === "create" || operation.action === "create_review") {
+          const submitReview = operation.action === "create_review";
+          operation.phase = submitReview ? "creating_and_submitting_review" : "creating";
           this.commit();
           guard();
-          await this.ports.createWork(draft, expected, beforeWrite);
-          operation.state = "created_id_unresolved";
-          operation.message = "已创建；平台未返回可靠 ID，请在作品列表确认，后续配置与提审需重新建立草稿";
+          await this.ports.createWork(draft, expected, beforeWrite, submitReview);
+          externalSent = false;
+          operation.state = "succeeded";
+          operation.phase = "completed";
+          operation.result = { created: true, submittedReview: submitReview, itemId: null };
+          operation.message = submitReview ? "作品已创建并提交审核" : "作品已创建";
           return;
         }
         if (operation.action !== "review" && Object.keys(patch).length) {

@@ -201,8 +201,8 @@ const editingTools = [
     "works_create",
     "创建作品",
     "works:save",
-    z.strictObject(request),
-    "获得保存权限后直接创建平台作品，无需二次确认。平台未返回作品 ID 时返回 created_id_unresolved，禁止猜测 ID 或自动提审。",
+    z.strictObject({ ...request, submitReview: z.boolean().default(false) }),
+    "直接创建平台作品。submitReview 默认为 false，仅明确要求新增并提审时设为 true，额外需要提审权限；同一次请求完成，成功不依赖返回 ID，后续修改仍需准确 ID。",
   ),
   edit(
     "works_save",

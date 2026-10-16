@@ -18,6 +18,8 @@ export function deferredWorkCreatePatch(fields: WorkRecord): WorkRecord {
 export interface WorkCreateParams {
   account: string;
   fields: WorkRecord;
+  /** Submit review in the same create request only when explicitly requested */
+  submitReview?: boolean;
 }
 
 /** Start with an account-local form, without inventing a platform work id */
@@ -72,6 +74,7 @@ export function isWorkCreateParams(value: unknown): value is WorkCreateParams {
     isWorkRecord(value) &&
     typeof value.account === "string" &&
     value.account.length > 0 &&
+    (value.submitReview === undefined || typeof value.submitReview === "boolean") &&
     isWorkRecord(value.fields) &&
     isWorkValue(value.fields) &&
     Object.keys(value.fields).every((key) => (workCreateFields as string[]).includes(key))

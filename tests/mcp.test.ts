@@ -763,7 +763,7 @@ test("unknown results lock drafts; restart preserves unknown writes and expires 
   assert.equal(restarted.snapshot().operations[0]?.state, "unknown");
 });
 
-test("creation without an ID returns unresolved and cannot accidentally submit review", async () => {
+test("creation without an ID succeeds and cannot accidentally submit review", async () => {
   const f = fixture();
   const draft = (await f.call("works_draft_create", { idempotencyKey: "new" })) as McpDraft;
   const operation = (await f.call("works_create", {
@@ -771,7 +771,7 @@ test("creation without an ID returns unresolved and cannot accidentally submit r
     revision: 1,
     idempotencyKey: "create",
   })) as McpOperation;
-  assert.equal(operation.state, "created_id_unresolved");
+  assert.equal(operation.state, "succeeded");
   assert.equal(f.counts.create, 1);
   assert.equal(f.counts.review, 0);
 });
@@ -1239,7 +1239,7 @@ test("direct create, review and save-review keep distinct grants and fail-closed
     fields: { item_name: "新作品" },
     idempotencyKey: "create",
   })) as McpOperation;
-  assert.equal(created.state, "created_id_unresolved");
+  assert.equal(created.state, "succeeded");
   assert.equal(f.counts.create, 1);
 });
 
@@ -2102,6 +2102,11 @@ test("history retention never hides unresolved writes and reconciliation never m
 test("history rollover protects unresolved creations, platform actions and saves whose later review failed", async () => {
   const f = fixture(false, 0);
   f.ports.editor = async (_account, itemId) => ({ ...structuredClone(f.remote), itemId });
+  f.ports.createWork = async (_draft, _fields, beforeWrite) => {
+    beforeWrite();
+    f.counts.create++;
+    throw new McpError("timeout", "创建结果待核实");
+  };
   const createArgs = { fields: { item_name: "新建待核实" }, idempotencyKey: "protected-create" };
   const created = (await f.call("works_create", createArgs)) as McpOperation;
   f.ports.review = async (_account, _itemId, _expected, beforeWrite) => {
@@ -2126,7 +2131,7 @@ test("history rollover protects unresolved creations, platform actions and saves
   };
   const failed = (await f.call("works_save", failedArgs)) as McpOperation;
   await f.call("works_save", { itemId: "789", patch: { item_name: "普通完成" }, idempotencyKey: "archived-success" });
-  assert.equal(created.state, "created_id_unresolved");
+  assert.equal(created.state, "unknown");
   assert.equal(platform.state, "platform_action");
   assert.equal(failed.state, "failed");
   assert.equal((failed.result as { saved: boolean }).saved, true);

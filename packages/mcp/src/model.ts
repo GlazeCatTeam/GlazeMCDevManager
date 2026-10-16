@@ -60,7 +60,7 @@ export interface McpPorts {
   options(account: string): Promise<WorkEditorOptions>;
   validate(draft: McpDraft, patch: WorkRecord): Promise<{ field: string; message: string }[]>;
   saveWork(draft: McpDraft, patch: WorkRecord, beforeWrite: () => void): Promise<void>;
-  createWork(draft: McpDraft, fields: WorkRecord, beforeWrite: () => void): Promise<void>;
+  createWork(draft: McpDraft, fields: WorkRecord, beforeWrite: () => void, submitReview?: boolean): Promise<void>;
   review(account: string, itemId: string, expected: WorkRecord, beforeWrite: () => void): Promise<WorkReviewResult>;
   pickFile(): Promise<string | null>;
   upload(draft: McpDraft, asset: StoredAsset, beforeWrite: () => void): Promise<WorkUpload>;

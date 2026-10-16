@@ -1,3 +1,4 @@
+import { deferredWorkCreatePatch, isWorkRecord } from "@glaze/contracts";
 import { z } from "zod";
 import type { ToolDefinition } from "./tools";
 
@@ -27,6 +28,15 @@ function tool(
   readOnly = false,
 ): ToolDefinition {
   let schema = z.strictObject(shape);
+  if (name === "works_create")
+    schema = schema.superRefine((params, ctx) => {
+      if (isWorkRecord(params.fields) && Object.keys(deferredWorkCreatePatch(params.fields)).length)
+        ctx.addIssue({
+          code: "custom",
+          path: ["fields"],
+          message: "新建接口不支持 PC 同步、关联作品、授权证明或折扣配置；请先创建作品，确认准确 ID 后再保存这些配置",
+        });
+    });
   if (name === "works_upload" || name === "promotion_upload")
     schema = schema.superRefine((params, ctx) => {
       const directory = params.directoryId !== undefined || params.relativePath !== undefined;
@@ -69,8 +79,8 @@ export const directTools = [
     "works_create",
     "直接创建作品",
     "works:save",
-    { ...account, fields, ...key },
-    "直接提交完整新作品字段，无需草稿。先读取 works_options。上传新作品材料时省略 itemId，再在 fields 引用材料 ID。平台未返回准确 ID 时返回 created_id_unresolved，不猜测作品 ID。",
+    { ...account, fields, submitReview: z.boolean().default(false), ...key },
+    "直接创建作品，成功即返回 succeeded，不要求因缺少 ID 人工核对。先读取 works_options；上传新作品材料时省略 itemId，再引用材料 ID。submitReview 默认 false；仅用户明确要求新增并提审时设为 true，额外需要提审权限，在同一次创建请求中完成。结果包含 created、submittedReview 和 itemId（平台未返回时为 null），不猜测 ID；后续修改或补充 PC 同步等配置仍须准确 ID。unknown 禁止自动重试，重试复用 idempotencyKey。",
   ),
   tool(
     "works_submit_review",

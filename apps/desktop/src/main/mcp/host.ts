@@ -298,9 +298,9 @@ export function createMcpHost(
           ),
         ),
       ),
-    createWork: (draft, fields, guard) =>
+    createWork: (draft, fields, guard, submitReview = false) =>
       sessions.request(draft.account, async (session) =>
-        writeResult(await createPlatformWork(session, { account: draft.account, fields }, guard)),
+        writeResult(await createPlatformWork(session, { account: draft.account, fields, submitReview }, guard)),
       ),
     review: (account, itemId, expected, guard) =>
       sessions.request(account, async (session) =>

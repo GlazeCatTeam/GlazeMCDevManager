@@ -76,15 +76,15 @@ export function validateWorkCreate(fields: WorkRecord, options: WorkEditorOption
   return null;
 }
 
-/** Construct only the documented create DTO, without identifiers or update-only metadata */
-export function buildWorkCreate(fields: WorkRecord): WorkRecord {
+/** Construct the documented create DTO with an explicit, separately authorized review choice */
+export function buildWorkCreate(fields: WorkRecord, submitReview = false): WorkRecord {
   fields = normalizeWorkAdvanced(fields);
   const body: WorkRecord = {
     ...structuredClone(workCreateDefaults),
     ...Object.fromEntries(Object.entries(fields).filter(([key]) => Object.hasOwn(workCreateDefaults, key))),
     item_name: String(fields.item_name).trim(),
     item_version: "0.1",
-    is_check_apply: false,
+    is_check_apply: submitReview,
     sync_pc_flag: false,
     dlc_info: { dlc_switch: false, dlc_type: "off", master: {}, slave_list: [] },
   };
@@ -101,7 +101,7 @@ export function buildWorkCreate(fields: WorkRecord): WorkRecord {
   return body;
 }
 
-/** Create once; the upstream endpoint succeeds without returning a work id */
+/** Create and optionally submit review in one POST, without depending on a returned work id */
 export async function createWork(
   session: NeteaseSession,
   params: WorkCreateParams,
@@ -119,7 +119,7 @@ export async function createWork(
     "/items/categories/pe/upload",
     session,
     "POST",
-    JSON.stringify(buildWorkCreate(fields)),
+    JSON.stringify(buildWorkCreate(fields, params.submitReview ?? false)),
   );
   return result.ok ? ok(undefined) : result;
 }

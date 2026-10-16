@@ -80,7 +80,7 @@
 
 `base` 可选，用于核对 AI 读取时的原值。宿主仍会在实际保存前复核平台数据和作品状态。`patch` 支持现有编辑器全部可写分区字段，包括基本信息、定价、详情、资源、图片、视频、PC 同步、更新与上架设置；只读平台字段不可伪造。普通保存默认不提审；`submitReview: true` 需要提审权限。
 
-`works_create` 直接接收 `fields`；`works_submit_review` 直接接收作品 ID。新建未得到可靠作品 ID 时保留 `created_id_unresolved` 状态，不猜测 ID，不自动提审。
+`works_create` 接收 `fields` 和可选 `submitReview`（默认 false）。普通新增仅要求保存授权；明确要求新增并提审时设为 true，同时检查保存与提审授权，由同一次创建请求设置 `is_check_apply=true`，不查询 ID 或另发提审请求。平台确认成功后返回 `succeeded`，结果包含 `{ created: true, submittedReview: boolean, itemId: null }`；仅缺少返回 ID 不要求人工核对。后续修改或补配置仍须准确 ID，不按名称猜测；MCP 创建传入 PC 同步、关联、授权证明或折扣等后续配置时在写入前报错，避免静默忽略。旧版 `created_id_unresolved` 记录和未知写入继续要求核实，不随升级自动解除。`works_submit_review` 仍用于按准确 ID 提审已有作品。见 [ADR-0017](../adr/0017-mcp-create-and-review.md)。
 
 `works_upload` 直接导入并上传材料，返回 `assetId`。优先传 `filePath`（运行 Glaze 的电脑上、用户明确指定的素材绝对路径），在已有上传授权内后台完成，不操作窗口；也可用 `directoryId` + `relativePath` 读取已授权目录。三种来源互斥，只有显式传 `interactive: true` 才打开文件选择器；缺少来源、目录参数不完整或来源冲突时直接报错。`promotion_upload` 使用相同来源规则。
 

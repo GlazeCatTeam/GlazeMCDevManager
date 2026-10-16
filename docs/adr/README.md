@@ -20,6 +20,7 @@
 | [0014](0014-plugin-registry-driven-shell.md) | 外壳由插件注册表驱动 | 已接受 |
 | [0015](0015-node-test-runner.md) | 测试沿用 node:test，不引入 Vitest | 已接受 |
 | [0016](0016-github-releases-auto-update.md) | 通过 GitHub Releases 发布，electron-updater 自动更新 | 已接受 |
+| [0017](0017-mcp-create-and-review.md) | MCP 新增作品与新增并提审直接完成 | 已接受 |
 
 新增 ADR 时复制下面的模板，编号顺延。
 
