@@ -125,7 +125,7 @@ type CallerIdentity =
 | 模块 | 计划暴露的工具 | 风险 |
 |---|---|---|
 | 账号 | `account_list`、`account_current`（能力已在 `@glaze/contracts` 的 `capabilities` 定义，MCP 服务待接入）；等级卡片与首页共用 `developer_level` / `developer.level`，支持按 `account` 读取等级、经验、升阶任务及两类贡献；`sessionSettings.get/set` 已定义为主界面专用读/写能力（`netease:account.read/manage`），管理自动登录与过期提醒，暂不开放 MCP；登录、Cookie 导入、切换、退出、删除永不开放 | read；会话偏好写入仅主界面 |
-| 首页 | `developer_level`（等级、阶、经验、贡献）、`analytics_overview`（本月 / 上月、昨日 / 14 日均的钻石与下载）、`income_estimate`（收益速算，month 可选）、`rank_list`（6 个榜单 × 4 个分类的前 N 条）、`rank_page`（start/limit 逐批读取，返回 items/total/nextStart，nextStart 为 null 结束）；能力已定义并接入界面，均可选 `account` 参数，MCP 服务待接入 | read |
+| 首页 | `developer_level`（等级、阶、经验、贡献）、`analytics_overview`（本月 / 上月、昨日 / 14 日均的钻石与下载）、`income_estimate`（收益速算，month 可选）、`rank_list`（4 个榜单，热搜不分类，其余支持 4 个分类的前 N 条）、`rank_page`（start/limit 逐批读取，返回 items/total/nextStart，nextStart 为 null 结束）；能力已定义并接入界面，均可选 `account` 参数，MCP 服务待接入 | read |
 | 作品 | 已声明 `works_list`、`works_get`、`works_review_feedback`；本轮设计增加编辑文档、选项查询、创建/修改草稿、材料上传、保存与提交审核，详见下节。所有 MCP 接入仍待实现；独立上架、删除等不在本轮范围 | read / write |
 | 数据分析 | `analytics_query` | read |
 | 收益 | `income_summary`、`income_monthly`（`income_estimate` 见首页）；`income_settle` | read；dangerous |

@@ -26,7 +26,7 @@ test("appearance and layout survive database reopen; reset leaves appearance and
     assert.deepEqual(service.getRanking(), defaultRankingBoards);
     const selected = { themeId: "ore-ui", colorMode: "system", scale: 125 };
     service.set(selected);
-    service.setRanking(["pc_like", "pe_sell"]);
+    service.setRanking(["pe_download", "pe_sell"]);
     store.set("unrelated", { keep: true });
     db.exec(
       "INSERT INTO accounts (id, nickname, login_method, last_login_at, status) VALUES ('test', 'test', 'cookie', 0, 'offline')",
@@ -36,7 +36,7 @@ test("appearance and layout survive database reopen; reset leaves appearance and
     store = new PreferenceStore(db);
     service = new AppearanceService(store);
     assert.deepEqual(service.get(), selected);
-    assert.deepEqual(service.getRanking(), ["pc_like", "pe_sell"]);
+    assert.deepEqual(service.getRanking(), ["pe_download", "pe_sell"]);
     store.setLayout("future-page", { widgets: [] });
     assert.deepEqual(service.resetLayouts(), defaultRankingBoards);
     assert.equal(db.prepare("SELECT COUNT(*) AS count FROM layouts").get()?.count, 0);
@@ -68,15 +68,31 @@ test("invalid writes are rejected and damaged or unsupported stored data uses de
       assert.throws(() => service.set(value));
       assert.deepEqual(service.get(), defaultAppearance);
     }
-    for (const value of [null, [], ["fake"], ["pe_hot", "pe_hot"]]) {
+    for (const value of [
+      null,
+      [],
+      ["fake"],
+      ["pe_hot", "pe_hot"],
+      ["pc_download"],
+      ["pc_like"],
+      ["pe_hot", "pc_like"],
+    ]) {
       assert.equal(isRankingLayout(value), false);
       assert.throws(() => service.setRanking(value));
+    }
+    // Old stored desktop layouts must not revive removed tabs or break settings restoration
+    for (const value of [
+      ["pc_download", "pc_like"],
+      ["pe_hot", "pc_like"],
+    ]) {
+      store.setLayout("glaze.home/ranking", value);
+      assert.deepEqual(service.getRanking(), defaultRankingBoards);
     }
     db.exec("UPDATE settings SET value_json = '{bad json' WHERE key = 'appearance'");
     assert.deepEqual(service.get(), defaultAppearance);
     store.set("appearance", { ...defaultAppearance, themeId: "removed-theme" });
     assert.deepEqual(service.get(), defaultAppearance);
-    service.setRanking(["pc_like"]);
+    service.setRanking(["pe_download"]);
     db.exec("UPDATE layouts SET version = 99");
     assert.deepEqual(service.getRanking(), defaultRankingBoards);
   } finally {

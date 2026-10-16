@@ -140,7 +140,7 @@ function requireItemId(params: unknown): string {
   return itemId;
 }
 
-const rankBoards: readonly RankBoard[] = ["pe_hot", "hot_search", "pe_download", "pe_sell", "pc_download", "pc_like"];
+const rankBoards: readonly RankBoard[] = ["pe_hot", "hot_search", "pe_download", "pe_sell"];
 const rankCategories: readonly RankCategory[] = ["mod", "map", "texture", "lobby"];
 
 /** Handlers for every RPC method, backed by the session manager */

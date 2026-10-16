@@ -43,7 +43,7 @@ try {
     ).ok,
     true,
   );
-  assert.equal((await page.evaluate(() => window.glaze.rpc("layout.setRanking", ["pc_like"]))).ok, true);
+  assert.equal((await page.evaluate(() => window.glaze.rpc("layout.setRanking", ["pe_download"]))).ok, true);
   assert.equal(
     (
       await page.evaluate(() =>
@@ -62,11 +62,14 @@ try {
   });
   assert.equal(await page.evaluate(() => document.documentElement.style.zoom), "1.25");
   assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), "glaze.theme.fluent-dark");
-  assert.deepEqual(await page.evaluate(() => window.glaze.rpc("layout.getRanking")), { ok: true, value: ["pc_like"] });
+  assert.deepEqual(await page.evaluate(() => window.glaze.rpc("layout.getRanking")), {
+    ok: true,
+    value: ["pe_download"],
+  });
   assert.equal((await page.evaluate(() => window.glaze.rpc("layout.reset"))).ok, true);
   assert.deepEqual(await page.evaluate(() => window.glaze.rpc("layout.getRanking")), {
     ok: true,
-    value: ["pe_hot", "hot_search", "pe_download"],
+    value: ["pe_hot", "hot_search", "pe_download", "pe_sell"],
   });
   assert.equal((await page.evaluate(() => window.glaze.rpc("appearance.get"))).value.scale, 125);
   console.log("PASS: real Electron preload/RPC, validation, process restart restoration and layout reset isolation");

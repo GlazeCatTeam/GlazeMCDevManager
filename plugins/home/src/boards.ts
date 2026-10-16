@@ -7,8 +7,6 @@ export const rankBoards: readonly { board: RankBoard; label: string }[] = [
   { board: "hot_search", label: "热搜榜" },
   { board: "pe_download", label: "手游免费榜" },
   { board: "pe_sell", label: "手游畅销榜" },
-  { board: "pc_download", label: "端游下载榜" },
-  { board: "pc_like", label: "端游点赞榜" },
 ];
 
 export const rankCategories: readonly { category: RankCategory; label: string }[] = [

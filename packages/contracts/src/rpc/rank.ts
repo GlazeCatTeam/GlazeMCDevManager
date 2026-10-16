@@ -3,7 +3,7 @@ import type { AccountParams } from "./developer";
 // Platform leaderboard capability
 
 /** pe_hot: 手游热门飙升; hot_search: 热搜 (search terms, not works); the rest are sales boards */
-export type RankBoard = "pe_hot" | "hot_search" | "pe_download" | "pe_sell" | "pc_download" | "pc_like";
+export type RankBoard = "pe_hot" | "hot_search" | "pe_download" | "pe_sell";
 
 /** Work category; ignored by hot_search */
 export type RankCategory = "mod" | "map" | "texture" | "lobby";

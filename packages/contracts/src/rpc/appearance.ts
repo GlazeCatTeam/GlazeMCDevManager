@@ -7,8 +7,8 @@ export interface AppearanceSettings {
 }
 
 export const defaultAppearance: Readonly<AppearanceSettings> = { themeId: "ore-ui", colorMode: "dark", scale: 100 };
-export const defaultRankingBoards: readonly RankBoard[] = ["pe_hot", "hot_search", "pe_download"];
-const rankingBoards: readonly string[] = [...defaultRankingBoards, "pe_sell", "pc_download", "pc_like"];
+export const defaultRankingBoards: readonly RankBoard[] = ["pe_hot", "hot_search", "pe_download", "pe_sell"];
+const rankingBoards: readonly string[] = defaultRankingBoards;
 
 /** Validate persisted preferences and untrusted RPC payloads */
 export function isAppearanceSettings(value: unknown): value is AppearanceSettings {

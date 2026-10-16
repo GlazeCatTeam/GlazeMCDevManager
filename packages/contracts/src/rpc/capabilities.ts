@@ -166,7 +166,7 @@ export const capabilities: Record<RpcMethod, Capability> = {
     mcp: {
       title: "平台排行榜",
       description:
-        "返回网易我的世界资源平台的榜单。board：pe_hot 手游热门飙升、hot_search 热搜（返回搜索词，不是作品）、pe_download 手游免费、pe_sell 手游畅销、pc_download 端游下载、pc_like 端游点赞。category：mod 模组、map 地图、texture 材质光影、lobby 联机大厅，默认 mod，热搜忽略此参数。limit 1–50，默认 10。",
+        "返回网易我的世界资源平台的榜单。board：pe_hot 手游热门飙升、hot_search 热搜（返回搜索词，不是作品）、pe_download 手游免费、pe_sell 手游畅销。category：mod 模组、map 地图、texture 材质光影、lobby 联机大厅，默认 mod，热搜忽略此参数。limit 1–50，默认 10。",
     },
   },
   "rank.page": {

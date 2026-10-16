@@ -9,6 +9,20 @@ const session = { sessionCookie: "offline-rank-cookie" };
 const imageUrl = "https://x19.fp.ps.netease.com/file/rank-test";
 Object.assign(globalThis, { glaze: undefined });
 
+test("removed desktop boards are rejected before any platform request", async (t) => {
+  let calls = 0;
+  t.mock.method(globalThis, "fetch", async () => {
+    calls++;
+    throw new Error("Unexpected request");
+  });
+  for (const board of ["pc_download", "pc_like"]) {
+    const result = await getRankPage(session, board as Parameters<typeof getRankPage>[1], "mod", 0, 50);
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error.kind, "business");
+  }
+  assert.equal(calls, 0);
+});
+
 test("paged rankings keep absolute positions and continue past the previous top-50 boundary", async (t) => {
   t.mock.method(globalThis, "fetch", async (input: string) => {
     const url = new URL(input);
@@ -21,20 +35,21 @@ test("paged rankings keep absolute positions and continue past the previous top-
         data: Array.from({ length }, (_, index) => ({
           item_id: String(start + index),
           item_name: `Work ${start + index}`,
+          icon_url: imageUrl,
           rank: index + 1,
           rank_change: 20,
         })),
       },
     });
   });
-  const middle = await getRankPage(session, "pc_download", "mod", 50, 50);
+  const middle = await getRankPage(session, "pe_download", "mod", 50, 50);
   assert.equal(middle.ok, true);
   if (!middle.ok) return;
   assert.equal(middle.value.items[0]?.rank, 51);
   assert.deepEqual(middle.value.items[0]?.change, { kind: "up", value: 20 });
   assert.equal(middle.value.items.at(-1)?.rank, 100);
   assert.equal(middle.value.nextStart, 100);
-  const last = await getRankPage(session, "pc_download", "mod", 150, 50);
+  const last = await getRankPage(session, "pe_download", "mod", 150, 50);
   assert.equal(last.ok && last.value.items.at(-1)?.rank, 157);
   assert.equal(last.ok && last.value.nextStart, null);
 });
@@ -58,12 +73,12 @@ test("empty search terms remain identifiable; empty tail pages terminate despite
 
 test("malformed pagination metadata and failed pages are errors rather than successful empty lists", async (t) => {
   t.mock.method(globalThis, "fetch", async () => Response.json({ status: "ok", data: { count: -1, data: [] } }));
-  assert.equal((await getRankPage(session, "pc_like", "mod", 0, 50)).ok, false);
-  assert.equal((await getRankPage(session, "pc_like", "mod", -1, 50)).ok, false);
+  assert.equal((await getRankPage(session, "pe_sell", "mod", 0, 50)).ok, false);
+  assert.equal((await getRankPage(session, "pe_sell", "mod", -1, 50)).ok, false);
   t.mock.method(globalThis, "fetch", async () => {
     throw new Error("offline");
   });
-  assert.equal((await getRankPage(session, "pc_like", "mod", 50, 50)).ok, false);
+  assert.equal((await getRankPage(session, "pe_sell", "mod", 50, 50)).ok, false);
 });
 
 test("free ranking enriches exact string IDs in one cookie-free public request, preserving order", async (t) => {
@@ -142,7 +157,7 @@ test("missing, unsafe and failed thumbnails preserve rankings and can retry", as
   assert.equal((await getRankIcons(["9001"])).get("9001"), imageUrl);
 });
 
-test("hot search skips covers; native thumbnails skip the public lookup; platform categories remain distinct", async (t) => {
+test("hot search skips covers; native thumbnails skip the public lookup; mobile categories remain correct", async (t) => {
   const paths: URL[] = [];
   t.mock.method(globalThis, "fetch", async (input: string) => {
     const url = new URL(input);
@@ -153,16 +168,16 @@ test("hot search skips covers; native thumbnails skip the public lookup; platfor
         ? { content: "Search", rank: 1 }
         : board === "pe_hot"
           ? { iid: "2001", res_name: "Hot", icon_url: imageUrl }
-          : { item_id: "2002", item_name: "PC", icon_url: imageUrl };
+          : { item_id: "2002", item_name: "Mobile", icon_url: imageUrl };
     return Response.json({ status: "ok", data: { count: 1, data: [row] } });
   });
   assert.equal((await getRankList(session, "hot_search", "map", 1)).ok, true);
   assert.equal((await getRankList(session, "pe_hot", "map", 1)).ok, true);
-  assert.equal((await getRankList(session, "pc_download", "mod", 1)).ok, true);
+  assert.equal((await getRankList(session, "pe_download", "mod", 1)).ok, true);
   assert.equal(paths.length, 3);
   assert.deepEqual(
     paths.map((url) => url.searchParams.get("first_type")),
-    ["0", "1", "3"],
+    ["0", "1", "2"],
   );
 });
 

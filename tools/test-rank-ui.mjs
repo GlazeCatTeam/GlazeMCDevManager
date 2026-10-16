@@ -91,7 +91,7 @@ try {
   await page.getByRole("button", { name: "切换页面", exact: true }).click();
   assert.equal(await page.getByText("b:pe_hot:mod:work-0", { exact: true }).count(), 1);
   assert.equal(await page.evaluate(() => rankTest.calls.length), count, "route re-entry uses the cached ranking");
-  assert.equal(await page.getByRole("tab").count(), 6, "all board tabs are available by default");
+  assert.equal(await page.getByRole("tab").count(), 4, "all board tabs are available by default");
   assert.equal(await page.getByRole("button", { name: "查看全部榜单" }).count(), 0);
   assert.equal(await list.getByText(/:work-\d+$/).count(), 50);
   await page.evaluate(() => {
@@ -117,11 +117,12 @@ try {
   assert.equal(await list.getByText(/:work-\d+$/).count(), 123);
   assert.equal((await list.boundingBox()).height, geometry.height, "appending rows preserves list geometry");
   const tabs = page.getByRole("tablist", { name: "榜单" });
+  await page.setViewportSize({ width: 360, height: 800 });
   await tabs.hover();
   await page.mouse.wheel(0, 400);
   await page.waitForFunction(() => document.querySelector('[role="tablist"]').scrollLeft > 0);
-  await page.getByRole("tab", { name: "端游点赞榜", exact: true }).click();
-  await page.getByText("b:pc_like:mod:work-0", { exact: true }).waitFor();
+  await page.getByRole("tab", { name: "手游畅销榜", exact: true }).click();
+  await page.getByText("b:pe_sell:mod:work-0", { exact: true }).waitFor();
   assert.equal(await list.evaluate((el) => el.scrollTop), 0);
   await page.evaluate(() => {
     rankTest.controls.delay = 400;
@@ -131,7 +132,7 @@ try {
   });
   await list.getByText("正在加载更多…", { exact: true }).waitFor();
   await page.getByRole("tab", { name: "手游热门飙升", exact: true }).click();
-  await page.getByRole("tab", { name: "端游点赞榜", exact: true }).click();
+  await page.getByRole("tab", { name: "手游畅销榜", exact: true }).click();
   await page.waitForTimeout(450);
   assert.equal(
     await list.getByText(/:work-\d+$/).count(),
@@ -141,7 +142,7 @@ try {
   await list.evaluate((el) => {
     el.scrollTop = el.scrollHeight;
   });
-  await page.getByText("b:pc_like:mod:work-99", { exact: true }).waitFor();
+  await page.getByText("b:pe_sell:mod:work-99", { exact: true }).waitFor();
   assert.equal(await list.getByText(/:work-\d+$/).count(), 100, "returning to a board can append again");
   await page.screenshot({ path: `${output}/rank-dark.png` });
   await page.getByRole("button", { name: "浅色主题", exact: true }).click();

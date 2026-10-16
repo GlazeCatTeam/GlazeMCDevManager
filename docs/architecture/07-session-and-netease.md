@@ -126,14 +126,14 @@ type NeteaseError =
 | `developer.level` | `GET /new_level/` | 等级、阶、经验区间、升阶任务、本月贡献 |
 | `analytics.overview` | `GET /data_analysis/overview/` | 字段缺失视为解析错误，不填零 |
 | `income.estimate` | `GET /items/categories/pe/`、`/data_analysis/day_detail/`、`/goods/pe/summary`、`/goods/pe/{iid}/`、`/data_analysis/goods/day_detail/` | 作品每 20 个一批查询日明细（必须带 `sort`、`order`，否则平台返回"查询日明细数据失败"），跳过前置模组；某批失败时列出这些作品名，不当作零 |
-| `rank.list` / `rank.page` | `GET /square/us_rank_list/`、`/square/rank_list/`；手游缺图另查公开 `POST /h5/pe-item/query/search-by-id-list` | 手游与端游的分类编号不同；`rank_change` 是上次名次减本次名次，上次名次缺失或非正数视为新上榜，超过 50 的有效名次正常计算升降。销售榜分页会将 `rank` 从 1 重置，因此用偏移量加行序号得到绝对名次；热搜空字符串显示“（空搜索词）”，不使整榜失败。优先使用榜单原生 `icon_url`；手游其他条目从 `g79apigatewayobt.nie.netease.com` 的公开分享查询批量匹配准确字符串 ID，取 `title_image_url`，不带 Cookie，拒绝重定向，3 秒超时，失败不丢弃榜单。成功图片元数据缓存 30 分钟/最多 500 条；不缓存失败。端游公开元数据接口仍待核实，不能用同名手游图片替代 |
+| `rank.list` / `rank.page` | `GET /square/us_rank_list/`、`/square/rank_list/`；手游缺图另查公开 `POST /h5/pe-item/query/search-by-id-list` | 仅保留手游热门飙升、热搜、手游免费、手游畅销四榜；`rank_change` 是上次名次减本次名次，上次名次缺失或非正数视为新上榜，超过 50 的有效名次正常计算升降。销售榜分页会将 `rank` 从 1 重置，因此用偏移量加行序号得到绝对名次；热搜空字符串显示“（空搜索词）”，不使整榜失败。优先使用榜单原生 `icon_url`；手游其他条目从 `g79apigatewayobt.nie.netease.com` 的公开分享查询批量匹配准确字符串 ID，取 `title_image_url`，不带 Cookie，拒绝重定向，3 秒超时，失败不丢弃榜单。成功图片元数据缓存 30 分钟/最多 500 条；不缓存失败。端游下载/点赞榜已移除，不提供查询 |
 | `works.list` | `GET /items/categories/pe/` | 只含手机版作品；列表没有封面和上线时间。收益速算也复用它（跳过 `pri_type` 为 9 的前置模组） |
 | `works.get` | `GET /items/categories/pe/{id}` | 图标取 `channel` 里 `channel_id` 为 5 的图（1000×1000 正方形），`banner_pic` 是横幅图；另有上线、首次上线、定时上架时间；只能查本账号的作品 |
 | `works.reviewFeedback` | `GET /items/categories/pe/{id}/feedback` | 反馈可能是 HTML，主进程转成纯文本；没有反馈时返回 null |
 
 首页查询使用插件内存缓存，账号 ID、登录时间和查询参数共同组成键，60 秒内返回首页或切回榜单不重复请求；过期重新校验、手动刷新绕过有效期，均保留当前键的成功结果。榜单/分类首次加载用固定行占位，热搜保留分类栏空间，避免列表移动；悬停或聚焦标签时预取目标榜单并预解码图片。并发调用共享请求，响应只更新自己的键，快速切换和账号变更不会串数据。
 
-排行榜默认显示全部六个标签，标签区支持滚轮/触控板横向移动；旧的更多/排版和查看全部入口已移除。使用 `rank.page` 每批读取 50 条，固定面板内纵向滚动到末尾自动续读，避免一次拉取端游数万条记录。首批缓存，后续批次每次仅一个请求；失败保留已加载条目并允许重试，不循环自动重试；切榜、账号变更、刷新和卸载隔离旧响应。平台 count 可能大于实际可返回条数，短页或空页结束续读；图片只预解码前 8 张，其余随滚动懒加载。
+排行榜默认显示全部四个标签，标签区支持滚轮/触控板横向移动；旧的更多/排版和查看全部入口已移除。使用 `rank.page` 每批读取 50 条，固定面板内纵向滚动到末尾自动续读，按需获取后续排名。首批缓存，后续批次每次仅一个请求；失败保留已加载条目并允许重试，不循环自动重试；切榜、账号变更、刷新和卸载隔离旧响应。平台 count 可能大于实际可返回条数，短页或空页结束续读；图片只预解码前 8 张，其余随滚动懒加载。
 
 ### 账号管理页等级卡片
 

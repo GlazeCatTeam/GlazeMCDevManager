@@ -4,17 +4,14 @@ import { getMcDevData, type NeteaseSession, withQuery } from "../http/client";
 import { readArray, readNumber, readRecord, readString } from "../http/parse";
 import { getRankIcons } from "./rank-images";
 
-// Platform category ids differ between mobile (PE) and PC boards
+// Category ids used by the supported mobile leaderboards
 const peFirstType: Record<RankCategory, number> = { mod: 2, map: 1, texture: 3, lobby: 6 };
-const pcFirstType: Record<RankCategory, number> = { mod: 3, map: 5, texture: 4, lobby: 11 };
 
 const boardPaths: Record<RankBoard, string> = {
   pe_hot: "/square/us_rank_list/?type=pe_hot",
   hot_search: "/square/us_rank_list/?type=hot_search",
   pe_download: "/square/rank_list/?type=pe_download",
   pe_sell: "/square/rank_list/?type=pe_sell",
-  pc_download: "/square/rank_list/?type=pc_download",
-  pc_like: "/square/rank_list/?type=pc_like",
 };
 
 /** Category id a board expects; hot search has no categories */
@@ -22,7 +19,7 @@ function firstType(board: RankBoard, category: RankCategory): number {
   if (board === "hot_search") {
     return 0;
   }
-  return board.startsWith("pc_") ? pcFirstType[category] : peFirstType[category];
+  return peFirstType[category];
 }
 
 /** Movement from the previous rank; only missing or non-positive positions mean newly ranked */
@@ -82,6 +79,7 @@ export async function getRankPage(
   start: number,
   limit: number,
 ): Promise<Result<RankPage>> {
+  if (!Object.hasOwn(boardPaths, board)) return fail({ kind: "business", code: "validation", message: "榜单类型无效" });
   if (!Number.isInteger(start) || start < 0 || start > 1_000_000 || !Number.isInteger(limit) || limit < 1 || limit > 50)
     return fail({ kind: "business", code: "validation", message: "榜单分页参数无效" });
   const path = withQuery(boardPaths[board], { start, span: limit, first_type: firstType(board, category) });
