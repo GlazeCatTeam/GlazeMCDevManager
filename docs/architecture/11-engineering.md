@@ -9,7 +9,7 @@
 | 任务编排 | Turborepo |
 | 语言 | TypeScript（严格模式，配置见 `tsconfig.base.json`） |
 | 桌面构建 | electron-vite |
-| 打包与更新 | electron-builder（NSIS 安装包，见下文「安装包」）；electron-updater 待接入 |
+| 打包与更新 | electron-builder（NSIS 安装包，见下文「安装包」）；electron-updater 从 GitHub Releases 自动更新（见下文「发布与更新」） |
 | 代码检查与格式化 | Biome |
 | 单元与集成测试 | `node:test` + `node:assert/strict`，由 Vite 打包后运行（不引入 Vitest，见 [ADR-0015](../adr/0015-node-test-runner.md)） |
 | 界面回归 | Playwright（浏览器页面用系统 Edge；另有 Electron 模式脚本） |
@@ -32,7 +32,7 @@ pnpm dev
 |---|---|
 | `pnpm dev` | 启动桌面应用开发模式 |
 | `pnpm build` | 构建所有包 |
-| `pnpm dist` | 构建桌面应用并打 Windows x64 NSIS 安装包，输出到 `apps/desktop/release/` |
+| `pnpm dist` | 构建桌面应用并打 Windows x64 NSIS 安装包，输出到 `apps/desktop/release/`（含 `latest.yml`，不上传） |
 | `pnpm typecheck` | 全仓库类型检查 |
 | `pnpm test` | 运行 `tests/` 下全部离线测试（`tools/run-tests.mjs`）；`pnpm test mcp rank` 只跑指定几组 |
 | `pnpm test:ui` | 逐个运行 `tools/test-*-ui.mjs` 界面回归（`tools/run-ui-tests.mjs`）；加 `--electron` 同时跑 `test-*-electron.mjs`（需先 `pnpm build`），`--channel=chrome` 换浏览器 |
@@ -52,7 +52,7 @@ pnpm dev
 - 网易接口测试使用录制的请求响应样本，不在 CI 中访问真实平台，不提交任何真实凭据。
 - 收益规则必须覆盖档位边界和统计窗口边界。
 - 新增测试放进 `tests/` 并命名为 `*.test.ts` 即被 `pnpm test` 收集；被其他测试文件 `import "./x.test"` 的文件只随导入方运行一次；需要 Electron 主进程的测试在 `tools/run-tests.mjs` 的 `electronTests` 里登记。
-- 2026-10-16 基线：`pnpm test` 15 个 Node 测试文件共 301 项、2 个 Electron 宿主测试全部通过，约 5 秒。`pnpm test:ui` 15 个脚本中 11 个通过，`test-license-ui`、`test-mcp-ui`、`test-promotion-ui`、`test-rank-ui` 四个是稳定复现的既有失败（断言或选择器与当前界面不一致）；Electron 模式 6 个脚本中 `about`、`general`、`mcp`、`session-settings` 四个超时，暂不进 CI。
+- 2026-10-16 基线：`pnpm test` 16 个 Node 测试文件共 312 项、2 个 Electron 宿主测试全部通过，约 5 秒；`pnpm test:ui` 16 个脚本全部通过（原 `license`、`mcp`、`promotion`、`rank` 四个失败已修复，`realtime` 偶发超时改为轮询）。Electron 模式 6 个脚本中 `about`、`general`、`mcp`、`session-settings` 四个超时，暂不进 CI。
 
 ## 安装包
 
@@ -69,12 +69,13 @@ pnpm dev
 | 语言包 | 只保留 `zh-CN`、`en-US` |
 | 用户数据 | 应用名仍为 `@glaze/desktop`，安装版与开发版共用 `%APPDATA%\@glaze\desktop`：同一份账号与设置，也共用单实例锁，二者不能同时运行 |
 | 签名 | 不签名（应用代码签名证书是待定事项）；未签名安装包可能被 SmartScreen 提示 |
-| 图标 | 暂用 Electron 默认图标，待提供 `apps/desktop/resources/icon.ico` |
+| 图标 | `apps/desktop/resources/icon.ico`（安装器、卸载器、可执行文件），由 `node tools/build-icon.mjs` 按 `AppLogo` 草方块生成 16–256px，改标志后重新生成并提交 |
+| 版本 | 取 `apps/desktop/package.json` 的 `version`，首版 0.1.0 |
 
 验证步骤（2026-10-16 本地已按此执行）：
 
 1. `pnpm dist` 生成安装包（约 100 MB）。
-2. 静默安装到临时目录：`GlazeMCDevManager-0.0.0-x64-setup.exe /S /D=<目录>`；确认目录中有 `LICENSE`、`NOTICE`、`LICENSES.chromium.html`、`LICENSE.electron.txt`，开始菜单与桌面快捷方式的 `System.AppUserModel.ID` 都是 `com.glaze.mcdevmanager`，卸载项发布者为 GlazeCatTeam。
+2. 静默安装到临时目录：`GlazeMCDevManager-<版本>-x64-setup.exe /S /D=<目录>`；确认目录中有 `LICENSE`、`NOTICE`、`LICENSES.chromium.html`、`LICENSE.electron.txt`，开始菜单与桌面快捷方式的 `System.AppUserModel.ID` 都是 `com.glaze.mcdevmanager`，卸载项发布者为 GlazeCatTeam。
 3. 用 `--user-data-dir=<临时目录>` 启动已安装的程序，避免读到真实账号；确认 `app.isPackaged` 为 true、窗口进入登录页、无页面错误。
 4. 运行 `Uninstall Glaze MC Dev Manager.exe /S /currentuser`，确认安装目录、快捷方式和卸载注册项都已清除。
 
@@ -87,11 +88,34 @@ pnpm dev
 | 类型检查、Biome、测试与构建 | `pnpm typecheck` → `pnpm lint`（`biome check .`）→ `pnpm test` → `pnpm build` |
 | 界面回归（Playwright + Edge） | `pnpm test:ui`，用运行器自带的 Edge，不下载 Playwright 浏览器 |
 
-- 界面回归是独立任务，不阻塞第一个任务；上面列出的四个既有失败修好之前它会是红的。
+- 界面回归是独立任务，不阻塞第一个任务；2026-10-16 修复四个既有失败后本地 16 个脚本全部通过。
 - 本机 act 无法模拟 `windows-latest`，提交前在不含 `node_modules` 和构建产物的干净副本里逐条执行了上述命令，结果与上表一致。本机副本路径过深时 Electron 会因 Windows 260 字符路径限制报 `Error loading V8 startup snapshot file`，GitHub 运行器路径较短不受影响。
 - 暂未做：依赖边界检查、主题校验脚本、Electron 模式界面回归、安装包产物上传。
 
-发布计划：打标签触发，构建 Windows 安装包和便携版，签名后上传到 GitHub Releases，并生成更新元数据（未实现，依赖代码签名证书和 electron-updater）。
+## 发布与更新
+
+按 [ADR-0016](../adr/0016-github-releases-auto-update.md)。
+
+发布一个版本：
+
+1. 提升 `apps/desktop/package.json` 的 `version`，写 `docs/releases/v<版本>.md`（Release 正文和应用内更新说明都用它），在 PROJECT.md 记录。
+2. 提交后推送分支，再推送标签 `git tag v<版本>`、`git push origin v<版本>`。
+3. `.github/workflows/release.yml` 校验标签与版本一致、更新说明存在，跑类型检查、Biome、测试，然后 `pnpm --filter @glaze/desktop release` 打包，并把安装包、`.blockmap` 和 `latest.yml` 上传到**草稿** Release。
+4. 维护者在 GitHub 上检查草稿：下载安装包试装，核对正文后点「Publish release」。发布前，用户和更新程序都看不到它。
+
+应用内更新（`apps/desktop/src/main/update/service.ts`）：
+
+| 项 | 行为 |
+|---|---|
+| 来源 | `electron-builder.yml` 的 `publish`（GitHub `GlazeCatTeam/GlazeMCDevManager`），安装时写入 `resources/app-update.yml` |
+| 检查 | 启动 15 秒后一次，之后每 6 小时一次；设置 → 关于 可关闭自动检查，偏好存在 SQLite `update` 键；也可手动检查 |
+| 下载 | 有新版本就在后台下载，优先差分下载，失败时下载完整安装包；进度按整百分比广播 `update.changed` |
+| 安装 | 下载完成后由用户确认「重启并安装」，静默安装到原目录并自动重启；不重启时，下次正常退出也会安装 |
+| 不支持 | 开发版、免安装版返回 `unsupported`，界面提供发布页链接 |
+| 失败 | 网络、没有发布版本、校验失败、磁盘不足分别给出可操作的提示；原始错误只写入脱敏日志 |
+| MCP | `update_state`、`update_check` 只读开放；安装和开关只能在界面操作 |
+
+验证（2026-10-16 本地已按此执行）：静默安装 0.1.0，用 `--user-data-dir` 启动。连接真实 GitHub 时（当时还没有 Release）显示「暂时没有可用的发布版本」。把安装目录的 `app-update.yml` 临时改为本机 generic 源，提供 `-c.extraMetadata.version=0.1.1` 打出的测试包后，检查发现 0.1.1，下载完成，确认重启后安装目录的版本变为 0.1.1，再启动时 `app.getAbout` 也是 0.1.1。随后静默卸载，并清理更新缓存 `%LOCALAPPDATA%\@glazedesktop-updater`。
 
 ## 代码规范
 

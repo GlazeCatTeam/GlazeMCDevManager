@@ -2,7 +2,7 @@
 
 ## 范围
 
-设置 → 关于接入真实版本、运行环境、项目主页、问题反馈、第三方许可与参考项目。更新检查和自动检查选项仍沿用原来的预览状态，本轮不实现更新服务。
+设置 → 关于接入真实版本、运行环境、项目主页、问题反馈、第三方许可与参考项目。2026-10-16 起「更新」分组接入真实更新服务（[ADR-0016](../adr/0016-github-releases-auto-update.md)、[11 工程规范](11-engineering.md)「发布与更新」）：显示当前版本与状态，可以检查更新，下载时显示进度，完成后可重启安装，可展开查看更新说明，可开关自动检查；开发版提供发布页链接。
 
 项目仓库为 `https://github.com/GlazeCatTeam/GlazeMCDevManager`，反馈入口为该仓库的 `/issues`。参考项目为 `https://github.com/BitterLemonn/MCDevManager`，只参考行为和接口，不包含其源码。用户授权选用 Apache-2.0，适用于项目原创代码和文档，包括内置插件、主题实现和 SDK；另有声明的第三方材料保留原许可。
 
@@ -12,7 +12,9 @@
 |---|---|---|
 | `app.getAbout` | 应用版本、开发/打包状态、平台和架构、Electron / Chromium / Node.js 版本、项目许可证 ID、摘要、完整原文与 NOTICE | read，无账号权限；已接入 MCP 只读工具 |
 | `app.getLicenses` | 构建时收集的生产依赖、Electron 与内置第三方资源版本、许可标识、完整许可/NOTICE 文本 | read，无账号权限；已接入 MCP 只读工具 |
-| `app.openProjectLink` | 仅接收 `homepage`、`feedback`、`reference` 三个 ID，由宿主映射固定 HTTPS 地址 | write，仅主界面；不接受任意 URL |
+| `app.openProjectLink` | 仅接收 `homepage`、`feedback`、`reference`、`releases`（发布页）四个 ID，由宿主映射固定 HTTPS 地址 | write，仅主界面；不接受任意 URL |
+| `update.state` / `update.check` | 更新状态；立即检查，有新版本时在后台下载 | read，无账号权限；已接入 MCP 只读工具 |
+| `update.install` / `update.setAutoCheck` | 重启并安装已下载的更新；保存自动检查开关 | write，仅主界面，不开放 MCP |
 | `app.openRuntimeNotices` | 打开 Electron 可执行文件旁的 `LICENSES.chromium.html` | write，仅主界面；不接受文件路径 |
 
 四项 IPC 均校验来源为应用主窗口的主 frame。插件页面通过 SDK 调用；MCP 服务复用只读能力，不直接触发桌面浏览器。所有打开错误返回明确提示，读取失败支持重试。

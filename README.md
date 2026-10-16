@@ -2,11 +2,18 @@
 
 Glaze MC Dev Manager：网易我的世界开发者管理工具（Windows 桌面端）。
 
-账号管理、作品管理、数据分析、收益结算、反馈与评论、消息中心。业务范围参考 [MCDevManager](https://github.com/BitterLemonn/MCDevManager)，采用**宿主 + 插件**架构重新设计：排版可自由调整，主题可多套扩展，支持第三方插件。
+账号管理、首页概览、作品管理、数据分析、收益管理、玩家反馈与评论、系统消息、活动推广，并可通过 MCP 让 Claude Code、Codex、Cursor 等 AI 工具帮你打理。业务范围参考 [MCDevManager](https://github.com/BitterLemonn/MCDevManager)，采用**宿主 + 插件**架构重新设计：固定面板布局，主题可多套扩展，内置功能与插件共用一套插件 API。
+
+## 下载安装
+
+到 [Releases](https://github.com/GlazeCatTeam/GlazeMCDevManager/releases) 下载最新的 `GlazeMCDevManager-<版本>-x64-setup.exe` 并运行，支持 Windows 10/11 x64。
+
+- 安装包暂未做代码签名。如果 Windows 提示「Windows 已保护你的电脑」，点「更多信息」→「仍要运行」。
+- 装好以后，新版本会在后台自动下载，重启应用就会完成安装；也可以在 设置 → 关于 里手动检查。
 
 ## 状态
 
-M0 工程骨架进行中：已初始化仓库、安装依赖，`pnpm dev` 可打开 Electron 窗口。
+首个公开测试版 v0.1.0。功能进度与已知限制见 [项目文档](docs/PROJECT.md)「当前进度」和各版本的 [更新说明](docs/releases)。
 
 ## 目录
 
@@ -14,7 +21,7 @@ M0 工程骨架进行中：已初始化仓库、安装依赖，`pnpm dev` 可打
 |---|---|
 | `apps/desktop` | Electron 应用（主进程、preload、Shell） |
 | `packages/*` | 内核包：shared、contracts、core、netease、storage、theme、layout、ui、plugin-sdk |
-| `plugins/*` | 内置插件：home、account、works、analytics、income、community、messages、settings |
+| `plugins/*` | 内置插件：home、account、works、analytics、income、promotion、community、messages、assistant、settings |
 | `themes/*` | 内置主题：ore-ui、fluent-dark |
 | `tools` | 仓库脚本 |
 | `tests/e2e` | 端到端测试 |

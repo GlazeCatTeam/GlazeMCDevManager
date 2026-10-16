@@ -157,6 +157,7 @@ type CallerIdentity =
 | 收益 | `income_summary`、`income_monthly`（`income_estimate` 见首页）；`income_settle`（后注：实际开放的是结算列表 / 详情 / 估算等只读查询，申请结算不开放，见 22） | read；dangerous |
 | 反馈与评论 | 已接入 `feedback.list`、`feedback.reply`、`feedback.log`、`comments.list`、`comments.reply`，仅供应用主界面调用；MCP 的 `community_list`、`community_reply` 暂未暴露（后注：已改为直接开放 `comments_list`、`comments_reply`、`feedback_list`、`feedback_reply`、`feedback_log`，见 22），详见 [玩家反馈数据接入](player-feedback-data.md) 与 [玩家评论数据接入](player-comments-data.md) | read / write |
 | 消息 | `messages_list`、`messages_mark_read`（后注：实际开放列表、未读数、读取并标记已读、全部已读、删除，见 22） | read / write |
+| 应用更新 | `update_state`（当前版本、新版本与更新说明、下载进度、是否待重启安装、自动检查开关）、`update_check`（立即检查并在后台下载）。均为只读、无账号权限；`update.install`（会重启应用）与 `update.setAutoCheck` 为 shellOnly，不开放 | read |
 | 关于 | `app.getAbout` 返回版本和 Apache-2.0 项目许可原文、NOTICE；`app.getLicenses` 返回第三方依赖及内置资源独立声明。均已接入主界面与 MCP 只读工具，无账号权限要求。`app.openProjectLink` / `app.openRuntimeNotices` 触发系统浏览器或文件打开，仅主界面可用，不向 MCP 开放 | read；本机打开动作 write |
 
 ### 作品列表八项能力（2026-10-16）
