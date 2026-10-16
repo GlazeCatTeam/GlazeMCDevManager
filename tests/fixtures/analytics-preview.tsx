@@ -2,9 +2,11 @@ import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { AccountSummary, AnalyticsRecord, GlazeBridge, WorkSummary } from "../../packages/contracts/src";
 import { allocatePePeriodIncome } from "../../packages/netease/src/income/period-allocation";
-import { SessionProvider } from "../../packages/plugin-sdk/src";
+import { NavigationProvider, type RouteParams, SessionProvider } from "../../packages/plugin-sdk/src";
 import { applyTheme } from "../../packages/theme/src";
+import analyticsPlugin from "../../plugins/analytics/src";
 import { AnalyticsPage } from "../../plugins/analytics/src/AnalyticsPage";
+import { WorksPage } from "../../plugins/works/src/WorksPage";
 import fluentDark from "../../themes/fluent-dark/theme.json";
 import oreUi from "../../themes/ore-ui/theme.json";
 import "../../apps/desktop/src/renderer/global.css";
@@ -23,6 +25,7 @@ const account: AccountSummary = {
 };
 const denseRealtime = new URLSearchParams(location.search).has("realtime");
 const periodPreview = new URLSearchParams(location.search).has("period");
+const worksPreview = new URLSearchParams(location.search).has("works");
 const resourceNames =
   denseRealtime || new URLSearchParams(location.search).has("dense")
     ? Array.from(
@@ -46,6 +49,8 @@ const works: WorkSummary[] = resourceNames.map((name, index) => ({
   applyReviewTime: null,
   onlineTime: "2026-01-01",
 }));
+if (worksPreview && works[0])
+  works.push({ ...works[0], itemId: "3", name: "未上架资源", status: "init", onlineTime: null });
 let activeAccount = account.id;
 let failure = false;
 let calls = 0;
@@ -95,7 +100,19 @@ const rpc: GlazeBridge["rpc"] = async (method, params) => {
   await new Promise((resolve) => setTimeout(resolve, controls.delay));
   if (shouldFail) return { ok: false, error: { kind: failureKind, message: "离线测试失败" } };
   let value: unknown;
-  if (method === "works.list")
+  if (method === "works.page") {
+    const { page, pageSize } = params as { page: number; pageSize: number };
+    value = { items: works.slice(page * pageSize, (page + 1) * pageSize), total: works.length };
+  } else if (method === "works.get") {
+    const work = works.find((item) => item.itemId === (params as { itemId: string }).itemId);
+    value = {
+      itemId: work?.itemId,
+      iconUrl: null,
+      bannerUrl: null,
+      onlineTime: work?.onlineTime,
+      appointOnlineTime: null,
+    };
+  } else if (method === "works.list")
     value =
       callAccount === account.id
         ? (params as { platform?: string } | undefined)?.platform === "pc"
@@ -258,6 +275,23 @@ Object.assign(globalThis, {
 });
 applyTheme(oreUi);
 
+/** Exercise production work cards and the registered analytics route in one navigation session */
+function WorkNavigationPreview() {
+  const [location, setLocation] = useState<{ route: string; params: RouteParams }>({
+    route: "glaze.works/works",
+    params: {},
+  });
+  const Analysis = analyticsPlugin.pages?.analytics;
+  return (
+    <NavigationProvider value={{ ...location, navigate: (route, params = {}) => setLocation({ route, params }) }}>
+      <button type="button" onClick={() => setLocation({ route: "glaze.works/works", params: {} })}>
+        返回作品列表
+      </button>
+      {location.route === "glaze.works/works" ? <WorksPage /> : Analysis && <Analysis />}
+    </NavigationProvider>
+  );
+}
+
 /** Visible controls exercise failure recovery and account changes without real credentials */
 function Preview() {
   const [current, setCurrent] = useState(account);
@@ -290,7 +324,7 @@ function Preview() {
           {shown ? "离开分析页" : "返回分析页"}
         </button>
       </div>
-      {shown && <AnalyticsPage />}
+      {shown && (worksPreview ? <WorkNavigationPreview /> : <AnalyticsPage />)}
     </SessionProvider>
   );
 }

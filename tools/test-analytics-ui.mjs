@@ -26,6 +26,7 @@ try {
   await server.listen();
   browser = await chromium.launch({ headless: true, channel: process.argv[3] ?? "msedge" });
   const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
+  await page.clock.setFixedTime(new Date("2026-10-16T12:00:00+08:00"));
   page.setDefaultTimeout(10000);
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -145,9 +146,19 @@ try {
   await page.getByRole("tab", { name: "周期收益", exact: true }).click();
   const period = page.getByRole("tabpanel", { name: "周期收益", exact: true });
   await period.getByRole("region", { name: "周期收益趋势", exact: true }).waitFor();
+  await period.getByText("PE · 每月 22 日至下月 21 日（含起止当天）", { exact: true }).waitFor();
+  assert.match(await period.innerText(), /相邻周期不重叠/);
+  assert.doesNotMatch(await period.innerText(), /重叠一天|不可直接跨周期累加/);
   await period.getByRole("button", { name: "上一周期", exact: true }).click();
   await period.getByText(/暂显示/).waitFor();
+  await period.getByText("PE · 2026-08-22 — 2026-09-21", { exact: true }).waitFor();
   await period.getByText("已更新 · 筛选自动生效", { exact: true }).last().waitFor();
+  const previousParams = await page.evaluate(
+    () => __analyticsTest.requests.filter((r) => r.method === "analytics.periodIncome").at(-1).params,
+  );
+  assert.equal(previousParams.startDate, "2026-08-22");
+  assert.equal(previousParams.endDate, "2026-09-21");
+  assert.equal(previousParams.settlementMonth, "2026-09");
   const cycle = await period.getByRole("combobox", { name: "收益周期", exact: true }).inputValue();
   const peCalls = await page.evaluate(() => __analyticsTest.requests.length);
   await period.getByRole("button", { name: /^统计资源 全部/ }).click();
@@ -160,6 +171,7 @@ try {
   );
   await period.getByRole("button", { name: "PC · 电脑版", exact: true }).click();
   await period.getByRole("region", { name: "周期收益趋势", exact: true }).waitFor();
+  await period.getByText("PC · 每月 22 日至下月 21 日（含起止当天）", { exact: true }).waitFor();
   assert.match(await period.innerText(), /PC 独立资源/);
   assert.doesNotMatch(await period.innerText(), /测试资源 18/);
   await period.getByRole("button", { name: "PE · 手游", exact: true }).click();
@@ -390,6 +402,109 @@ try {
     await tracking.getByRole("button", { name: "退款率", exact: true }).getAttribute("aria-pressed"),
     "true",
   );
+  // The 22nd starts an empty cycle; the 23rd queries only the completed 22nd on either platform
+  for (const day of [22, 23]) {
+    const boundaryPage = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
+    boundaryPage.on("pageerror", (error) => errors.push(error.message));
+    await boundaryPage.clock.setFixedTime(new Date(`2026-10-${day}T12:00:00+08:00`));
+    await boundaryPage.goto(`${server.resolvedUrls.local[0]}tests/fixtures/analytics.html?dense&period`);
+    await boundaryPage.getByRole("tab", { name: "周期收益", exact: true }).click();
+    const boundaryPeriod = boundaryPage.getByRole("tabpanel", { name: "周期收益", exact: true });
+    for (const platform of ["pe", "pc"]) {
+      if (platform === "pc") await boundaryPeriod.getByRole("button", { name: "PC · 电脑版", exact: true }).click();
+      if (day === 22) {
+        await boundaryPeriod
+          .getByText("本周期刚开始，完整日数据从明天起统计。可以选择上一周期查看收益。", { exact: true })
+          .waitFor();
+        assert.equal(
+          await boundaryPage.evaluate(
+            (value) =>
+              __analyticsTest.requests.filter(
+                (r) => r.method === "analytics.periodIncome" && r.params.platform === value,
+              ).length,
+            platform,
+          ),
+          0,
+        );
+        await boundaryPeriod.getByRole("button", { name: "上一周期", exact: true }).click();
+      }
+      await boundaryPeriod.getByRole("region", { name: "周期收益趋势", exact: true }).waitFor();
+      const params = await boundaryPage.evaluate(
+        (value) =>
+          __analyticsTest.requests
+            .filter((r) => r.method === "analytics.periodIncome" && r.params.platform === value)
+            .at(-1).params,
+        platform,
+      );
+      assert.equal(params.startDate, day === 22 ? "2026-09-22" : "2026-10-22");
+      assert.equal(params.endDate, day === 22 ? "2026-10-21" : "2026-10-22");
+      assert.equal(params.settlementMonth, day === 22 ? "2026-10" : "2026-11");
+    }
+    await boundaryPage.close();
+  }
+  // Work cards select their own module even when another tab/resource was saved previously
+  const workPage = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  workPage.on("pageerror", (error) => errors.push(error.message));
+  await workPage.addInitScript(() => {
+    localStorage.setItem("glaze:analytics:view:v1:analytics-a:tab", JSON.stringify("summary"));
+    localStorage.setItem("glaze:analytics:view:v1:analytics-a:module.resource", JSON.stringify("1"));
+  });
+  await workPage.goto(`${server.resolvedUrls.local[0]}tests/fixtures/analytics.html?works&shell`);
+  const dataLink = workPage.getByRole("button", { name: "查看 分析资源乙 数据", exact: true });
+  const detailLink = workPage.getByRole("button", { name: "查看 分析资源乙 详情", exact: true });
+  await dataLink.waitFor();
+  const dataBounds = await dataLink.boundingBox();
+  const detailBounds = await detailLink.boundingBox();
+  assert.ok(dataBounds.x + dataBounds.width <= detailBounds.x, "data action appears left of details");
+  await workPage.screenshot({ path: `${output}/work-data-entry.png` });
+  await dataLink.click();
+  const modulePanel = workPage.getByRole("tabpanel", { name: "模组分析", exact: true });
+  await modulePanel.getByRole("button", { name: "模组 分析资源乙", exact: true }).waitFor();
+  await modulePanel.getByRole("table").waitFor();
+  assert.equal(
+    await workPage.getByRole("tab", { name: "模组分析", exact: true }).getAttribute("aria-selected"),
+    "true",
+  );
+  const moduleRequests = await workPage.evaluate(() =>
+    __analyticsTest.requests.filter((request) => request.method === "analytics.daily"),
+  );
+  assert.ok(moduleRequests.length > 0);
+  assert.ok(
+    moduleRequests.every(
+      (request) => request.params.account === "analytics-a" && JSON.stringify(request.params.resourceIds) === '["2"]',
+    ),
+  );
+  await modulePanel.getByRole("button", { name: "模组 分析资源乙", exact: true }).click();
+  await modulePanel.getByRole("option", { name: "分析资源甲", exact: true }).click();
+  await modulePanel.getByRole("button", { name: "模组 分析资源甲", exact: true }).waitFor();
+  await workPage.getByRole("tab", { name: "数据追踪", exact: true }).click();
+  await workPage.getByRole("tab", { name: "模组分析", exact: true }).click();
+  await modulePanel.getByRole("button", { name: "模组 分析资源甲", exact: true }).waitFor();
+  await workPage.getByRole("button", { name: "返回作品列表", exact: true }).click();
+  await dataLink.click();
+  await modulePanel.getByRole("button", { name: "模组 分析资源乙", exact: true }).waitFor();
+  await workPage.getByRole("button", { name: "返回作品列表", exact: true }).click();
+  const beforeUnavailable = await workPage.evaluate(
+    () => __analyticsTest.requests.filter((request) => request.method === "analytics.daily").length,
+  );
+  await workPage.getByRole("button", { name: "查看 未上架资源 数据", exact: true }).click();
+  await modulePanel.getByText(/所选作品暂无可分析的数据/).waitFor();
+  assert.equal(await modulePanel.getByRole("table").count(), 0);
+  assert.equal(
+    await workPage.evaluate(
+      () => __analyticsTest.requests.filter((request) => request.method === "analytics.daily").length,
+    ),
+    beforeUnavailable,
+  );
+  await modulePanel.getByRole("button", { name: "模组 请选择资源", exact: true }).click();
+  await modulePanel.getByRole("option", { name: "分析资源甲", exact: true }).click();
+  await modulePanel.getByRole("table").waitFor();
+  await workPage.getByRole("button", { name: "切换测试账号", exact: true }).click();
+  assert.equal(
+    await workPage.getByRole("tab", { name: "数据追踪", exact: true }).getAttribute("aria-selected"),
+    "true",
+  );
+  await workPage.close();
   assert.deepEqual(errors, []);
   console.log(
     "PASS: automatic filters, request coalescing, cache reuse, refresh recovery, preserved chart state, searchable resources, monthly paging, PE/PC isolation, cache clearing, account isolation, persistent comparison preferences and five tabs in three themes",

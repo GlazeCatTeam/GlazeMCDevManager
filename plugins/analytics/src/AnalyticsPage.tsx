@@ -31,19 +31,25 @@ function targetIndex(key: string, index: number): number | undefined {
   return moves[key];
 }
 
-/** Analytics tabs share account scope while keeping each view's filters */
-export function AnalyticsPage() {
+/** Analytics tabs share account scope; work links open directly in module analysis */
+export function AnalyticsPage({ initialResourceId }: { initialResourceId?: string | undefined }) {
   const { current } = useSession();
   if (!current) return <p>请先登录开发者账号</p>;
-  return <AccountAnalytics key={`${current.id}:${current.lastLoginAt}`} />;
+  return (
+    <AccountAnalytics
+      key={`${current.id}:${current.lastLoginAt}:${initialResourceId ?? ""}`}
+      initialResourceId={initialResourceId}
+    />
+  );
 }
 
 /** Keep resource selections and responses scoped to the current account */
-function AccountAnalytics() {
+function AccountAnalytics({ initialResourceId }: { initialResourceId?: string | undefined }) {
   const [tab, setTab] = useAnalysisPreference<Tab>(
     "tab",
     "tracking",
     tabs.map((item) => item.id),
+    initialResourceId ? "module" : undefined,
   );
   const [visited, setVisited] = useState<Tab[]>([tab]);
   const [refreshVersions, setRefreshVersions] = useState<Record<Tab, number>>({
@@ -85,7 +91,9 @@ function AccountAnalytics() {
   const views: Record<Tab, ReactNode> = {
     tracking: <TrackingView resources={resources} refreshVersion={refreshVersions.tracking} />,
     summary: <SummaryView refreshVersion={refreshVersions.summary} />,
-    module: <ModuleView resources={resources} refreshVersion={refreshVersions.module} />,
+    module: (
+      <ModuleView resources={resources} refreshVersion={refreshVersions.module} initialResourceId={initialResourceId} />
+    ),
     period: <PeriodIncomeView refreshVersion={refreshVersions.period} />,
     realtime: <RealtimeView resources={resources} refreshVersion={refreshVersions.realtime} />,
   };

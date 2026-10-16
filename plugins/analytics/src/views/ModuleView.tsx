@@ -1,4 +1,4 @@
-import { Panel, SegmentedControl } from "@glaze/plugin-sdk";
+import { Notice, Panel, SegmentedControl } from "@glaze/plugin-sdk";
 import {
   aggregate,
   type DayRange,
@@ -36,20 +36,42 @@ function leadText(value: number | null, peer: number | null): string {
   return `${percent > 0 ? "+" : ""}${percent.toFixed(1)}%`;
 }
 
-/** One real resource compared with the platform's matching daily peer means */
-export function ModuleView({ resources, refreshVersion }: { resources: Resource[]; refreshVersion: number }) {
-  const [resourceId, setResourceId] = useAnalysisPreference("module.resource", resources[0]?.id ?? "");
+/** Compare the selected resource with peers, honoring a work link before saved preferences */
+export function ModuleView({
+  resources,
+  refreshVersion,
+  initialResourceId,
+}: {
+  resources: Resource[];
+  refreshVersion: number;
+  initialResourceId?: string | undefined;
+}) {
+  const [resourceId, setResourceId] = useAnalysisPreference(
+    "module.resource",
+    resources[0]?.id ?? "",
+    undefined,
+    initialResourceId,
+  );
   const [days, setDays] = useAnalysisPreference<DayRange>("module.days", 14, [7, 14, 30]);
   const [metric, setMetric] = useAnalysisPreference<Metric>("module.metric", "purchases", moduleMetrics);
-  const requestedResource = resources.find((item) => item.id === resourceId) ?? resources[0];
+  const requestedResource =
+    resources.find((item) => item.id === resourceId) ?? (initialResourceId === resourceId ? undefined : resources[0]);
   const requestedDates = daysInRange(days);
-  const query = useAnalyticsQuery("analytics.daily", {
-    includePeers: true,
-    resourceIds: requestedResource ? [requestedResource.id] : [],
-    startDate: requestedDates[0] as string,
-    endDate: requestedDates.at(-1) as string,
-  });
-  const result = useAnalysisSnapshot(query, { resource: requestedResource, dates: requestedDates });
+  const query = useAnalyticsQuery(
+    "analytics.daily",
+    {
+      includePeers: true,
+      resourceIds: requestedResource ? [requestedResource.id] : [],
+      startDate: requestedDates[0] as string,
+      endDate: requestedDates.at(-1) as string,
+    },
+    !!requestedResource,
+  );
+  const result = useAnalysisSnapshot(
+    query,
+    { resource: requestedResource, dates: requestedDates },
+    !!requestedResource,
+  );
   const { resource, dates } = result.scope;
   useRefresh(result.reload, refreshVersion);
   const records = result.data ?? [];
@@ -85,6 +107,9 @@ export function ModuleView({ resources, refreshVersion }: { resources: Resource[
           <span className={styles.dateRange}>{rangeText(requestedDates)}</span>
         </div>
       </Panel>
+      {!requestedResource && (
+        <Notice>所选作品暂无可分析的数据，仅支持曾上架且不是前置模组的手游作品。请选择其他模组。</Notice>
+      )}
       <QueryState query={result} scopeLabel={`${resource?.name} · ${rangeText(dates)}`} />
       <QuerySkeleton loading={result.loading && result.data === null} />
       {result.data !== null && (

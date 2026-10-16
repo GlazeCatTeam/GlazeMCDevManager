@@ -6,6 +6,7 @@ import {
   PageHeader,
   Pagination,
   TextButton,
+  useNavigation,
   useSession,
   type WorkStatus,
   type WorkSummary,
@@ -47,6 +48,7 @@ export function WorksPage() {
 
 /** Account changes remount pagination and selection before any old rows can be painted */
 function WorksForAccount({ account }: { account: AccountSummary }) {
+  const { navigate } = useNavigation();
   const [page, setPage] = useState(() => workListPosition(account.id).page);
   const works = useWorksPage(account.id, page, PER_PAGE);
   const [lastView, setLastView] = useState<WorkListView | null>(null);
@@ -257,6 +259,9 @@ function WorksForAccount({ account }: { account: AccountSummary }) {
                 onPrepare={prepare}
                 canWrite={account.status === "active"}
                 onOpenDetail={openDetail}
+                onOpenAnalytics={(work) =>
+                  navigate("glaze.analytics/analytics", { account: account.id, resourceId: work.itemId })
+                }
               />
             ))}
           </ul>

@@ -13,6 +13,7 @@ export interface WorkTileProps {
   /** Read actions, editor entry points and confirmed list operations */
   onAction: (work: WorkSummary, action: WorkAction) => void;
   onOpenDetail: (work: WorkSummary) => void;
+  onOpenAnalytics: (work: WorkSummary) => void;
   onPrepare: (work: WorkSummary) => void;
   canWrite: boolean;
 }
@@ -40,8 +41,17 @@ function Cover({ iconUrl, seed }: { iconUrl: string | null; seed: string }) {
   );
 }
 
-/** Fixed-size tile for one work: status, platform, price, dates and available actions */
-export function WorkTile({ work, account, refreshToken, onAction, onOpenDetail, onPrepare, canWrite }: WorkTileProps) {
+/** Fixed-size tile with data and detail entry points plus available work actions */
+export function WorkTile({
+  work,
+  account,
+  refreshToken,
+  onAction,
+  onOpenDetail,
+  onOpenAnalytics,
+  onPrepare,
+  canWrite,
+}: WorkTileProps) {
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** A short hover delay avoids fetching every card swept by the pointer */
   const cancelHover = useCallback(() => {
@@ -78,9 +88,14 @@ export function WorkTile({ work, account, refreshToken, onAction, onOpenDetail, 
           <span className={styles.name}>{work.name}</span>
           <span className={`${styles.status} ${toneClass[statusTones[work.status]]}`}>{statusLabels[work.status]}</span>
         </span>
-        <TextButton className={styles.detail} aria-label={`查看 ${work.name} 详情`} onClick={() => onOpenDetail(work)}>
-          详情 ›
-        </TextButton>
+        <div className={styles.links}>
+          <TextButton aria-label={`查看 ${work.name} 数据`} onClick={() => onOpenAnalytics(work)}>
+            数据
+          </TextButton>
+          <TextButton aria-label={`查看 ${work.name} 详情`} onClick={() => onOpenDetail(work)}>
+            详情 ›
+          </TextButton>
+        </div>
       </div>
 
       <div className={styles.meta}>

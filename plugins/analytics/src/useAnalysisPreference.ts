@@ -1,11 +1,17 @@
 import { useSession } from "@glaze/plugin-sdk";
 import { useEffect, useState } from "react";
 
-/** Remember small account-local filter choices, validating persisted values before restoring them */
-export function useAnalysisPreference<T extends string | number>(name: string, initial: T, allowed?: readonly T[]) {
+/** Remember account-local choices; an explicit entry selection takes priority over saved filters */
+export function useAnalysisPreference<T extends string | number>(
+  name: string,
+  initial: T,
+  allowed?: readonly T[],
+  entryValue?: T,
+) {
   const { current } = useSession();
   const key = current ? `glaze:analytics:view:v1:${current.id}:${name}` : null;
   const [value, setValue] = useState<T>(() => {
+    if (entryValue !== undefined && (!allowed || allowed.includes(entryValue))) return entryValue;
     if (!key) return initial;
     try {
       const saved: unknown = JSON.parse(localStorage.getItem(key) ?? "null");
