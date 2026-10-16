@@ -18,6 +18,7 @@
     "@glaze/netease": "workspace:*",
     "@glaze/plugin-account": "workspace:*",
     "@glaze/plugin-analytics": "workspace:*",
+    "@glaze/plugin-assistant": "workspace:*",
     "@glaze/plugin-community": "workspace:*",
     "@glaze/plugin-home": "workspace:*",
     "@glaze/plugin-income": "workspace:*",

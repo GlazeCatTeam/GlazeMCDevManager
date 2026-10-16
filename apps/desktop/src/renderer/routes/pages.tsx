@@ -1,4 +1,5 @@
 import { AccountPage, LoginExpiredPage, LoginPage } from "@glaze/plugin-account";
+import { AssistantPage } from "@glaze/plugin-assistant";
 import { HomePage } from "@glaze/plugin-home";
 import { EmptyState, usePluginRegistry } from "@glaze/plugin-sdk";
 import { SettingsPage } from "@glaze/plugin-settings";
@@ -29,6 +30,7 @@ const pages: Record<string, ComponentType> = {
   "glaze.community/feedback": FeedbackPage,
   "glaze.community/comments": CommentsPage,
   "glaze.messages/messages": MessagesPage,
+  "glaze.assistant/assistant": AssistantPage,
   "glaze.settings/settings": Settings,
   "glaze.account/account": AccountPage,
   "glaze.account/login": LoginPage,

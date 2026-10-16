@@ -1,14 +1,22 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { basename } from "node:path";
 import {
   emptyWorkCreateFields,
   isWorkRecord,
   isWorkValue,
+  type McpAccessRequest,
   type McpAction,
+  type McpDecision,
   type McpDraft,
   type McpGrant,
+  type McpInstallerId,
+  type McpLevel,
   type McpOperation,
+  type McpPermission,
   type McpSnapshot,
+  mcpLevelOf,
+  mcpLevels,
+  mcpPermissionLabels,
   mcpPermissions,
   type WorkRecord,
   type WorkValue,
@@ -26,7 +34,13 @@ import {
   type StoredClient,
   type StoredOperation,
 } from "./model";
-import { toolDefinitions } from "./tools";
+import { type ToolDefinition, toolDefinitions } from "./tools";
+
+type AccessOutcome = McpDecision | "timeout";
+interface PendingAccess {
+  request: McpAccessRequest;
+  waiters: Set<(outcome: AccessOutcome) => void>;
+}
 
 const editStates = new Set(["init", "online", "reject", "offline", "system_offline"]);
 const mediaKeys = new Set(["res_url", "channel_url", "banner_pic", "corp_proof_image", "url", "cover"]);
@@ -42,6 +56,11 @@ export class McpService {
   private readonly writes = new Set<string>();
   private readonly epochs = new Map<string, number>();
   private readonly rates = new Map<string, number[]>();
+  private readonly access = new Map<string, PendingAccess>();
+  /** One-shot permissions granted with "only this time", consumed by the next matching call */
+  private readonly once = new Map<string, Set<McpPermission>>();
+  /** How long a tool call waits for the user to answer an access request before reporting it pending */
+  accessWaitMs = 60_000;
   readonly definitions = toolDefinitions();
 
   constructor(
@@ -95,11 +114,13 @@ export class McpService {
       status: this.status,
       error: this.error,
       endpoint: this.endpoint,
-      clients: this.data.clients.map(({ token: _token, directories, ...client }) => ({
+      clients: this.data.clients.map(({ token: _token, key, directories, ...client }) => ({
         ...client,
+        persistent: !!key,
         connected: !!this.connections.get(client.id)?.size,
         directories: directories.map(({ id, name }) => ({ id, name })),
       })),
+      requests: [...this.access.values()].map(({ request }) => structuredClone(request)),
       operations: this.data.operations.map((operation) => this.operationView(operation)),
       drafts: this.data.drafts.map((draft) => {
         try {
@@ -119,6 +140,12 @@ export class McpService {
   /** Expire pending business approvals without reviving them on reconnect */
   private expire(): void {
     let changed = false;
+    for (const [id, entry] of this.access)
+      if (entry.request.expiresAt < Date.now()) {
+        this.access.delete(id);
+        for (const resolve of entry.waiters) resolve("timeout");
+        changed = true;
+      }
     for (const operation of this.data.operations)
       if (operation.state === "pending" && operation.expiresAt < Date.now()) {
         operation.state = "expired";
@@ -136,7 +163,9 @@ export class McpService {
     // A new session never resumes an old grant; retain offline clients only when drafts reference them
     this.data.clients = this.data.clients.filter(
       (client) =>
-        this.connections.get(client.id)?.size || this.data.drafts.some((draft) => draft.clientId === client.id),
+        client.key ||
+        this.connections.get(client.id)?.size ||
+        this.data.drafts.some((draft) => draft.clientId === client.id),
     );
     if (this.data.clients.length >= 50) throw new McpError("limit", "客户端数量已达上限，请撤销不用的客户端");
     const client: StoredClient = {
@@ -153,6 +182,247 @@ export class McpService {
     this.data.clients.push(client);
     this.commit();
     return client;
+  }
+
+  /** Create a trusted client from the app's one-click connect; its key identifies it on every reconnect */
+  createKeyedClient(name: string, tool: McpInstallerId, level: McpLevel): { client: StoredClient; key: string } {
+    if (this.data.clients.length >= 50) throw new McpError("limit", "已连接的 AI 工具太多，请先移除不用的");
+    const key = randomBytes(24).toString("base64url");
+    const client: StoredClient = {
+      id: randomUUID(),
+      name,
+      tool,
+      key,
+      ...this.defaultGrant(mcpLevels[level].permissions),
+      approved: true,
+      lastSeen: null,
+      expiresAt: Number.MAX_SAFE_INTEGER,
+      directories: [],
+    };
+    this.data.clients.push(client);
+    this.commit();
+    return { client, key };
+  }
+
+  /** Resolve a connection key in constant time; unknown keys never fall back to pairing */
+  clientByKey(key: string): StoredClient | undefined {
+    const given = Buffer.from(key);
+    return this.data.clients.find((client) => {
+      if (!client.key) return false;
+      const stored = Buffer.from(client.key);
+      return stored.length === given.length && timingSafeEqual(stored, given);
+    });
+  }
+
+  /** Grant every usable account, defaulting to the one shown in the app */
+  private defaultGrant(permissions: McpPermission[]): McpGrant {
+    const usable = this.ports.accounts().filter((account) => account.status !== "expired");
+    const fallback = usable.find((account) => account.current) ?? usable[0];
+    return {
+      accounts: usable.map((account) => account.id),
+      defaultAccount: fallback?.id ?? "",
+      permissions: [...permissions],
+    };
+  }
+
+  /** Ask the user, through the app, to let a manually configured tool connect */
+  requestConnect(id: string): void {
+    const client = this.client(id, false);
+    if (client.approved || [...this.access.values()].some((entry) => entry.request.clientId === id)) return;
+    this.openRequest(client, "connect", mcpLevels.assist.permissions, "想要连接 Glaze，帮你管理作品与数据");
+    this.commit();
+  }
+
+  /** Reuse an identical open request so repeated AI retries show a single prompt */
+  private openRequest(
+    client: StoredClient,
+    kind: McpAccessRequest["kind"],
+    permissions: McpPermission[],
+    reason: string,
+  ): PendingAccess {
+    const key = [...permissions].sort().join(",");
+    for (const entry of this.access.values())
+      if (
+        entry.request.clientId === client.id &&
+        entry.request.kind === kind &&
+        [...entry.request.permissions].sort().join(",") === key
+      )
+        return entry;
+    if ([...this.access.values()].filter((entry) => entry.request.clientId === client.id).length >= 5)
+      throw new McpError("rate_limited", "缺少权限，且已有多条授权请求在等用户处理，请先提醒用户在 Glaze 中处理");
+    const entry: PendingAccess = {
+      request: {
+        id: randomUUID(),
+        clientId: client.id,
+        clientName: client.name,
+        kind,
+        permissions,
+        reason: reason.slice(0, 200),
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 10 * 60_000,
+      },
+      waiters: new Set(),
+    };
+    this.access.set(entry.request.id, entry);
+    this.ports.notify?.(entry.request);
+    return entry;
+  }
+
+  /** Wait briefly for the user's answer so a granted call can continue without the AI retrying */
+  private waitFor(entry: PendingAccess): Promise<AccessOutcome> {
+    if (this.accessWaitMs <= 0) return Promise.resolve("timeout");
+    return new Promise((resolve) => {
+      const done = (outcome: AccessOutcome) => {
+        clearTimeout(timer);
+        entry.waiters.delete(done);
+        resolve(outcome);
+      };
+      const timer = setTimeout(() => done("timeout"), this.accessWaitMs);
+      timer.unref?.();
+      entry.waiters.add(done);
+    });
+  }
+
+  /** Apply the user's answer from the trusted UI and release any waiting tool call */
+  answer(requestId: string, decision: McpDecision): void {
+    const entry = this.access.get(requestId);
+    if (!entry) throw new McpError("expired", "这条请求已处理或已过期");
+    if (!["always", "once", "deny"].includes(decision)) throw new McpError("validation", "请选择允许或拒绝");
+    const client = this.client(entry.request.clientId, false);
+    if (decision !== "deny") {
+      if (entry.request.kind === "connect") {
+        const grant = this.defaultGrant(entry.request.permissions);
+        if (!grant.accounts.length) throw new McpError("validation", "请先在 Glaze 登录至少一个账号");
+        this.invalidate(client.id, "客户端权限已变化");
+        Object.assign(client, grant, { approved: true });
+      } else if (decision === "always") {
+        client.permissions = [...new Set([...client.permissions, ...entry.request.permissions])];
+      } else if (!entry.waiters.size) {
+        // The call already returned; let the AI's retry use this one-time grant
+        const set = this.once.get(client.id) ?? new Set();
+        for (const permission of entry.request.permissions) set.add(permission);
+        this.once.set(client.id, set);
+      }
+    }
+    this.access.delete(requestId);
+    for (const resolve of [...entry.waiters]) resolve(decision);
+    this.commit();
+  }
+
+  /** Number of access requests waiting for the user */
+  requestCount(): number {
+    return this.access.size;
+  }
+
+  /** Whether a client may use a permission now, counting a live one-time grant */
+  allowed(id: string, permission: string): boolean {
+    const client = this.data.clients.find((entry) => entry.id === id);
+    return (
+      !!client?.approved &&
+      (client.permissions.includes(permission as McpPermission) ||
+        !!this.once.get(id)?.has(permission as McpPermission))
+    );
+  }
+
+  /** Describe the connection for the AI in plain language, before or after approval */
+  describe(id: string) {
+    const client = this.client(id, false);
+    const accounts = this.ports.accounts();
+    const missing = mcpPermissions.filter(
+      (permission) => permission !== "works:draft" && !client.permissions.includes(permission),
+    );
+    const level = mcpLevelOf(client.permissions);
+    return {
+      app: "Glaze MC Dev Manager（网易我的世界开发者管理工具）",
+      tool: client.name,
+      approved: client.approved,
+      waitingForUser: [...this.access.values()].some((entry) => entry.request.clientId === id),
+      level: client.approved ? (level === "custom" ? "自定义" : mcpLevels[level].title) : null,
+      accounts: accounts
+        .filter((account) => client.accounts.includes(account.id))
+        .map((account) => ({
+          id: account.id,
+          nickname: account.nickname,
+          default: account.id === client.defaultAccount,
+          loggedIn: account.status !== "expired",
+        })),
+      canDo: client.permissions.filter((p) => p !== "works:draft").map((p) => mcpPermissionLabels[p]),
+      needsPermission: missing.map((permission) => ({ permission, label: mcpPermissionLabels[permission] })),
+      hint: client.approved
+        ? "直接调用需要的工具即可。缺少权限时 Glaze 会弹窗询问用户，用户允许后调用会自动继续。"
+        : "用户还没有允许连接。请告诉用户：在 Glaze 窗口弹出的提示中点击「允许」，或在 Glaze 侧边栏「AI 助手」里一键连接。",
+    };
+  }
+
+  /** Let the AI ask for a level or specific permissions with a reason shown to the user */
+  async requestAccessTool(id: string, input: unknown) {
+    const params = (input ?? {}) as { level?: unknown; permissions?: unknown; reason?: unknown };
+    const reason = typeof params.reason === "string" && params.reason.trim() ? params.reason.trim() : "需要更多权限";
+    const client = this.client(id, false);
+    if (!client.approved) {
+      this.requestConnect(id);
+      const entry = [...this.access.values()].find((item) => item.request.clientId === id);
+      const outcome = entry ? await this.waitFor(entry) : "timeout";
+      return { outcome, status: this.describe(id) };
+    }
+    let wanted: McpPermission[] = [];
+    if (typeof params.level === "string" && Object.hasOwn(mcpLevels, params.level))
+      wanted = mcpLevels[params.level as McpLevel].permissions;
+    if (Array.isArray(params.permissions))
+      wanted = [
+        ...wanted,
+        ...params.permissions.filter(
+          (p): p is McpPermission => mcpPermissions.includes(p as McpPermission) && p !== "works:draft",
+        ),
+      ];
+    const missing = [...new Set(wanted)].filter((permission) => !client.permissions.includes(permission));
+    if (!missing.length) return { outcome: "always", status: this.describe(id) };
+    const entry = this.openRequest(client, "permission", missing, reason);
+    this.commit();
+    const outcome = await this.waitFor(entry);
+    return { outcome, status: this.describe(id) };
+  }
+
+  /** Ask for a missing permission during a call; returns once the user answers or the wait ends */
+  private async ensurePermission(id: string, tool: ToolDefinition): Promise<void> {
+    const permission = tool.permission as McpPermission | null;
+    const client = this.client(id);
+    if (!permission || this.allowed(id, permission)) return;
+    const entry = this.openRequest(client, "permission", [permission], `调用「${tool.title}」`);
+    this.commit();
+    const outcome = await this.waitFor(entry);
+    if (outcome === "deny") throw new McpError("forbidden", `用户拒绝了「${mcpPermissionLabels[permission]}」权限`);
+    if (outcome === "timeout")
+      throw new McpError(
+        "permission_pending",
+        `缺少「${mcpPermissionLabels[permission]}」权限，已在 Glaze 弹窗请求用户授权。请提醒用户在 Glaze 窗口中点击「允许」后再试一次。`,
+      );
+    if (outcome === "once") {
+      const set = this.once.get(id) ?? new Set();
+      set.add(permission);
+      this.once.set(id, set);
+    }
+  }
+
+  /** List every tool for approved clients so the AI knows what it can ask for */
+  catalog(id: string): { tool: ToolDefinition; granted: boolean }[] {
+    if (!this.data.clients.find((entry) => entry.id === id)?.approved) return [];
+    return this.definitions.map((tool) => ({
+      tool,
+      granted: tool.permission === null || this.allowed(id, tool.permission),
+    }));
+  }
+
+  /** Keep a keyed client's grant when one of its sessions ends; other sessions stay connected */
+  sessionClosed(id: string): void {
+    if (!this.connections.get(id)?.size) this.invalidate(id, "连接已断开");
+    this.commit();
+  }
+
+  /** Drop a client created for a session that never finished initializing */
+  discardTransient(id: string): void {
+    const client = this.data.clients.find((entry) => entry.id === id);
+    if (client && !client.key) this.revoke(id);
   }
 
   /** Track live HTTP sessions separately from persistent authorization */
@@ -198,10 +468,18 @@ export class McpService {
     this.commit();
   }
   /** Remove the grant and terminate the associated HTTP session */
-  revoke(id: string): void {
+  revoke(id: string): StoredClient | undefined {
+    const client = this.data.clients.find((entry) => entry.id === id);
     this.disconnect(id);
+    for (const [requestId, entry] of this.access)
+      if (entry.request.clientId === id) {
+        this.access.delete(requestId);
+        for (const resolve of [...entry.waiters]) resolve("deny");
+      }
+    this.once.delete(id);
     this.data.clients = this.data.clients.filter((entry) => entry.id !== id);
     this.commit();
+    return client;
   }
   /** Stop all clients and invalidate unexecuted approvals */
   disable(): void {
@@ -231,15 +509,14 @@ export class McpService {
   private client(id: string, approved = true): StoredClient {
     const client = this.data.clients.find((entry) => entry.id === id);
     if (!client || (approved && !client.approved))
-      throw new McpError("pairing_required", "请在应用 AI 接入页批准此客户端");
+      throw new McpError("pairing_required", "请在 Glaze 弹窗中批准此 AI 工具连接，或在侧边栏「AI 助手」里一键连接");
     return client;
   }
   /** Check account scope and plugin availability before every platform phase */
   private authorize(id: string, permission: string | null, account?: string): StoredClient {
     if (!this.data.enabled) throw new McpError("unavailable", "MCP 服务已关闭");
     const client = this.client(id);
-    if (permission && !client.permissions.includes(permission as never))
-      throw new McpError("forbidden", "此客户端没有该能力权限");
+    if (permission && !this.allowed(id, permission)) throw new McpError("forbidden", "此 AI 工具没有该权限");
     if (
       account &&
       (!client.accounts.includes(account) ||
@@ -271,8 +548,19 @@ export class McpService {
   async call(id: string, name: string, input: unknown): Promise<unknown> {
     let account: string | null = null;
     let outcome = "failed";
+    if (name === "glaze_status") return this.describe(id);
+    if (name === "glaze_request_access") return this.requestAccessTool(id, input);
     const tool = this.definitions.find((entry) => entry.name === name);
     if (!tool) throw new McpError("unknown_tool", "工具不存在");
+    if (!this.client(id, false).approved) this.requestConnect(id);
+    // Reject malformed calls before asking the user to approve anything
+    const checked = tool.schema.safeParse(input ?? {});
+    if (!checked.success)
+      throw new McpError(
+        "validation",
+        checked.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; "),
+      );
+    await this.ensurePermission(id, tool);
     const recent = (this.rates.get(id) ?? []).filter((time) => time > Date.now() - 60_000);
     if (recent.length >= 60 || this.calls.has(id))
       throw new McpError("rate_limited", "请降低调用频率并等待当前调用完成");
@@ -328,6 +616,7 @@ export class McpService {
       throw error;
     } finally {
       this.calls.delete(id);
+      if (tool.permission) this.once.get(id)?.delete(tool.permission as McpPermission);
       this.audit(id, name, account, outcome);
     }
   }
@@ -340,6 +629,7 @@ export class McpService {
       clientId: id,
       clientName: this.data.clients.find((entry) => entry.id === id)?.name ?? "已撤销客户端",
       tool,
+      title: this.definitions.find((entry) => entry.name === tool)?.title ?? tool,
       account,
       result,
     });
@@ -953,7 +1243,10 @@ export class McpService {
   }: StoredOperation): McpOperation {
     if (operation.method) {
       const { draftId: _snapshot, revision: _revision, ...result } = operation;
-      return structuredClone(result);
+      const title = this.definitions.find(
+        (tool) => tool.invoke === operation.method || tool.name === operation.method,
+      )?.title;
+      return structuredClone({ ...result, ...(title ? { title } : {}) });
     }
     return structuredClone(operation);
   }

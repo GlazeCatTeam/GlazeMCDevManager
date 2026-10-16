@@ -1,0 +1,32 @@
+.dialog {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.body p,
+.body ul {
+  margin: 0;
+}
+
+.body ul {
+  padding-left: 20px;
+}
+
+.reason {
+  padding: 10px 12px;
+  background: var(--g-surface-sunken);
+  border-radius: var(--g-radius-control);
+  font-size: 14px;
+}
+
+.muted {
+  color: var(--g-text-muted);
+  font-size: 12px;
+}

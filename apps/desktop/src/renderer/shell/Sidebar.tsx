@@ -30,18 +30,21 @@ export interface SidebarProps {
 
 /** Group workbench navigation by task, with account management anchored below */
 export function Sidebar({ entries, activeRoute, account, onNavigate }: SidebarProps) {
-  const [mcpPending, setMcpPending] = useState(0);
+  const [mcp, setMcp] = useState({ requests: 0, connected: 0 });
   useEffect(() => {
     let active = true;
     let changed = false;
-    const off = onHostEvent("mcp.changed", ({ pendingCount }) => {
+    const off = onHostEvent("mcp.changed", ({ requestCount, connectedCount }) => {
       changed = true;
-      setMcpPending(pendingCount);
+      setMcp({ requests: requestCount, connected: connectedCount });
     });
     void callHost("mcp.snapshot")
       .then((result) => {
         if (active && !changed && result.ok)
-          setMcpPending(result.value.operations.filter((operation) => operation.state === "pending").length);
+          setMcp({
+            requests: result.value.requests.length,
+            connected: result.value.clients.filter((client) => client.connected).length,
+          });
       })
       .catch(() => undefined);
     return () => {
@@ -86,13 +89,14 @@ export function Sidebar({ entries, activeRoute, account, onNavigate }: SidebarPr
           ))}
       </div>
       <div className={styles.spacer} />
-      {mcpPending > 0 && (
+      {(mcp.requests > 0 || mcp.connected > 0) && (
         <button
           type="button"
-          className={styles.item}
-          onClick={() => onNavigate("glaze.settings/settings", { category: "ai" })}
+          className={mcp.requests ? `${styles.aiStatus} ${styles.aiWaiting}` : styles.aiStatus}
+          onClick={() => onNavigate("glaze.assistant/assistant")}
         >
-          AI 执行中 · {mcpPending}
+          <span className={styles.aiDot} aria-hidden />
+          {mcp.requests ? `AI 等你允许 · ${mcp.requests}` : `AI 已连接 · ${mcp.connected}`}
         </button>
       )}
       <div className={styles.utilities}>{entries.filter((e) => e.group === "bottom").map(renderItem)}</div>

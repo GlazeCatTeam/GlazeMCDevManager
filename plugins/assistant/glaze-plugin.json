@@ -1,0 +1,16 @@
+{
+  "id": "glaze.assistant",
+  "name": "AI 助手",
+  "version": "0.0.0",
+  "publisher": "glaze",
+  "description": "一键连接 Claude Code、Codex 等 AI 工具，管理授权与查看 AI 操作记录",
+  "engines": { "glaze": "^0.1.0" },
+  "entries": { "ui": "src/index.ts" },
+  "activationEvents": ["onPage:assistant"],
+  "contributes": {
+    "pages": [{ "id": "assistant", "title": "AI 助手" }],
+    "navItems": [{ "page": "assistant", "icon": "nav.ai", "group": "bottom", "order": 10 }],
+    "widgets": []
+  },
+  "permissions": ["storage"]
+}

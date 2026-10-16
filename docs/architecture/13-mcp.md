@@ -2,6 +2,8 @@
 
 让外部 AI 工具（Claude Code、Codex、Cursor 等）通过 MCP 使用本应用的功能。应用本身不内置 AI。决定见 [ADR-0008](../adr/0008-capabilities-and-mcp.md)。
 
+> 2026-10-16 体验重设计：入口改为侧边栏「AI 助手」，一键连接写入 AI 工具配置并发放连接密钥，权限改为三档，缺权限时由 AI 触发应用内弹窗申请，见 [ADR-0013](../adr/0013-ai-first-mcp-experience.md) 与 [22 MCP 实装](22-mcp-runtime.md)。
+>
 > 2026-10-16 实装更新：本机 Streamable HTTP 接入、客户端授权、作品 ID 直接编辑、材料上传与授权后直接保存/提审已接入代码，设置页已使用真实状态。实际入口、工具、存储、测试及尚未完成的真实平台验收见 [22 MCP 实装](22-mcp-runtime.md)。下文保留最初架构与分阶段设计记录；其中“服务待接入/尚未实现”描述的是当时状态，传输、默认账号及批准规则以 22 文为准。第三方插件贡献工具仍待后续实现。
 
 ## 核心原则：能力优先
@@ -81,7 +83,7 @@ flowchart LR
 |---|---|---|
 | Streamable HTTP | 填写端口并启用后监听（默认 `http://127.0.0.1:17839/mcp`），AI 工具使用自动生成的 URL 连接 | MCP 总开关默认关闭 |
 
-设置页「AI 接入」提供总开关、端口输入、连接地址、客户端列表和 Codex / Claude Code / Cursor 配置示例。连接后由用户选择账号和权限，新建会话重新授权。旧 stdio 桥与命名管道已移除。
+侧边栏「AI 助手」提供一键连接（自动写入 Claude Code、Codex、Cursor、VS Code、Windsurf、Gemini CLI 的配置，其他工具生成一句话让 AI 自己配置）、已连接工具与三档权限、待处理请求和操作记录；服务开关和端口收进高级设置。一键连接的地址带独立连接密钥，重连无需再次授权；不带密钥的手动连接每次会话需在弹窗中允许。旧 stdio 桥与命名管道已移除。
 
 ## 安全
 
@@ -96,8 +98,8 @@ type CallerIdentity =
 
 | 措施 | 规则 |
 |---|---|
-| 配对 | 新客户端第一次连接时，应用弹窗显示客户端名称，用户同意后才能调用；可随时撤销 |
-| 授权范围 | 按权限授予，默认只给只读权限（`*.read`）；写权限要用户单独勾选 |
+| 配对 | 一键连接由用户在应用内发起，按连接密钥识别客户端；手动连接首次调用时应用弹窗请用户允许；可随时移除，密钥立即失效 |
+| 授权范围 | 三档权限（只看数据 / 帮我打理 / 完全托管），一键连接默认帮我打理；缺权限时 AI 调用会触发应用内申请，用户选择一直允许、仅这一次或拒绝 |
 | 执行 | 上传、新建、保存、提审按各自已授予权限直接执行，无逐次确认；普通保存默认不提审，申请结算不开放 |
 | 凭据 | 永远不返回 Cookie、密码、ticket；工具结果再过一遍日志脱敏规则 |
 | 审计 | 每次调用写 `audit_log`：客户端、工具、账号、结果 |
@@ -123,6 +125,7 @@ type CallerIdentity =
 | 模块 | 计划暴露的工具 | 风险 |
 |---|---|---|
 | 账号 | `account_list`、`account_current`（能力已在 `@glaze/contracts` 的 `capabilities` 定义，MCP 服务待接入）；等级卡片与首页共用 `developer_level` / `developer.level`，支持按 `account` 读取等级、经验、升阶任务及两类贡献；`sessionSettings.get/set` 已定义为主界面专用读/写能力（`netease:account.read/manage`），管理自动登录与过期提醒，暂不开放 MCP；登录、Cookie 导入、切换、退出、删除永不开放 | read；会话偏好写入仅主界面 |
+| AI 助手 | `glaze_status`（连接状态、档位、账号、能做的事与还需申请的权限）、`glaze_request_access`（按档位或权限申请并说明原因，最多等待 60 秒）；授权前即可调用。宿主侧 `mcp.installers` / `mcp.connect` / `mcp.answer` 等为 shellOnly，不开放 MCP | read；申请本身不执行业务 |
 | 首页 | `developer_level`（等级、阶、经验、贡献）、`analytics_overview`（本月 / 上月、昨日 / 14 日均的钻石与下载）、`income_estimate`（收益速算，month 可选）、`rank_list`（4 个榜单，热搜不分类，其余支持 4 个分类的前 N 条）、`rank_page`（start/limit 逐批读取，返回 items/total/nextStart，nextStart 为 null 结束；includeIcons=false 不等待缺失封面）、`rank_icons`（最多 50 个数字作品 ID 批量读取公开封面，不携带 Cookie，缺失项省略）；界面与 MCP 共用能力和权限 | read |
 | 作品 | 已声明 `works_list`、`works_get`、`works_review_feedback`；本轮设计增加编辑文档、选项查询、创建/修改草稿、材料上传、保存与提交审核，详见下节。所有 MCP 接入仍待实现；独立上架、删除等不在本轮范围 | read / write |
 | 数据分析 | `analytics.daily` 已通过 MCP 暴露, 支持 PE/PC 日度查询; 返回新增购买、销售总量、钻石、绿宝石、日活、退款率 (0–1 比例)、人均游玩时长 (分钟) 和组件涨粉, 缺失字段为 null; 查询 PE 组件涨粉需传 `includePeers: true` 开启平台附加统计 | read |

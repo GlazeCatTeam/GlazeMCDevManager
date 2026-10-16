@@ -1,0 +1,112 @@
+.page {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 36px 40px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 32px;
+  align-items: center;
+  min-height: 300px;
+}
+
+.heroText {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.heroText h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.steps {
+  margin: 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.steps li {
+  font-size: 14px;
+}
+
+.steps span {
+  display: block;
+  margin-top: 2px;
+  color: var(--g-text-muted);
+  font-size: 12px;
+}
+
+/* Fixed height so connecting more tools never moves the panels below */
+.clients {
+  height: 300px;
+  display: flex;
+  flex-direction: column;
+}
+
+.clientList {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-auto-rows: min-content;
+  gap: 12px;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 20px;
+}
+
+.columns > :only-child {
+  grid-column: 1 / -1;
+}
+
+.side {
+  height: 380px;
+}
+
+.examples {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.examples li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--g-surface-sunken);
+  border-radius: var(--g-radius-control);
+  font-size: 13px;
+}
+
+.footnote {
+  margin: 0;
+  color: var(--g-text-muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+@media (max-width: 900px) {
+  .hero,
+  .columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

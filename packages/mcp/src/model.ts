@@ -1,5 +1,6 @@
 import type {
   AccountSummary,
+  McpAccessRequest,
   McpAsset,
   McpAudit,
   McpClient,
@@ -16,6 +17,8 @@ import { MCP_DEFAULT_PORT } from "@glaze/contracts";
 export interface StoredClient extends Omit<McpClient, "connected" | "directories"> {
   /** Legacy bridge secrets are stripped from public snapshots during migration */
   token?: string;
+  /** Connection key written into the AI tool's configuration by one-click connect */
+  key?: string;
   directories: { id: string; name: string; path: string }[];
 }
 export interface StoredAsset extends McpAsset {
@@ -45,6 +48,8 @@ export interface McpData {
 export interface McpPorts {
   save(data: McpData): void;
   changed(): void;
+  /** Tell the user a tool is waiting for an answer, e.g. with a system notification */
+  notify?(request: McpAccessRequest): void;
   accounts(): AccountSummary[];
   assertEnabled(method: string): void;
   read(method: string, params: Record<string, unknown>): Promise<unknown>;

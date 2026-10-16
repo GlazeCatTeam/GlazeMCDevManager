@@ -25,7 +25,15 @@ import type {
   IncomePlatform,
 } from "./income";
 import type { LogPage, LogQuery } from "./logs";
-import type { McpGrant, McpSnapshot } from "./mcp";
+import type {
+  McpConnectResult,
+  McpDecision,
+  McpGrant,
+  McpInstaller,
+  McpInstallerId,
+  McpLevel,
+  McpSnapshot,
+} from "./mcp";
 import type { MessageContent, MessageDeleteParams, MessageListParams, MessagePage, MessageParams } from "./messages";
 import type { PluginInstallPreview, PluginSnapshot } from "./plugins";
 import type {
@@ -81,6 +89,9 @@ export interface RpcMethods {
   "mcp.disconnect": { params: { clientId: string }; result: undefined };
   "mcp.revoke": { params: { clientId: string }; result: undefined };
   "mcp.directory": { params: { clientId: string; removeId?: string }; result: undefined };
+  "mcp.installers": { params: undefined; result: McpInstaller[] };
+  "mcp.connect": { params: { tool: McpInstallerId; level: McpLevel }; result: McpConnectResult };
+  "mcp.answer": { params: { requestId: string; decision: McpDecision }; result: undefined };
   "promotion.activities": { params: PromotionPageParams; result: { records: PromotionActivity[]; total: number } };
   "promotion.discount": { params: AccountParams | undefined; result: { activity: PromotionActivity | null } };
   "promotion.module": { params: PromotionModuleParams; result: PromotionModuleData };
@@ -180,7 +191,7 @@ export interface RpcMethods {
 }
 
 export interface EventPayloads {
-  "mcp.changed": { pendingCount: number };
+  "mcp.changed": { pendingCount: number; requestCount: number; connectedCount: number };
   "sessionSettings.changed": SessionSettings;
   "plugins.changed": PluginSnapshot;
   "logs.changed": undefined;

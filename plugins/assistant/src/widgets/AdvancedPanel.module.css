@@ -1,0 +1,53 @@
+.advanced {
+  padding: 14px 20px;
+  background: var(--g-surface-panel);
+  border: var(--g-border-width) solid var(--g-panel-borderColor);
+  border-radius: var(--g-radius-panel);
+}
+
+.advanced summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  font-size: 13px;
+}
+
+.row p {
+  margin: 4px 0 0;
+}
+
+.muted {
+  color: var(--g-text-muted);
+  font-size: 12px;
+  font-weight: normal;
+  line-height: 1.6;
+}
+
+.port {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.input {
+  width: 88px;
+  padding: 6px 8px;
+  color: var(--g-text-primary);
+  background: var(--g-surface-sunken);
+  border: 1px solid var(--g-field-borderColor);
+  border-radius: var(--g-radius-control);
+}

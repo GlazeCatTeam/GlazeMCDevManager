@@ -96,3 +96,37 @@
   font-size: 12px;
   color: var(--g-status-warning);
 }
+
+/* AI connection status above the bottom utilities; highlighted while a request waits */
+.aiStatus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin: 0 0 6px;
+  padding: 6px 12px;
+  color: var(--g-text-muted);
+  font-size: 12px;
+  text-align: left;
+}
+
+.aiStatus:hover {
+  background: var(--g-nav-hover-bg);
+  color: var(--g-text-primary);
+}
+
+.aiDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--g-status-success);
+}
+
+.aiWaiting {
+  color: var(--g-text-primary);
+  font-weight: 700;
+}
+
+.aiWaiting .aiDot {
+  background: var(--g-status-warning);
+}

@@ -1,0 +1,24 @@
+{
+  "name": "@glaze/plugin-assistant",
+  "license": "Apache-2.0",
+  "version": "0.0.0",
+  "private": true,
+  "description": "内置插件：AI 助手",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@glaze/plugin-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "react": "^19.3.0"
+  },
+  "peerDependencies": {
+    "react": "^19.3.0"
+  }
+}

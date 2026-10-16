@@ -66,7 +66,7 @@ flowchart TD
 | [13 能力层与 MCP 接入](13-mcp.md) | 能力优先原则、能力到 MCP 工具的映射、传输、配对授权、每个模块的工具清单 |
 | [20 关于页面](20-about.md) | 版本、固定项目链接、离线依赖许可与运行时声明 |
 | [21 活动推广](21-promotion.md) | 作品活动、折扣特卖、PE 轮播图申请、能力和验收 |
-| [22 MCP 实装](22-mcp-runtime.md) | 本机连接、账号授权、AI 草稿、材料、写入审批与验证 |
+| [22 MCP 实装](22-mcp-runtime.md) | AI 助手页、一键连接与连接密钥、三档权限、AI 主动申请、材料与写入保护 |
 
 项目目标、已敲定的决定和当前进度见 [docs/PROJECT.md](../PROJECT.md)。架构决策记录（ADR）见 [docs/adr](../adr/README.md)。设计参考图见 [docs/design/references](../design/references/)。
 

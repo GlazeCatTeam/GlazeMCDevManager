@@ -74,6 +74,8 @@ export function createServices(ensureTray: () => void, showWindow: () => void) {
   mcp = createMcpHost(sessions, plugins, () =>
     broadcast("mcp.changed", {
       pendingCount: mcp?.service.data.operations.filter((operation) => operation.state === "pending").length ?? 0,
+      requestCount: mcp?.service.requestCount() ?? 0,
+      connectedCount: mcp?.service.connections.size ?? 0,
     }),
   );
   return {

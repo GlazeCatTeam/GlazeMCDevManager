@@ -11,7 +11,6 @@ import {
 } from "./mock";
 import styles from "./SettingsPage.module.css";
 import { AboutSection } from "./sections/AboutSection";
-import { AiSection } from "./sections/AiSection";
 import { AppearanceSection } from "./sections/AppearanceSection";
 import { GeneralSection } from "./sections/GeneralSection";
 import { LogsSection } from "./sections/LogsSection";
@@ -37,10 +36,11 @@ export function SettingsPage({
   themePreviewStyles,
 }: SettingsPageProps) {
   const { navigate, params } = useNavigation();
-  const [category, setCategory] = useState<SettingsCategory>(params.category === "ai" ? "ai" : "appearance");
+  const [category, setCategory] = useState<SettingsCategory>("appearance");
+  // AI connections moved to their own page; keep old links working
   useEffect(() => {
-    if (params.category === "ai") setCategory("ai");
-  }, [params.category]);
+    if (params.category === "ai") navigate("glaze.assistant/assistant");
+  }, [params.category, navigate]);
   const [localAppearance, setLocalAppearance] = useState(initialAppearance);
   const general = useGeneralSettings(category === "general");
   const [autoUpdate, setAutoUpdate] = useState(true);
@@ -154,7 +154,6 @@ export function SettingsPage({
               />
             )}
             {category === "plugins" && <PluginsSection />}
-            {category === "ai" && <AiSection />}
             {category === "logs" && <LogsSection />}
             {category === "about" && (
               <AboutSection
@@ -179,9 +178,7 @@ export function SettingsPage({
                       ? "运行日志自动记录并脱敏，可导出当前级别的最近 500 条。"
                       : category === "about"
                         ? "项目链接通过默认浏览器打开；依赖许可支持离线查看。"
-                        : category === "ai"
-                          ? "MCP 按已授予的账号与权限直接执行，操作结果保存在本机。"
-                          : "界面预览 · 系统功能与业务服务尚待接入")}
+                        : "界面预览 · 系统功能与业务服务尚待接入")}
           </div>
         </Panel>
       </div>

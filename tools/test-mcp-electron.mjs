@@ -53,6 +53,13 @@ await new Promise((resolve) => next.server.close(resolve));
 let application;
 let client;
 let transport;
+/** Open a fresh SDK session against the running app */
+async function open(url, name) {
+  const next = new Client({ name, version: "1" });
+  const nextTransport = new StreamableHTTPClientTransport(new URL(url));
+  await next.connect(nextTransport);
+  return { client: next, transport: nextTransport };
+}
 try {
   application = await electron.launch({ executablePath: require("electron"), args: [entry], cwd: root });
   const page = await application.firstWindow();
@@ -61,48 +68,62 @@ try {
   page.on("pageerror", (error) => errors.push(error.message));
   await page.waitForFunction(() => window.glaze && document.querySelector("button"));
   await application.evaluate(() => globalThis.__seedMcp());
-  await page.getByRole("button", { name: "设置", exact: true }).click();
-  await page.getByRole("button", { name: "AI 接入", exact: true }).click();
-  await page.getByRole("switch", { name: "MCP 服务" }).waitFor();
-  assert.equal(await page.getByRole("switch", { name: "MCP 服务" }).getAttribute("aria-checked"), "false");
-  await page.getByRole("textbox", { name: "MCP 端口", exact: true }).fill(String(initialPort));
-  await page.getByRole("button", { name: "启用服务", exact: true }).click();
-  await page.getByText("运行中", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "AI 助手", exact: true }).click();
+  await page.getByRole("region", { name: "开始使用" }).waitFor();
+  await page.getByText("高级设置", { exact: false }).click();
+  assert.equal(await page.getByRole("switch", { name: "AI 连接服务" }).getAttribute("aria-checked"), "false");
+  await page.getByRole("textbox", { name: "本机端口", exact: true }).fill(String(initialPort));
+  await page.getByRole("switch", { name: "AI 连接服务" }).click();
+  await page.getByText("连接服务运行中", { exact: false }).waitFor();
   const state = await page.evaluate(() => window.glaze.rpc("mcp.snapshot"));
-  assert.equal(state.ok, true);
-  assert.equal(state.value.clients.length, 0);
   assert.equal(state.value.port, initialPort);
   assert.equal(state.value.endpoint, `http://127.0.0.1:${initialPort}/mcp`);
-  assert.equal(await page.getByRole("textbox", { name: "MCP 连接地址" }).inputValue(), state.value.endpoint);
-  transport = new StreamableHTTPClientTransport(new URL(state.value.endpoint));
-  client = new Client({ name: "Codex", version: "1" });
-  await client.connect(transport);
-  assert.equal((await client.listTools()).tools.length, 0);
-  await page.getByRole("button", { name: "授权", exact: true }).click();
-  const grant = page.getByRole("dialog", { name: "Codex · 账号与权限", exact: true });
-  await grant.getByText("MCP 测试账号", { exact: false }).first().waitFor();
-  assert.equal(await grant.getByRole("checkbox", { name: "收益与结算查询", exact: true }).isChecked(), false);
-  for (const label of [
-    "作品发布、撤回、定价、自测与删除",
-    "回复玩家评论与反馈",
-    "系统消息已读与删除",
-    "活动报名、推广材料与轮播图申请",
-  ]) {
-    assert.equal(await grant.getByRole("checkbox", { name: label, exact: true }).isChecked(), false);
-  }
-  assert.equal(await grant.getByRole("checkbox", { name: /草稿/ }).count(), 0);
-  await grant.getByRole("button", { name: "保存授权", exact: true }).click();
-  await grant.waitFor({ state: "hidden" });
-  const tools = await client.listTools();
-  assert.ok(tools.tools.some((tool) => tool.name === "account_list"));
-  assert.ok(!tools.tools.some((tool) => tool.name === "income_list"));
-  assert.ok(tools.tools.some((tool) => tool.name === "comments_list"));
-  assert.ok(!tools.tools.some((tool) => tool.name === "comments_reply"));
-  assert.ok(!tools.tools.some((tool) => tool.name.startsWith("works_draft_")));
-  assert.equal(await page.getByRole("region", { name: "AI 草稿", exact: true }).count(), 0);
+
+  // "Other" never writes into real AI tool configs, so it is safe to exercise here
+  const connected = await page.evaluate(() => window.glaze.rpc("mcp.connect", { tool: "other", level: "assist" }));
+  assert.equal(connected.ok, true);
+  assert.equal(connected.value.installed, false);
+  assert.match(connected.value.endpoint, new RegExp(`^http://127\\.0\\.0\\.1:${initialPort}/mcp\\?key=`));
+  assert.ok(connected.value.prompt.includes(connected.value.endpoint));
+  ({ client, transport } = await open(connected.value.endpoint, "伪造名称"));
+  const names = (await client.listTools()).tools.map((tool) => tool.name);
+  assert.ok(names.includes("glaze_status") && names.includes("works_save") && names.includes("account_list"));
+  const status = await client.callTool({ name: "glaze_status", arguments: {} });
+  assert.equal(status.structuredContent.result.approved, true);
+  assert.equal(status.structuredContent.result.level, "帮我打理");
   const accounts = await client.callTool({ name: "account_list", arguments: {} });
   assert.equal(accounts.structuredContent.result[0].nickname, "MCP 测试账号");
   assert.ok(!JSON.stringify(accounts).includes("TEST_ONLY"));
+  await page.getByText("其他 AI 工具", { exact: true }).first().waitFor();
+  await page.getByText("AI 已连接", { exact: false }).waitFor();
+
+  // A missing permission opens the app-wide prompt; denying returns a clear error to the AI
+  const card = page.getByRole("article").filter({ hasText: "其他 AI 工具" });
+  await card.getByRole("button", { name: "只看数据", exact: true }).click();
+  const pending = client.callTool({
+    name: "comments_reply",
+    arguments: { id: "comment-1", content: "谢谢", idempotencyKey: "deny" },
+  });
+  const prompt = page.getByRole("dialog", { name: "其他 AI 工具 需要你的允许" });
+  await prompt.getByText("回复玩家评论与反馈", { exact: true }).waitFor();
+  await prompt.getByRole("button", { name: "拒绝", exact: true }).click();
+  const denied = await pending;
+  assert.equal(denied.isError, true);
+  assert.match(JSON.stringify(denied.content), /拒绝/);
+
+  // Keyless manual connections must be allowed in the app before they see business tools
+  const manual = await open(state.value.endpoint, "Cherry Studio");
+  assert.deepEqual(
+    (await manual.client.listTools()).tools.map((tool) => tool.name),
+    ["glaze_status", "glaze_request_access"],
+  );
+  const ask = page.getByRole("dialog", { name: "Cherry Studio 想连接 Glaze" });
+  await ask.getByRole("button", { name: "允许连接", exact: true }).click();
+  await ask.waitFor({ state: "hidden" });
+  assert.ok((await manual.client.listTools()).tools.some((tool) => tool.name === "account_list"));
+  await manual.transport.terminateSession();
+  await manual.client.close();
+
   for (const port of [0, 65536, 1.5, "19133"]) {
     const invalid = await page.evaluate((port) => window.glaze.rpc("mcp.setEnabled", { enabled: true, port }), port);
     assert.equal(invalid.ok, false);
@@ -113,49 +134,64 @@ try {
   );
   assert.equal(conflict.value.status, "running");
   assert.equal(conflict.value.port, initialPort);
-  assert.equal(conflict.value.endpoint, state.value.endpoint);
   assert.match(conflict.value.error, /已被占用/);
   assert.equal((await client.callTool({ name: "account_list", arguments: {} })).isError, undefined);
-  const denied = await client.callTool({ name: "income_list", arguments: { platform: "pe" } });
-  assert.equal(denied.isError, true);
   assert.equal(readFileSync(join(directory, "mcp/state.bin")).includes(Buffer.from("MCP 测试账号")), false);
-  const info = await client.callTool({ name: "app_getAbout", arguments: {} });
-  assert.equal(info.isError, undefined);
-  await page.getByRole("button", { name: "撤销", exact: true }).click();
-  await page.getByRole("button", { name: "撤销授权", exact: true }).click();
-  await page.getByText("暂无客户端连接", { exact: true }).waitFor();
+  assert.equal(readFileSync(join(directory, "mcp/state.bin")).includes(Buffer.from("key=")), false);
   assert.deepEqual(errors, []);
   await client.close();
   client = undefined;
-  await page.getByRole("textbox", { name: "MCP 端口", exact: true }).fill(String(nextPort));
-  await page.getByRole("button", { name: "应用端口", exact: true }).click();
-  await page.waitForFunction(
-    (port) => document.querySelector('[aria-label="MCP 连接地址"]').value.includes(`:${port}/`),
+
+  // The key keeps the grant across an app restart without re-approval
+  await application.close();
+  application = await electron.launch({ executablePath: require("electron"), args: [entry], cwd: root });
+  const restarted = await application.firstWindow();
+  restarted.setDefaultTimeout(15000);
+  await restarted.waitForFunction(() => window.glaze);
+  ({ client, transport } = await open(connected.value.endpoint, "重启后"));
+  const again = await client.callTool({ name: "glaze_status", arguments: {} });
+  assert.equal(again.structuredContent.result.approved, true);
+  assert.equal(again.structuredContent.result.level, "只看数据");
+  await client.close();
+  client = undefined;
+  await restarted.getByRole("button", { name: "AI 助手", exact: true }).click();
+  await restarted
+    .getByRole("article")
+    .filter({ hasText: "其他 AI 工具" })
+    .getByRole("button", { name: "移除", exact: true })
+    .click();
+  await restarted.getByRole("dialog", { name: "移除 其他 AI 工具？" }).getByRole("button", { name: "移除" }).click();
+  await restarted.getByRole("region", { name: "开始使用" }).waitFor();
+  const refused = await fetch(connected.value.endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "x", version: "1" } },
+    }),
+  });
+  assert.equal(refused.status, 401);
+
+  // Moving the port keeps the service usable on the new address
+  await restarted.getByText("高级设置", { exact: false }).click();
+  await restarted.getByRole("textbox", { name: "本机端口", exact: true }).fill(String(nextPort));
+  await restarted.getByRole("button", { name: "应用", exact: true }).click();
+  await restarted.waitForFunction(
+    async (port) => (await window.glaze.rpc("mcp.snapshot")).value.port === port,
     nextPort,
   );
   await assert.rejects(fetch(state.value.endpoint));
-  client = new Client({ name: "Port switch test", version: "1" });
-  transport = new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${nextPort}/mcp`));
-  await client.connect(transport);
-  assert.equal((await client.listTools()).tools.length, 0);
-  await transport.terminateSession();
-  await client.close();
-  client = undefined;
-  await page.getByRole("button", { name: "撤销", exact: true }).click();
-  await page.getByRole("button", { name: "撤销授权", exact: true }).click();
-  await application.close();
-  application = undefined;
-  application = await electron.launch({ executablePath: require("electron"), args: [entry], cwd: root });
-  const restarted = await application.firstWindow();
-  await restarted.waitForFunction(() => window.glaze);
-  const recovered = await restarted.evaluate(() => window.glaze.rpc("mcp.snapshot"));
-  assert.equal(recovered.ok, true);
-  assert.equal(recovered.value.clients.length, 0);
-  assert.ok(recovered.value.audit.length > 0);
-  assert.equal(recovered.value.port, nextPort);
-  assert.equal(recovered.value.endpoint, `http://127.0.0.1:${nextPort}/mcp`);
+  const moved = await open(`http://127.0.0.1:${nextPort}/mcp`, "Port switch test");
+  assert.deepEqual(
+    (await moved.client.listTools()).tools.map((tool) => tool.name),
+    ["glaze_status", "glaze_request_access"],
+  );
+  await moved.transport.terminateSession();
+  await moved.client.close();
   console.log(
-    "PASS: Electron UI, encrypted persistence, Streamable HTTP, SDK handshake, account grants, income denial, port validation, conflict rollback, port switching, revocation and restart",
+    "PASS: Electron AI assistant page, keyed one-click client, restart persistence, app-wide permission prompt, manual connection approval, port validation, conflict rollback, removal and port switching",
   );
 } finally {
   await new Promise((resolve) => blocked.server.close(resolve));

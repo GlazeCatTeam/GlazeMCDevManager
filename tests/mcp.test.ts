@@ -6,11 +6,13 @@ import { join } from "node:path";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { createMcpBusiness } from "../apps/desktop/src/main/mcp/business";
+import { withoutTomlServer } from "../apps/desktop/src/main/mcp/installers";
 import {
   type AccountSummary,
   emptyWorkCreateFields,
   type McpDraft,
   type McpOperation,
+  mcpLevels,
   mcpPermissions,
 } from "../packages/contracts/src";
 import { Client } from "../packages/mcp/node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js";
@@ -91,6 +93,8 @@ function fixture(legacy = true) {
     assetRoot: join(tmpdir(), "glaze-mcp-test-unused"),
   };
   const service = new McpService(emptyMcpData(), ports);
+  // Report missing permissions immediately instead of waiting for a user answer
+  service.accessWaitMs = 0;
   // Retain regression coverage of the internal snapshot executor; production publishes direct tools only
   if (legacy) service.definitions.splice(0, service.definitions.length, ...legacyToolDefinitions());
   service.data.enabled = true;
@@ -478,8 +482,15 @@ test("HTTP SDK clients connect by URL, stay isolated and receive grant notificat
     await first.connect(firstTransport);
     await second.connect(secondTransport);
     assert.notEqual(firstTransport.sessionId, secondTransport.sessionId);
-    assert.equal((await first.listTools()).tools.length, 0);
-    assert.equal((await second.listTools()).tools.length, 0);
+    const guide = ["glaze_status", "glaze_request_access"];
+    assert.deepEqual(
+      (await first.listTools()).tools.map((tool) => tool.name),
+      guide,
+    );
+    assert.deepEqual(
+      (await second.listTools()).tools.map((tool) => tool.name),
+      guide,
+    );
     const state = await first.readResource({ uri: "glaze://connection" });
     assert.equal(JSON.parse(state.contents[0]?.text as string).approved, false);
     const clients = f.service.snapshot().clients.filter((entry) => entry.name === "Codex");
@@ -494,7 +505,10 @@ test("HTTP SDK clients connect by URL, stay isolated and receive grant notificat
     for (let attempt = 0; attempt < 20 && !notified; attempt++) await delay(10);
     assert.equal(notified, true);
     assert.ok((await first.listTools()).tools.some((tool) => tool.name === "account_list"));
-    assert.equal((await second.listTools()).tools.length, 0);
+    assert.deepEqual(
+      (await second.listTools()).tools.map((tool) => tool.name),
+      guide,
+    );
     const accounts = await first.callTool({ name: "account_list", arguments: {} });
     assert.ok(accounts.structuredContent);
     assert.equal((accounts.structuredContent.result as AccountSummary[])[0]?.id, "a");
@@ -1005,4 +1019,136 @@ test("host business adapter checks the fixed account immediately before sending 
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("one-click keys keep the grant across reconnects and unknown keys are refused", async () => {
+  const f = fixture(false);
+  const http = new McpHttpServer(f.service);
+  const endpoint = await http.start(0);
+  const { client, key } = f.service.createKeyedClient("Claude Code", "claude-code", "assist");
+  assert.deepEqual(client.permissions, mcpLevels.assist.permissions);
+  assert.deepEqual(client.accounts, ["a", "b"]);
+  assert.equal(client.defaultAccount, "a");
+  assert.equal("key" in (f.service.snapshot().clients.find((entry) => entry.id === client.id) ?? {}), false);
+  const count = f.service.data.clients.length;
+  try {
+    for (let round = 0; round < 2; round++) {
+      const ai = new Client({ name: "伪造名称", version: "1" });
+      await ai.connect(new StreamableHTTPClientTransport(new URL(`${endpoint}?key=${key}`)));
+      const names = (await ai.listTools()).tools.map((tool) => tool.name);
+      assert.ok(names.includes("glaze_status") && names.includes("works_save") && names.includes("works_delete"));
+      const status = (await ai.callTool({ name: "glaze_status", arguments: {} })).structuredContent?.result as {
+        approved: boolean;
+        level: string;
+      };
+      assert.equal(status.approved, true);
+      assert.equal(status.level, "帮我打理");
+      assert.equal(
+        (await ai.listPrompts()).prompts.some((prompt) => prompt.name === "daily_report"),
+        true,
+      );
+      await ai.close();
+    }
+    assert.equal(f.service.data.clients.length, count);
+    assert.equal(f.service.snapshot().clients.find((entry) => entry.id === client.id)?.approved, true);
+    const refused = await fetch(`${endpoint}?key=wrong-key`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "x", version: "1" } },
+      }),
+    });
+    assert.equal(refused.status, 401);
+    assert.equal(f.service.data.clients.length, count);
+    f.service.revoke(client.id);
+    assert.equal(f.service.clientByKey(key), undefined);
+  } finally {
+    await http.stop();
+  }
+});
+
+test("missing permissions open one request that the user can allow always, once or deny", async () => {
+  const f = fixture(false);
+  f.service.accessWaitMs = 1000;
+  f.service.grant(f.client.id, { accounts: ["a"], defaultAccount: "a", permissions: [...mcpLevels.view.permissions] });
+  const calls: string[] = [];
+  f.ports.invoke = async (method, _params, _guard, beforeWrite) => {
+    beforeWrite();
+    calls.push(method);
+    return null;
+  };
+  const args = { id: "comment-1", content: "谢谢反馈" };
+  /** Answer the first open request once it appears */
+  const answer = async (decision: "always" | "once" | "deny") => {
+    for (let attempt = 0; attempt < 50 && !f.service.snapshot().requests.length; attempt++) await delay(5);
+    const request = f.service.snapshot().requests[0];
+    assert.ok(request);
+    assert.equal(request.kind, "permission");
+    assert.deepEqual(request.permissions, ["netease:community.write"]);
+    f.service.answer(request.id, decision);
+  };
+  const denied = f.call("comments_reply", { ...args, idempotencyKey: "deny" });
+  await answer("deny");
+  await assert.rejects(denied, /拒绝/);
+  const once = f.call("comments_reply", { ...args, idempotencyKey: "once" });
+  await answer("once");
+  await once;
+  assert.equal(f.service.data.clients[0]?.permissions.includes("netease:community.write"), false);
+  const always = f.call("comments_reply", { ...args, idempotencyKey: "always" });
+  await answer("always");
+  await always;
+  assert.equal(f.service.data.clients[0]?.permissions.includes("netease:community.write"), true);
+  await f.call("comments_reply", { ...args, idempotencyKey: "later" });
+  assert.equal(f.service.snapshot().requests.length, 0);
+  assert.equal(calls.length, 3);
+  f.service.accessWaitMs = 0;
+  f.service.grant(f.client.id, { accounts: ["a"], defaultAccount: "a", permissions: [...mcpLevels.view.permissions] });
+  await assert.rejects(f.call("comments_reply", { ...args, idempotencyKey: "late" }), /权限/);
+  const late = f.service.snapshot().requests[0];
+  assert.ok(late);
+  f.service.answer(late.id, "once");
+  await f.call("comments_reply", { ...args, idempotencyKey: "late" });
+  await assert.rejects(f.call("comments_reply", { ...args, idempotencyKey: "late-2" }), /权限/);
+});
+
+test("manual connections ask to connect and get the recommended level once allowed", async () => {
+  const f = fixture(false);
+  const manual = f.service.registerClient("Cherry Studio");
+  f.service.connected(manual.id, () => {});
+  await assert.rejects(f.service.call(manual.id, "works_list", {}), /批准/);
+  const request = f.service.snapshot().requests.find((entry) => entry.clientId === manual.id);
+  assert.equal(request?.kind, "connect");
+  assert.equal(f.service.describe(manual.id).approved, false);
+  f.service.answer(request?.id ?? "", "always");
+  const approved = f.service.snapshot().clients.find((entry) => entry.id === manual.id);
+  assert.equal(approved?.approved, true);
+  assert.deepEqual(approved?.permissions, mcpLevels.assist.permissions);
+  assert.equal(approved?.persistent, false);
+  assert.throws(() => f.service.answer(request?.id ?? "", "always"), /已处理/);
+});
+
+test("Codex config edits replace only the glaze server table", () => {
+  const text = [
+    'model = "gpt"',
+    "",
+    "[mcp_servers.other]",
+    'url = "http://x"',
+    "",
+    "[mcp_servers.glaze]",
+    'url = "http://127.0.0.1:1/mcp?key=old"',
+    "",
+    "[mcp_servers.glaze.env]",
+    'A = "1"',
+    "",
+    "[profiles.default]",
+    'model = "o"',
+  ].join("\n");
+  const cleaned = withoutTomlServer(text);
+  assert.equal(cleaned.includes("glaze"), false);
+  assert.ok(cleaned.includes("[mcp_servers.other]") && cleaned.includes("[profiles.default]"));
+  assert.equal(withoutTomlServer(text, (block) => !block.includes("old")).includes("glaze"), false);
+  assert.ok(withoutTomlServer(text, (block) => !block.includes("other-key")).includes("[mcp_servers.glaze]"));
 });

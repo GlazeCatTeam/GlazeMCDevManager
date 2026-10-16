@@ -1,3 +1,4 @@
+import { AccessRequestDialog } from "@glaze/plugin-assistant";
 import {
   Button,
   callHost,
@@ -137,6 +138,7 @@ export function AppShell() {
               </main>
             </div>
           )}
+          <AccessRequestDialog />
         </div>
       </SessionProvider>
     </NavigationProvider>

@@ -6,7 +6,6 @@ export const categories = [
   { id: "appearance", label: "外观", description: "主题、颜色模式和界面大小" },
   { id: "general", label: "通用", description: "启动行为、账号与本地数据" },
   { id: "plugins", label: "插件", description: "管理内置功能和已安装的主题包" },
-  { id: "ai", label: "AI 接入", description: "通过 MCP 让外部 AI 工具连接本应用" },
   { id: "logs", label: "日志", description: "查看和导出运行记录, 帮助排查问题" },
   { id: "about", label: "关于", description: "版本信息、更新与开源许可" },
 ] as const;

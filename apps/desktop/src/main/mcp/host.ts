@@ -2,7 +2,10 @@ import { join } from "node:path";
 import type {
   IncomeDetailParams,
   IncomeListParams,
+  McpDecision,
   McpGrant,
+  McpInstallerId,
+  McpLevel,
   PromotionModuleParams,
   PromotionPageParams,
   RankListParams,
@@ -41,13 +44,14 @@ import {
   validateWorkCreate,
   validateWorkPatch,
 } from "@glaze/netease";
-import { app, dialog, safeStorage } from "electron";
+import { app, BrowserWindow, dialog, Notification, safeStorage } from "electron";
 import { getAboutInfo, getDependencyLicenses } from "../ipc/about";
 import { uploadSelectedWorkFile } from "../ipc/work-files";
 import type { PluginRegistry } from "../plugins/registry";
 import type { SessionManager } from "../session/session-manager";
 import { appWindows } from "../windows/main-window";
 import { createMcpBusiness } from "./business";
+import { connectPrompt, installTool, listInstallers, uninstallTool } from "./installers";
 import { loadMcpData, saveMcpData } from "./store";
 
 /** Keep ambiguous platform responses distinguishable from an explicit business rejection */
@@ -148,7 +152,7 @@ export function createMcpHost(sessions: SessionManager, plugins: PluginRegistry,
       !service.data.enabled ||
       !client?.approved ||
       !client.accounts.includes(account) ||
-      !client.permissions.includes(promotion ? "netease:promotion.write" : "works:upload") ||
+      !service.allowed(clientId, promotion ? "netease:promotion.write" : "works:upload") ||
       !sessions.list().some((entry) => entry.id === account && entry.status !== "expired")
     )
       throw new McpError("forbidden", "上传授权已失效");
@@ -173,6 +177,26 @@ export function createMcpHost(sessions: SessionManager, plugins: PluginRegistry,
       }
     },
     accounts: () => sessions.list(),
+    notify: (request) => {
+      // The in-app dialog is enough while the user is looking at Glaze
+      if (BrowserWindow.getFocusedWindow() || !Notification.isSupported()) return;
+      try {
+        const notification = new Notification({
+          title: request.kind === "connect" ? `${request.clientName} 想连接 Glaze` : `${request.clientName} 请求权限`,
+          body: `${request.reason}。点击回到 Glaze 处理。`,
+        });
+        notification.on("click", () => {
+          const win = appWindows()[0];
+          if (!win) return;
+          if (win.isMinimized()) win.restore();
+          win.show();
+          win.focus();
+        });
+        notification.show();
+      } catch {
+        // Notifications are a convenience; the request stays visible in the app
+      }
+    },
     assertEnabled: (method) => {
       if (persistenceError) throw new McpError("unavailable", persistenceError);
       const owner =
@@ -312,10 +336,16 @@ export function createMcpHost(sessions: SessionManager, plugins: PluginRegistry,
       transport = next;
       http = next;
       service.endpoint = next.endpoint;
+      const portChanged = service.data.port !== port;
       service.data.port = port;
       service.data.enabled = true;
       service.status = "running";
       service.commit();
+      // One-click configs embed the address, so rewrite them when the port moves
+      if (portChanged)
+        for (const client of service.data.clients)
+          if (client.key && client.tool && client.tool !== "other")
+            await installTool(client.tool, `${next.endpoint}?key=${client.key}`).catch(() => undefined);
       return service.snapshot();
     } finally {
       changing = false;
@@ -336,9 +366,42 @@ export function createMcpHost(sessions: SessionManager, plugins: PluginRegistry,
       service.disconnect(params?.clientId);
       return undefined;
     },
-    "mcp.revoke": (params: { clientId: string }) => {
+    "mcp.revoke": async (params: { clientId: string }) => {
       if (!/^[\da-f-]{36}$/.test(params?.clientId)) throw new McpError("validation", "客户端 ID 无效");
-      service.revoke(params?.clientId);
+      const removed = service.revoke(params?.clientId);
+      if (removed?.key && removed.tool) await uninstallTool(removed.tool, removed.key);
+      return undefined;
+    },
+    "mcp.installers": () => listInstallers(),
+    "mcp.connect": async (params: { tool: McpInstallerId; level: McpLevel }) => {
+      const installer = (await listInstallers()).find((entry) => entry.id === params?.tool);
+      if (!installer) throw new McpError("validation", "不支持这个 AI 工具");
+      if (!["view", "assist", "full"].includes(params?.level)) throw new McpError("validation", "请选择权限档位");
+      if (!sessions.list().some((account) => account.status !== "expired"))
+        throw new McpError("validation", "请先登录至少一个网易开发者账号");
+      if (service.status !== "running") {
+        const state = await setEnabled(true);
+        if (state.status !== "running") throw new McpError("unavailable", state.error ?? "AI 连接服务启动失败");
+      }
+      // Reconnecting a tool replaces its previous key instead of piling up entries
+      if (installer.id !== "other")
+        for (const old of service.data.clients.filter((client) => client.tool === installer.id)) service.revoke(old.id);
+      const { client, key } = service.createKeyedClient(installer.name, installer.id, params.level);
+      const endpoint = `${service.endpoint}?key=${key}`;
+      let installed = false;
+      let message = "把下面这句话发给你的 AI 工具，它会自己完成连接。";
+      if (installer.id !== "other")
+        try {
+          await installTool(installer.id, endpoint);
+          installed = true;
+          message = `已写入 ${installer.name} 的配置。重启 ${installer.name} 后，直接用中文告诉它你想做什么即可。`;
+        } catch (error) {
+          message = error instanceof McpError ? error.message : `写入 ${installer.name} 配置失败`;
+        }
+      return { clientId: client.id, installed, message, endpoint, prompt: connectPrompt(endpoint) };
+    },
+    "mcp.answer": (params: { requestId: string; decision: McpDecision }) => {
+      service.answer(params?.requestId, params?.decision);
       return undefined;
     },
     "mcp.directory": async (params: RpcMethods["mcp.directory"]["params"]) => {
