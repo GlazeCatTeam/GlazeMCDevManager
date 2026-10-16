@@ -59,6 +59,8 @@ export class McpService {
   private readonly access = new Map<string, PendingAccess>();
   /** One-shot permissions granted with "only this time", consumed by the next matching call */
   private readonly once = new Map<string, Set<McpPermission>>();
+  /** Reserved one-shot permissions stay valid only while their matching call executes */
+  private readonly activeOnce = new Map<string, Set<McpPermission>>();
   /** How long a tool call waits for the user to answer an access request before reporting it pending */
   accessWaitMs = 60_000;
   readonly definitions = toolDefinitions();
@@ -86,10 +88,13 @@ export class McpService {
     }
   }
 
+  /** Restore unresolved writes and migrate completed history before accepting new requests */
   constructor(
     readonly data: McpData,
     private readonly ports: McpPorts,
+    private readonly recentOperationLimit = 5000,
   ) {
+    data.operationArchive ??= [];
     for (const operation of data.operations) {
       if (operation.state === "running") {
         operation.state = "unknown";
@@ -111,8 +116,31 @@ export class McpService {
 
   /** Persist before notifying views; callers must not perform a write if persistence fails */
   commit(): void {
+    this.archiveOperations();
     this.ports.save(this.data);
     this.ports.changed();
+  }
+
+  /** Keep recent results and every unresolved write visible without discarding durable replay protection */
+  private archiveOperations(): void {
+    let recent = 0;
+    this.data.operationArchive ??= [];
+    const archive = this.data.operationArchive;
+    this.data.operations = this.data.operations.filter((operation) => {
+      const protectedWrite =
+        ["pending", "running"].includes(operation.state) ||
+        (!operation.resolvedAt &&
+          (["unknown", "platform_action", "created_id_unresolved"].includes(operation.state) ||
+            (operation.state === "failed" && isWorkRecord(operation.result) && operation.result.saved === true)));
+      if (protectedWrite || recent++ < this.recentOperationLimit) return true;
+      archive.push(operation);
+      return false;
+    });
+  }
+
+  /** Search recent and archived results so old requests never become executable again */
+  private findOperation(matches: (operation: StoredOperation) => boolean): StoredOperation | undefined {
+    return this.data.operations.find(matches) ?? this.data.operationArchive?.find(matches);
   }
 
   /** Bound material storage independently of audit-log retention */
@@ -320,8 +348,8 @@ export class McpService {
         Object.assign(client, grant, { approved: true });
       } else if (decision === "always") {
         client.permissions = [...new Set([...client.permissions, ...entry.request.permissions])];
-      } else if (!entry.waiters.size) {
-        // The call already returned; let the AI's retry use this one-time grant
+      } else {
+        // Publish one grant per answer, whether a call is waiting now or will retry later
         const set = this.once.get(client.id) ?? new Set();
         for (const permission of entry.request.permissions) set.add(permission);
         this.once.set(client.id, set);
@@ -343,7 +371,8 @@ export class McpService {
     return (
       !!client?.approved &&
       (client.permissions.includes(permission as McpPermission) ||
-        !!this.once.get(id)?.has(permission as McpPermission))
+        !!this.once.get(id)?.has(permission as McpPermission) ||
+        !!this.activeOnce.get(id)?.has(permission as McpPermission))
     );
   }
 
@@ -403,34 +432,40 @@ export class McpService {
     const entry = this.openRequest(client, "permission", missing, reason);
     this.commit();
     const outcome = await this.waitFor(entry);
-    // An advance "only this time" must survive until the AI's actual call
-    if (outcome === "once") {
-      const set = this.once.get(id) ?? new Set();
-      for (const permission of missing) set.add(permission);
-      this.once.set(id, set);
-    }
     return { outcome, status: this.describe(id) };
   }
 
-  /** Ask for a missing permission during a call; returns once the user answers or the wait ends */
-  private async ensurePermission(id: string, tool: ToolDefinition): Promise<void> {
-    const permission = tool.permission as McpPermission | null;
+  /** Include every permission required by the requested phases of a tool call */
+  private requiredPermissions(tool: ToolDefinition, params: Record<string, unknown>): McpPermission[] {
+    const permissions = tool.permission ? [tool.permission as McpPermission] : [];
+    if (tool.name === "works_save" && params.submitReview === true) permissions.push("works:review");
+    return [...new Set(permissions)];
+  }
+
+  /** Ask once for all missing permissions before any phase of a compound write can start */
+  private async ensurePermissions(id: string, tool: ToolDefinition, permissions: McpPermission[]): Promise<void> {
     const client = this.client(id);
-    if (!permission || this.allowed(id, permission)) return;
-    const entry = this.openRequest(client, "permission", [permission], `调用「${tool.title}」`);
+    const missing = permissions.filter((permission) => !this.allowed(id, permission));
+    if (!missing.length) return;
+    const labels = missing.map((permission) => mcpPermissionLabels[permission]).join("、");
+    const entry = this.openRequest(client, "permission", missing, `调用「${tool.title}」`);
     this.commit();
     const outcome = await this.waitFor(entry);
-    if (outcome === "deny") throw new McpError("forbidden", `用户拒绝了「${mcpPermissionLabels[permission]}」权限`);
+    if (outcome === "deny") throw new McpError("forbidden", `用户拒绝了「${labels}」权限`);
     if (outcome === "timeout")
       throw new McpError(
         "permission_pending",
-        `缺少「${mcpPermissionLabels[permission]}」权限，已在 Glaze 弹窗请求用户授权。请提醒用户在 Glaze 窗口中点击「允许」后再试一次。`,
+        `缺少「${labels}」权限，已在 Glaze 弹窗请求用户授权。请提醒用户在 Glaze 窗口中点击「允许」后再试一次。`,
       );
-    if (outcome === "once") {
-      const set = this.once.get(id) ?? new Set();
-      set.add(permission);
-      this.once.set(id, set);
-    }
+  }
+
+  /** Reserve only this call's one-time grants so failures and compound phases consume them together */
+  private reservePermissions(id: string, permissions: McpPermission[]): void {
+    const available = this.once.get(id);
+    const reserved = new Set<McpPermission>();
+    for (const permission of permissions) if (available?.delete(permission)) reserved.add(permission);
+    if (reserved.size) this.activeOnce.set(id, reserved);
+    if (!available?.size) this.once.delete(id);
   }
 
   /** List every tool for approved clients so the AI knows what it can ask for */
@@ -559,6 +594,8 @@ export class McpService {
   /** Invalidate work after scope changes, including async operations awaiting network responses */
   private invalidate(id: string, message: string): void {
     this.epochs.set(id, (this.epochs.get(id) ?? 0) + 1);
+    this.once.delete(id);
+    this.activeOnce.delete(id);
     for (const operation of this.data.operations)
       if (operation.clientId === id && operation.state === "pending") {
         operation.state = "expired";
@@ -592,28 +629,30 @@ export class McpService {
         "validation",
         checked.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; "),
       );
-    await this.ensurePermission(id, tool);
-    const recent = (this.rates.get(id) ?? []).filter((time) => time > Date.now() - 60_000);
-    if (recent.length >= 60 || this.calls.has(id))
-      throw new McpError("rate_limited", "请降低调用频率并等待当前调用完成");
-    recent.push(Date.now());
-    this.rates.set(id, recent);
+    const params = checked.data as Record<string, unknown>;
+    const client = this.authorize(id, null);
+    const draft = !tool.plugin && typeof params.draftId === "string" ? this.draft(id, params.draftId) : undefined;
+    const accountRequired = !name.startsWith("app_") || name === "app_switch_account";
+    account = accountRequired
+      ? (draft?.account ?? (typeof params.account === "string" ? params.account : client.defaultAccount))
+      : null;
+    if (accountRequired) this.authorize(id, null, account ?? undefined);
+    const normalized = { ...params, account };
+    const previous = this.replay(client, tool, normalized);
+    if (previous) {
+      this.recordCall(id);
+      this.audit(id, name, account, previous.state, tool.title);
+      return publicValue(this.operationView(previous));
+    }
+    const permissions = this.requiredPermissions(tool, params);
+    if (this.calls.has(id)) throw new McpError("rate_limited", "请降低调用频率并等待当前调用完成");
     this.calls.add(id);
     try {
-      const parsed = tool.schema.safeParse(input ?? {});
-      if (!parsed.success)
-        throw new McpError(
-          "validation",
-          parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; "),
-        );
-      const params = parsed.data as Record<string, unknown>;
-      const client = this.authorize(id, tool.permission);
+      await this.ensurePermissions(id, tool, permissions);
+      this.recordCall(id);
+      this.reservePermissions(id, permissions);
+      this.authorize(id, tool.permission);
       const epoch = this.epochs.get(id) ?? 0;
-      const draft = !tool.plugin && typeof params.draftId === "string" ? this.draft(id, params.draftId) : undefined;
-      const accountRequired = !name.startsWith("app_") || name === "app_switch_account";
-      account = accountRequired
-        ? (draft?.account ?? (typeof params.account === "string" ? params.account : client.defaultAccount))
-        : null;
       if (accountRequired) this.authorize(id, tool.permission, account ?? undefined);
       if (tool.plugin && !account) throw new McpError("forbidden", "请设置已授权默认账号");
       /** Recheck the original contribution and grant after every asynchronous phase */
@@ -657,9 +696,45 @@ export class McpService {
       throw error;
     } finally {
       this.calls.delete(id);
-      if (tool.permission) this.once.get(id)?.delete(tool.permission as McpPermission);
+      this.activeOnce.delete(id);
       this.audit(id, name, account, outcome, tool.title);
     }
+  }
+
+  /** Count cached and new business calls together before they can persist an audit entry */
+  private recordCall(id: string): void {
+    const recent = (this.rates.get(id) ?? []).filter((time) => time > Date.now() - 60_000);
+    if (recent.length >= 60) throw new McpError("rate_limited", "请降低调用频率并等待当前调用完成");
+    recent.push(Date.now());
+    this.rates.set(id, recent);
+  }
+
+  /** Return an owned replay before requesting or consuming permission for a new external write */
+  private replay(
+    client: StoredClient,
+    tool: ToolDefinition,
+    params: Record<string, unknown>,
+  ): StoredOperation | undefined {
+    if (tool.readOnly || typeof params.idempotencyKey !== "string" || tool.name.startsWith("works_draft_"))
+      return undefined;
+    const account = (params.account as string | null) ?? "";
+    const direct = !tool.invoke && !params.draftId && !tool.method.includes(".");
+    const key = tool.invoke
+      ? `business:${client.id}:${account}:${tool.invoke}:${params.idempotencyKey}`
+      : direct
+        ? `direct:${client.id}:${account}:${tool.name}:${params.idempotencyKey}`
+        : `${client.id}:${account}:${params.idempotencyKey}`;
+    const previous = this.findOperation((operation) => operation.key === key);
+    if (!previous) return undefined;
+    const fingerprint = createHash("sha256")
+      .update(canonical(tool.invoke ? params : { name: tool.name, params }))
+      .digest("hex");
+    if (previous.fingerprint !== fingerprint) throw new McpError("conflict", "幂等键已用于其他内容");
+    let owner = tool.invoke ?? tool.method;
+    if (tool.plugin) owner = `plugin:${tool.plugin.pluginId}`;
+    else if (!owner.includes(".")) owner = tool.name === "promotion_upload" ? "promotion.upload" : "works.save";
+    this.ports.assertEnabled(owner);
+    return previous;
   }
 
   /** Append bounded metadata only; never log parameters, credentials or response bodies */
@@ -719,7 +794,7 @@ export class McpService {
       return this.editing(client, name, params, undefined, guard);
     const key = `direct:${client.id}:${account}:${name}:${params.idempotencyKey}`;
     const fingerprint = createHash("sha256").update(canonical({ name, params })).digest("hex");
-    const previous = this.data.operations.find((op) => op.key === key);
+    const previous = this.findOperation((op) => op.key === key);
     if (previous) {
       if (previous.fingerprint !== fingerprint) throw new McpError("conflict", "幂等键已用于其他内容");
       return this.operationView(previous);
@@ -810,7 +885,7 @@ export class McpService {
     if (tool.readOnly) return invoke(params, guard, guard);
     const key = `business:${client.id}:${account}:${method}:${params.idempotencyKey}`;
     const fingerprint = createHash("sha256").update(canonical(params)).digest("hex");
-    const prior = this.data.operations.find((op) => op.key === key);
+    const prior = this.findOperation((op) => op.key === key);
     if (prior) {
       if (prior.fingerprint !== fingerprint) throw new McpError("conflict", "幂等键已用于其他内容");
       return this.operationView(prior);
@@ -828,7 +903,6 @@ export class McpService {
       )
     )
       throw new McpError("conflict", "目标存在执行中或结果待核实的操作");
-    if (this.data.operations.length >= 5000) throw new McpError("limit", "操作记录达到上限，请先整理历史记录");
     const op: StoredOperation = {
       id: randomUUID(),
       clientId: client.id,
@@ -1079,7 +1153,7 @@ export class McpService {
 
   /** Record explicit human reconciliation without making the original request replayable */
   resolveOperation(id: string): void {
-    const operation = this.data.operations.find((entry) => entry.id === id);
+    const operation = this.findOperation((entry) => entry.id === id);
     if (!operation || !["unknown", "created_id_unresolved", "platform_action", "failed"].includes(operation.state))
       throw new McpError("validation", "此操作不需要核对");
     operation.resolvedAt = Date.now();
@@ -1098,9 +1172,7 @@ export class McpService {
   ): Promise<unknown> {
     const account = params.account as string;
     if (name === "works_operation_get") {
-      const operation = this.data.operations.find(
-        (entry) => entry.id === params.operationId && entry.clientId === client.id,
-      );
+      const operation = this.findOperation((entry) => entry.id === params.operationId && entry.clientId === client.id);
       if (!operation) throw new McpError("not_found", "操作不存在");
       this.authorize(client.id, null, operation.account);
       this.expire();
@@ -1177,7 +1249,7 @@ export class McpService {
     const fingerprint =
       (params.operationFingerprint as string | undefined) ??
       createHash("sha256").update(canonical({ name, params })).digest("hex");
-    const existing = this.data.operations.find((operation) => operation.key === key);
+    const existing = this.findOperation((operation) => operation.key === key);
     if (existing) {
       if (existing.fingerprint !== fingerprint) throw new McpError("conflict", "幂等键不能用于不同操作");
       return this.operationView(existing);
@@ -1192,7 +1264,6 @@ export class McpService {
         throw new McpError("validation", issues.map((issue) => `${issue.field}: ${issue.message}`).join("; "));
     }
     if (action === "upload") this.asset(draft, params.assetId as string);
-    if (this.data.operations.length >= 5000) throw new McpError("limit", "操作记录达到上限，请先整理历史记录");
     const operation: StoredOperation = {
       id: randomUUID(),
       clientId: client.id,

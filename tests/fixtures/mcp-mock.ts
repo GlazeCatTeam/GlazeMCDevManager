@@ -42,7 +42,7 @@ export function installMcpMock(): void {
         defaultAccount: account.id,
         permissions: assist,
         directories: [],
-        lastSeen: new Date(now - 120_000).toISOString(),
+        lastSeen: new Date(now - 120_000).toISOString() as string | null,
         expiresAt: Number.MAX_SAFE_INTEGER,
       },
       {
@@ -109,13 +109,19 @@ export function installMcpMock(): void {
   /** Notify subscribers the way the host broadcasts mcp.changed */
   const emit = () => {
     for (const handler of listeners.get("mcp.changed") ?? [])
-      handler({ pendingCount: 0, requestCount: state.requests.length, connectedCount: 1 });
+      handler({
+        pendingCount: 0,
+        requestCount: state.requests.length,
+        connectedCount: state.clients.filter((client) => client.connected).length,
+      });
   };
   const calls: { method: string; params: unknown }[] = [];
+  const failures = { connect: "", preserveConnection: false };
   Object.assign(globalThis, {
     __mcpCalls: calls,
     __mcpState: state,
     __mcpEmit: emit,
+    __mcpFailures: failures,
     glaze: {
       on: (name: string, handler: Handler) => {
         const entries = listeners.get(name) ?? new Set();
@@ -144,11 +150,43 @@ export function installMcpMock(): void {
           };
         if (method === "mcp.connect") {
           const other = params?.tool === "other";
+          const clientId = `client-new-${calls.filter((call) => call.method === "mcp.connect").length}`;
           const endpoint = "http://127.0.0.1:17839/mcp?key=preview-key";
+          if (failures.connect) {
+            const previous = state.clients.find((client) => client.tool === params?.tool);
+            if (!failures.preserveConnection || !previous)
+              return { ok: false, error: { kind: "config", message: failures.connect } };
+            return {
+              ok: true,
+              value: {
+                clientId: previous.id,
+                installed: false,
+                message: failures.connect,
+                endpoint,
+                prompt: `请帮我添加一个 MCP 服务器：名称 glaze，地址 ${endpoint} 。`,
+              },
+            };
+          }
+          state.clients = state.clients.filter((client) => client.tool !== params?.tool);
+          state.clients.push({
+            id: clientId,
+            name: other ? "其他 AI 工具" : "Claude Code",
+            tool: String(params?.tool),
+            persistent: true,
+            approved: true,
+            connected: false,
+            accounts: [account.id],
+            defaultAccount: account.id,
+            permissions: params?.level === "view" ? read : assist,
+            directories: [],
+            lastSeen: null,
+            expiresAt: Number.MAX_SAFE_INTEGER,
+          });
+          emit();
           return {
             ok: true,
             value: {
-              clientId: "client-new",
+              clientId,
               installed: !other,
               message: other
                 ? "把下面这句话发给你的 AI 工具，它会自己完成连接。"

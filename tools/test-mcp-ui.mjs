@@ -64,7 +64,26 @@ try {
   assert.equal(await connect.getByRole("button", { name: /Claude Code/ }).getAttribute("aria-pressed"), "true");
   assert.equal(await connect.getByRole("button", { name: /^帮我打理/ }).getAttribute("aria-pressed"), "true");
   await connect.getByRole("button", { name: "一键连接", exact: true }).click();
+  const configured = page.getByRole("dialog", { name: "已写入 Claude Code 配置" });
+  await configured.getByText("等待 AI 工具连接。请重启该工具，连接成功后这里会自动更新。", { exact: true }).waitFor();
+  assert.equal(await page.getByRole("dialog", { name: "已连接 Claude Code" }).count(), 0);
+  assert.equal(await page.getByText("等待 AI 工具连接", { exact: true }).count(), 1);
+
+  // Only a live session in the pushed snapshot turns the configuration success into a connection
+  await page.evaluate(() => {
+    const client = globalThis.__mcpState.clients.find((entry) => entry.id === "client-new-1");
+    client.connected = true;
+    client.lastSeen = new Date().toISOString();
+    globalThis.__mcpEmit();
+  });
   await page.getByRole("dialog", { name: "已连接 Claude Code" }).waitFor();
+  await page.getByText("已检测到 AI 工具在线，可以开始使用。", { exact: true }).waitFor();
+  await page.evaluate(() => {
+    globalThis.__mcpState.clients.find((entry) => entry.id === "client-new-1").connected = false;
+    globalThis.__mcpEmit();
+  });
+  await configured.waitFor();
+  await page.getByText("离线 · 上次使用 刚刚", { exact: true }).waitFor();
   await page.getByRole("button", { name: "完成", exact: true }).click();
   assert.deepEqual(
     await page.evaluate(() => globalThis.__mcpCalls.find((call) => call.method === "mcp.connect")?.params),
@@ -75,9 +94,28 @@ try {
   await page.getByRole("button", { name: "连接 AI 工具", exact: true }).click();
   await page.getByRole("button", { name: /其他 AI 工具/ }).click();
   await page.getByRole("button", { name: "生成连接说明", exact: true }).click();
+  await page.getByRole("dialog", { name: "等待 AI 工具连接" }).waitFor();
   const prompt = await page.locator("textarea").inputValue();
   assert.match(prompt, /glaze/);
   assert.match(prompt, /key=preview-key/);
+  await page.getByRole("button", { name: "完成", exact: true }).click();
+
+  // A failed configuration update can retain an online client but must still report the failed update
+  await page.evaluate(() => {
+    globalThis.__mcpState.clients.find((entry) => entry.id === "client-new-1").connected = true;
+    globalThis.__mcpFailures.connect = "连接配置写入失败；原连接与授权已保留";
+    globalThis.__mcpFailures.preserveConnection = true;
+    globalThis.__mcpEmit();
+  });
+  await page.getByRole("button", { name: "连接 AI 工具", exact: true }).click();
+  await page.getByRole("button", { name: "一键连接", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "连接配置未更新" })
+    .getByText("连接配置写入失败；原连接与授权已保留", { exact: true })
+    .waitFor();
+  await page.getByText("原连接仍在线，可以继续使用原有权限。", { exact: true }).waitFor();
+  assert.equal(await page.getByRole("dialog", { name: "已连接 Claude Code" }).count(), 0);
+  assert.equal(await page.evaluate(() => globalThis.__mcpState.clients.length), 3);
   await page.getByRole("button", { name: "完成", exact: true }).click();
 
   // Port and service switches moved to Settings through the settingsSections contribution point
@@ -93,7 +131,9 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.screenshot({ path: join(output, "mcp-onboarding.png"), fullPage: true });
   assert.deepEqual(errors, []);
-  console.log("PASS: AI assistant page, app-wide permission request, levels, one-click connect, fallback prompt");
+  console.log(
+    "PASS: AI assistant page, app-wide permission request, levels, configured/waiting/live/disconnected states, fallback prompt",
+  );
 } finally {
   await browser?.close();
   await server.close();

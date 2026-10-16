@@ -68,9 +68,11 @@ try {
   page.on("pageerror", (error) => errors.push(error.message));
   await page.waitForFunction(() => window.glaze && document.querySelector("button"));
   await application.evaluate(() => globalThis.__seedMcp());
+  // Re-read the seeded account through the normal startup RPC instead of keeping the login route
+  await page.reload();
   await page.getByRole("button", { name: "AI 助手", exact: true }).click();
   await page.getByRole("region", { name: "开始使用" }).waitFor();
-  await page.getByText("高级设置", { exact: false }).click();
+  await page.getByRole("button", { name: "设置 → AI 连接服务", exact: true }).click();
   assert.equal(await page.getByRole("switch", { name: "AI 连接服务" }).getAttribute("aria-checked"), "false");
   await page.getByRole("textbox", { name: "本机端口", exact: true }).fill(String(initialPort));
   await page.getByRole("switch", { name: "AI 连接服务" }).click();
@@ -78,6 +80,7 @@ try {
   const state = await page.evaluate(() => window.glaze.rpc("mcp.snapshot"));
   assert.equal(state.value.port, initialPort);
   assert.equal(state.value.endpoint, `http://127.0.0.1:${initialPort}/mcp`);
+  await page.getByRole("button", { name: "AI 助手", exact: true }).click();
 
   // "Other" never writes into real AI tool configs, so it is safe to exercise here
   const connected = await page.evaluate(() => window.glaze.rpc("mcp.connect", { tool: "other", level: "assist" }));
@@ -85,6 +88,10 @@ try {
   assert.equal(connected.value.installed, false);
   assert.match(connected.value.endpoint, new RegExp(`^http://127\\.0\\.0\\.1:${initialPort}/mcp\\?key=`));
   assert.ok(connected.value.prompt.includes(connected.value.endpoint));
+  const configuredState = await page.evaluate(() => window.glaze.rpc("mcp.snapshot"));
+  assert.equal(configuredState.value.clients.find((entry) => entry.id === connected.value.clientId).connected, false);
+  await page.getByText("等待 AI 工具连接", { exact: true }).waitFor();
+  assert.equal(await page.getByText("AI 已连接", { exact: false }).count(), 0);
   ({ client, transport } = await open(connected.value.endpoint, "伪造名称"));
   const names = (await client.listTools()).tools.map((tool) => tool.name);
   assert.ok(names.includes("glaze_status") && names.includes("works_save") && names.includes("account_list"));
@@ -95,6 +102,7 @@ try {
   assert.equal(accounts.structuredContent.result[0].nickname, "MCP 测试账号");
   assert.ok(!JSON.stringify(accounts).includes("TEST_ONLY"));
   await page.getByText("其他 AI 工具", { exact: true }).first().waitFor();
+  await page.getByText("使用中", { exact: true }).waitFor();
   await page.getByText("AI 已连接", { exact: false }).waitFor();
 
   // A missing permission opens the app-wide prompt; denying returns a clear error to the AI
@@ -123,6 +131,15 @@ try {
   assert.ok((await manual.client.listTools()).tools.some((tool) => tool.name === "account_list"));
   await manual.transport.terminateSession();
   await manual.client.close();
+  // Remove this test's offline manual record so the later empty-state check has no unrelated clients
+  const manualState = await page.evaluate(() => window.glaze.rpc("mcp.snapshot"));
+  const manualClient = manualState.value.clients.find((entry) => entry.name === "Cherry Studio" && !entry.persistent);
+  assert.ok(manualClient);
+  const removedManual = await page.evaluate(
+    (clientId) => window.glaze.rpc("mcp.revoke", { clientId }),
+    manualClient.id,
+  );
+  assert.equal(removedManual.ok, true);
 
   for (const port of [0, 65536, 1.5, "19133"]) {
     const invalid = await page.evaluate((port) => window.glaze.rpc("mcp.setEnabled", { enabled: true, port }), port);
@@ -175,7 +192,7 @@ try {
   assert.equal(refused.status, 401);
 
   // Moving the port keeps the service usable on the new address
-  await restarted.getByText("高级设置", { exact: false }).click();
+  await restarted.getByRole("button", { name: "设置 → AI 连接服务", exact: true }).click();
   await restarted.getByRole("textbox", { name: "本机端口", exact: true }).fill(String(nextPort));
   await restarted.getByRole("button", { name: "应用", exact: true }).click();
   await restarted.waitForFunction(

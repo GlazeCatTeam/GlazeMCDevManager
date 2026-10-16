@@ -67,12 +67,7 @@ export function AssistantPage() {
         </Panel>
       ) : (
         snapshot && (
-          <Panel
-            title="已连接的 AI 工具"
-            badge={<Tag>{clients.length}</Tag>}
-            className={styles.clients}
-            aria-label="已连接的 AI 工具"
-          >
+          <Panel title="AI 工具" badge={<Tag>{clients.length}</Tag>} className={styles.clients} aria-label="AI 工具">
             <div className={styles.clientList}>
               {clients.map((client) => (
                 <ClientCard key={client.id} client={client} accounts={accounts} action={action} />
@@ -106,6 +101,7 @@ export function AssistantPage() {
 
       {connecting && (
         <ConnectDialog
+          clients={clients}
           onClose={() => {
             setConnecting(false);
             void reload();

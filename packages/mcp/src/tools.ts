@@ -57,10 +57,10 @@ export const readSchemas: Partial<Record<RpcMethod, z.ZodObject>> = {
   "works.list": z.strictObject({ ...account, platform: platform.optional() }),
   "works.get": z.strictObject(work),
   "works.reviewFeedback": z.strictObject(work),
-  "promotion.activities": z.strictObject({ ...account, page: z.number().int().min(0).max(10000).optional() }),
+  "promotion.activities": z.strictObject({ ...account, page: z.number().int().min(0).max(10000).default(0) }),
   "promotion.discount": z.strictObject(account),
   "promotion.dates": z.strictObject(account),
-  "promotion.applications": z.strictObject({ ...account, page: z.number().int().min(0).max(10000).optional() }),
+  "promotion.applications": z.strictObject({ ...account, page: z.number().int().min(0).max(10000).default(0) }),
   "promotion.module": z.strictObject({
     ...account,
     kind: z.enum(["review", "discount"]),
