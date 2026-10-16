@@ -92,7 +92,7 @@ export function Sidebar({ entries, activeRoute, account, onNavigate }: SidebarPr
           className={styles.item}
           onClick={() => onNavigate("glaze.settings/settings", { category: "ai" })}
         >
-          AI 待处理 · {mcpPending}
+          AI 执行中 · {mcpPending}
         </button>
       )}
       <div className={styles.utilities}>{entries.filter((e) => e.group === "bottom").map(renderItem)}</div>

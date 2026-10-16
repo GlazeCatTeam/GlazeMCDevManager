@@ -1,4 +1,3 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type {
   IncomeDetailParams,
@@ -10,8 +9,8 @@ import type {
   RankPageParams,
   RpcMethods,
 } from "@glaze/contracts";
-import { type AnalyticsDailyParams, isAnalyticsRange, isAnalyticsResourceIds } from "@glaze/contracts";
-import { emptyMcpData, type McpData, McpError, McpPipeServer, type McpPorts, McpService } from "@glaze/mcp";
+import { type AnalyticsDailyParams, isAnalyticsRange, isAnalyticsResourceIds, isMcpPort } from "@glaze/contracts";
+import { emptyMcpData, type McpData, McpError, McpHttpServer, type McpPorts, McpService } from "@glaze/mcp";
 import {
   createWork,
   estimateIncome,
@@ -25,6 +24,7 @@ import {
   getPromotionDates,
   getPromotionDiscount,
   getPromotionModule,
+  getRankIcons,
   getRankList,
   getRankPage,
   getReviewFeedback,
@@ -46,7 +46,7 @@ import { uploadSelectedWorkFile } from "../ipc/work-files";
 import type { PluginRegistry } from "../plugins/registry";
 import type { SessionManager } from "../session/session-manager";
 import { appWindows } from "../windows/main-window";
-import { bridgeCredential } from "./credential";
+import { createMcpBusiness } from "./business";
 import { loadMcpData, saveMcpData } from "./store";
 
 /** Keep ambiguous platform responses distinguishable from an explicit business rejection */
@@ -68,7 +68,7 @@ export function createMcpHost(sessions: SessionManager, plugins: PluginRegistry,
     persistenceError = "MCP 授权文件无法读取，服务已停用；原文件已保留";
   }
   if (!safeStorage.isEncryptionAvailable()) persistenceError = "Windows 系统加密不可用，MCP 服务已停用";
-  let pipe: McpPipeServer | undefined;
+  let http: McpHttpServer | undefined;
   let lastTools = "";
   const reads: Record<string, (params: Record<string, unknown>) => Promise<unknown>> = {
     "developer.level": (p) => sessions.request(p.account as string, getDeveloperLevel),
@@ -85,6 +85,7 @@ export function createMcpHost(sessions: SessionManager, plugins: PluginRegistry,
     "works.get": (p) => sessions.request(p.account as string, (session) => getWork(session, p.itemId as string)),
     "works.reviewFeedback": (p) =>
       sessions.request(p.account as string, (session) => getReviewFeedback(session, p.itemId as string)),
+    "rank.icons": (p) => getRankIcons(p.itemIds as string[]),
     "rank.list": (p) =>
       sessions.request(p.account as string, (session) =>
         getRankList(
@@ -102,6 +103,7 @@ export function createMcpHost(sessions: SessionManager, plugins: PluginRegistry,
           (p as unknown as RankPageParams).category ?? "mod",
           (p.start as number) ?? 0,
           (p.limit as number) ?? 50,
+          p.includeIcons as boolean | undefined,
         ),
       ),
     "income.list": (p) =>
@@ -137,39 +139,45 @@ export function createMcpHost(sessions: SessionManager, plugins: PluginRegistry,
     return win;
   };
   /** Recheck grants during long uploads without depending on the UI's selected account */
-  const assertUpload = (clientId: string, account: string) => {
+  const assertUpload = (clientId: string, account: string, promotion = false) => {
     const client = service.data.clients.find((entry) => entry.id === clientId);
     if (
       !service.data.enabled ||
       !client?.approved ||
       !client.accounts.includes(account) ||
-      !client.permissions.includes("works:upload") ||
+      !client.permissions.includes(promotion ? "netease:promotion.write" : "works:upload") ||
       !sessions.list().some((entry) => entry.id === account && entry.status !== "expired")
     )
       throw new McpError("forbidden", "上传授权已失效");
-    plugins.assertMethodEnabled("works.save");
+    plugins.assertMethodEnabled(promotion ? "promotion.upload" : "works.save");
   };
   const ports: McpPorts = {
+    invoke: createMcpBusiness(sessions),
     save: (state) => {
       if (persistenceError) return;
       saveMcpData(file, state);
     },
     changed: () => {
       changed();
-      if (pipe) {
+      if (http) {
         const tools = JSON.stringify(
           service.data.clients.map((client) => [client.id, client.approved, client.permissions]),
         );
         if (tools !== lastTools) {
           lastTools = tools;
-          pipe.changed();
+          http.changed();
         }
       }
     },
     accounts: () => sessions.list(),
     assertEnabled: (method) => {
       if (persistenceError) throw new McpError("unavailable", persistenceError);
-      const owner = method.startsWith("rank.") || method.startsWith("developer.") ? "home" : method.split(".")[0];
+      const owner =
+        method.startsWith("rank.") || method.startsWith("developer.")
+          ? "home"
+          : /^(comments|feedback)\./.test(method)
+            ? "community"
+            : method.split(".")[0];
       if (
         owner &&
         !["app", "account"].includes(owner) &&
@@ -238,7 +246,7 @@ export function createMcpHost(sessions: SessionManager, plugins: PluginRegistry,
         asset.path,
         () => {
           guard();
-          assertUpload(draft.clientId, draft.account);
+          assertUpload(draft.clientId, draft.account, draft.purpose === "promotion");
         },
         asset.name,
       ),
@@ -250,16 +258,17 @@ export function createMcpHost(sessions: SessionManager, plugins: PluginRegistry,
   }, 15 * 60_000);
   cleanup.unref();
   void service.cleanupMaterials().catch(() => undefined);
-  const transport = new McpPipeServer(service);
-  pipe = transport;
+  let transport = new McpHttpServer(service);
+  http = transport;
   if (persistenceError) {
     service.status = "error";
     service.error = persistenceError;
   }
   let changing = false;
-  /** Reflect actual listener state and keep enable/disable operations serialized */
-  const setEnabled = async (enabled: boolean) => {
+  /** Apply a validated port while keeping an existing listener alive if binding fails */
+  const setEnabled = async (enabled: boolean, port = service.data.port) => {
     if (typeof enabled !== "boolean") throw new McpError("validation", "服务开关无效");
+    if (!isMcpPort(port)) throw new McpError("validation", "端口必须是 1 到 65535 之间的整数");
     if (persistenceError) throw new McpError("unavailable", persistenceError);
     if (changing) throw new McpError("busy", "服务正在切换状态");
     changing = true;
@@ -267,25 +276,43 @@ export function createMcpHost(sessions: SessionManager, plugins: PluginRegistry,
       if (!enabled) {
         service.disable();
         await transport.stop();
+        service.error = null;
+        service.commit();
         return service.snapshot();
       }
-      service.status = "starting";
+      if (service.status === "running" && port === service.data.port) {
+        service.error = null;
+        service.commit();
+        return service.snapshot();
+      }
+      const wasRunning = service.status === "running";
+      if (!wasRunning) service.status = "starting";
       service.error = null;
       service.commit();
+      const next = new McpHttpServer(service);
       try {
-        const endpoint = await transport.start();
-        mkdirSync(root, { recursive: true });
-        writeFileSync(join(root, "endpoint"), endpoint, { mode: 0o600 });
-        service.data.enabled = true;
-        service.status = "running";
+        await next.start(port);
+      } catch (error) {
+        if (!wasRunning) {
+          service.data.enabled = false;
+          service.status = "error";
+        }
+        service.error =
+          error && typeof error === "object" && "code" in error && error.code === "EADDRINUSE"
+            ? `端口 ${port} 已被占用，请更换端口后重试${wasRunning ? "；原连接仍可使用" : ""}`
+            : `MCP 启动失败，请检查端口 ${port}${wasRunning ? "；原连接仍可使用" : ""}`;
         service.commit();
-      } catch {
-        await transport.stop();
-        service.data.enabled = false;
-        service.status = "error";
-        service.error = "MCP 启动失败，请检查本机管道与系统加密服务";
-        service.commit();
+        return service.snapshot();
       }
+      service.disable();
+      await transport.stop();
+      transport = next;
+      http = next;
+      service.endpoint = next.endpoint;
+      service.data.port = port;
+      service.data.enabled = true;
+      service.status = "running";
+      service.commit();
       return service.snapshot();
     } finally {
       changing = false;
@@ -297,23 +324,7 @@ export function createMcpHost(sessions: SessionManager, plugins: PluginRegistry,
       return undefined;
     },
     "mcp.snapshot": () => service.snapshot(),
-    "mcp.setEnabled": (params: RpcMethods["mcp.setEnabled"]["params"]) => setEnabled(params?.enabled),
-    "mcp.invite": (params: RpcMethods["mcp.invite"]["params"]) => {
-      const client = service.invite(params?.name);
-      try {
-        writeFileSync(join(root, `${client.id}.dpapi`), bridgeCredential(client.token, false), { mode: 0o600 });
-      } catch (error) {
-        service.revoke(client.id);
-        throw error;
-      }
-      return {
-        clientId: client.id,
-        command: process.execPath,
-        args: [join(import.meta.dirname, "mcp-bridge.js"), "--mcp-root", root, "--mcp-client", client.id],
-        env: { ELECTRON_RUN_AS_NODE: "1" },
-        expiresAt: client.expiresAt,
-      };
-    },
+    "mcp.setEnabled": (params: RpcMethods["mcp.setEnabled"]["params"]) => setEnabled(params?.enabled, params?.port),
     "mcp.grant": (params: { clientId: string; grant: McpGrant }) => {
       service.grant(params?.clientId, params?.grant);
       return service.snapshot();
@@ -325,7 +336,6 @@ export function createMcpHost(sessions: SessionManager, plugins: PluginRegistry,
     "mcp.revoke": (params: { clientId: string }) => {
       if (!/^[\da-f-]{36}$/.test(params?.clientId)) throw new McpError("validation", "客户端 ID 无效");
       service.revoke(params?.clientId);
-      rmSync(join(root, `${params.clientId}.dpapi`), { force: true });
       return undefined;
     },
     "mcp.directory": async (params: RpcMethods["mcp.directory"]["params"]) => {
@@ -340,14 +350,6 @@ export function createMcpHost(sessions: SessionManager, plugins: PluginRegistry,
       if (!selected.canceled && selected.filePaths[0]) service.directory(params.clientId, selected.filePaths[0]);
       return undefined;
     },
-    "mcp.decide": async (params: RpcMethods["mcp.decide"]["params"]) => {
-      if (!params || typeof params.approve !== "boolean" || !Number.isInteger(params.revision))
-        throw new McpError("validation", "确认参数无效");
-      await service.decide(params.operationId, params.revision, params.approve);
-      return undefined;
-    },
-    "mcp.editDraft": (params: RpcMethods["mcp.editDraft"]["params"]) =>
-      service.editDraft(params?.draftId, params?.revision, params?.patch),
   };
   return {
     service,

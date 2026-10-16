@@ -13,7 +13,6 @@ export default defineConfig({
       rolldownOptions: {
         input: {
           index: resolve(import.meta.dirname, "src/main/index.ts"),
-          "mcp-bridge": resolve(import.meta.dirname, "src/main/mcp/bridge-entry.ts"),
         },
       },
     },

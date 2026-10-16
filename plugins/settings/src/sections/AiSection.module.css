@@ -105,3 +105,20 @@
   display: block;
   margin: 8px 0;
 }
+
+.portControls,
+.address {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.portControls input {
+  width: 88px;
+}
+.address input {
+  flex: 1;
+}
+.address {
+  padding: 4px 0;
+}

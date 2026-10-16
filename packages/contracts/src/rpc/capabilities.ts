@@ -26,13 +26,10 @@ export const capabilities: Record<RpcMethod, Capability> = {
   "mcp.snapshot": shellOnly(null, "read"),
   "mcp.resolveOperation": shellOnly(null, "write"),
   "mcp.setEnabled": shellOnly(null, "write"),
-  "mcp.invite": shellOnly(null, "write"),
   "mcp.grant": shellOnly(null, "write"),
   "mcp.disconnect": shellOnly(null, "write"),
   "mcp.revoke": shellOnly(null, "write"),
   "mcp.directory": shellOnly(null, "write"),
-  "mcp.decide": shellOnly(null, "write"),
-  "mcp.editDraft": shellOnly(null, "write"),
   "promotion.activities": {
     caller: "any",
     permission: "netease:promotion.read",

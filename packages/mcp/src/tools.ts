@@ -1,5 +1,7 @@
 import { capabilities, type RpcMethod, workSections } from "@glaze/contracts";
 import { z } from "zod";
+import { businessTools } from "./business-tools";
+import { directTools } from "./direct-tools";
 
 const id = z.string().min(1).max(128);
 const itemId = z.string().regex(/^\d{1,32}$/);
@@ -69,10 +71,11 @@ export interface ToolDefinition {
   permission: string | null;
   schema: z.ZodObject;
   readOnly: boolean;
+  invoke?: string;
 }
 
 /** Derive public tools only from explicitly exposed, non-credential capabilities */
-export function toolDefinitions(): ToolDefinition[] {
+export function legacyToolDefinitions(): ToolDefinition[] {
   const read = Object.entries(readSchemas).map(([method, schema]) => {
     const meta = capabilities[method as RpcMethod];
     if (
@@ -94,6 +97,11 @@ export function toolDefinitions(): ToolDefinition[] {
     };
   });
   return [...read, ...editingTools];
+}
+
+/** Publish the direct API; legacy snapshot helpers are never listed or callable by MCP clients */
+export function toolDefinitions(): ToolDefinition[] {
+  return [...legacyToolDefinitions().filter((tool) => tool.method.includes(".")), ...directTools, ...businessTools];
 }
 
 /** Declare editing schemas separately from shell-only platform write endpoints */
@@ -168,35 +176,35 @@ const editingTools = [
       directoryId: id.optional(),
       relativePath: z.string().min(1).max(1024).optional(),
     }),
-    "未指定授权目录时建立应用内文件选择请求。指定 directoryId 与 relativePath 时从已授权目录创建不可变快照。返回操作 ID，通过 works_operation_get 查询材料 ID；不会上传。",
+    "未指定授权目录时直接打开文件选择器。指定 directoryId 与 relativePath 时从已授权目录创建不可变快照。返回操作 ID，通过 works_operation_get 查询材料 ID；不会上传。",
   ),
   edit(
     "works_asset_upload",
-    "请求上传材料",
+    "上传材料",
     "works:upload",
     z.strictObject({ ...request, assetId: id }),
-    "为固定材料申请上传批准。应用内确认后执行；返回操作 ID，上传后仍仅向 AI 返回材料 ID，不返回签名回执。",
+    "在上传权限范围内直接上传固定材料，无需二次确认。返回执行结果和操作 ID，不返回签名回执。",
   ),
   edit(
     "works_create",
-    "请求创建作品",
+    "创建作品",
     "works:save",
     z.strictObject(request),
-    "申请创建平台作品，需应用内确认。平台未返回作品 ID 时返回 created_id_unresolved，禁止猜测 ID 或自动提审。",
+    "获得保存权限后直接创建平台作品，无需二次确认。平台未返回作品 ID 时返回 created_id_unresolved，禁止猜测 ID 或自动提审。",
   ),
   edit(
     "works_save",
-    "请求保存作品",
+    "保存作品",
     "works:save",
     z.strictObject({ ...request, submitReview: z.boolean().default(false) }),
-    "申请保存现有作品；submitReview=true 表示固定的保存并提审序列，额外需要提审权限。等待应用内批准，返回操作 ID。",
+    "获得保存权限后直接保存现有作品，无需二次确认，返回执行状态和操作 ID。submitReview 默认 false；仅明确要求保存并提审时设为 true，额外需要提审权限。检查 state，只有 succeeded 表示全部完成；unknown 禁止自动重试。",
   ),
   edit(
     "works_submit_review",
-    "请求提交审核",
+    "提交审核",
     "works:review",
     z.strictObject(request),
-    "仅提交未修改的已存在作品草稿，绑定内容快照，每次需要应用内确认。",
+    "获得提审权限后直接提交未修改的已存在作品草稿，绑定内容快照，无需二次确认。",
   ),
   edit(
     "works_operation_get",

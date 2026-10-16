@@ -11,9 +11,11 @@ import type {
   WorkReviewResult,
   WorkUpload,
 } from "@glaze/contracts";
+import { MCP_DEFAULT_PORT } from "@glaze/contracts";
 
 export interface StoredClient extends Omit<McpClient, "connected" | "directories"> {
-  token: string;
+  /** Legacy bridge secrets are stripped from public snapshots during migration */
+  token?: string;
   directories: { id: string; name: string; path: string }[];
 }
 export interface StoredAsset extends McpAsset {
@@ -21,6 +23,9 @@ export interface StoredAsset extends McpAsset {
   receipt?: WorkUpload;
 }
 export interface StoredOperation extends McpOperation {
+  draftId: string;
+  revision: number;
+  target?: string;
   key: string;
   fingerprint: string;
   assetParams?: { kind: McpAsset["kind"]; platform: "pe" | "pc"; channelId?: number; resourceType?: number };
@@ -28,6 +33,7 @@ export interface StoredOperation extends McpOperation {
   relativePath?: string;
 }
 export interface McpData {
+  port: number;
   enabled: boolean;
   clients: StoredClient[];
   drafts: McpDraft[];
@@ -50,12 +56,27 @@ export interface McpPorts {
   review(account: string, itemId: string, expected: WorkRecord, beforeWrite: () => void): Promise<WorkReviewResult>;
   pickFile(): Promise<string | null>;
   upload(draft: McpDraft, asset: StoredAsset, beforeWrite: () => void): Promise<WorkUpload>;
+  invoke?(
+    method: string,
+    params: Record<string, unknown>,
+    guard: () => void,
+    beforeWrite: () => void,
+  ): Promise<unknown>;
   assetRoot: string;
 }
 
 /** Only a fresh local store defaults to disabled */
 export function emptyMcpData(): McpData {
-  return { enabled: false, clients: [], drafts: [], assets: [], operations: [], audit: [], draftKeys: {} };
+  return {
+    port: MCP_DEFAULT_PORT,
+    enabled: false,
+    clients: [],
+    drafts: [],
+    assets: [],
+    operations: [],
+    audit: [],
+    draftKeys: {},
+  };
 }
 export class McpError extends Error {
   constructor(

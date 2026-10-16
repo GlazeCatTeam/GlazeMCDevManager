@@ -14,6 +14,8 @@ function transportFailure(error: unknown, signal: AbortSignal): Result<never> {
 /** The session a request runs with; only the session cookie value is sent */
 export interface NeteaseSession {
   sessionCookie: string;
+  /** Recheck caller authority immediately before a platform request */
+  beforeRequest?: ((method: string) => void) | undefined;
   /** Called when a response rotates the session cookie, so the owner can store the new one */
   onRenewed?: ((sessionCookie: string) => void) | undefined;
 }
@@ -88,6 +90,7 @@ export async function getMcDev<T>(
   request?: { method: "POST" | "PUT" | "DELETE"; body?: string | undefined; allowEmpty?: boolean },
   timeoutMs = TIMEOUT_MS,
 ): Promise<Result<McDevResponse<T>>> {
+  session.beforeRequest?.(request?.method ?? "GET");
   let response: Response;
   const signal = AbortSignal.timeout(timeoutMs);
   try {

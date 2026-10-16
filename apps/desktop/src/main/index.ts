@@ -11,7 +11,7 @@ let lifecycle: WindowLifecycle | undefined;
 
 // A second launch, including Windows login startup, restores the existing window
 if (process.argv.includes("--mcp")) {
-  process.stderr.write("请在设置 → AI 接入复制连接配置；Windows stdio 需要使用随应用提供的 Node 桥。\n");
+  process.stderr.write("请在设置 → AI 接入开启 MCP 服务，并使用页面中的 HTTP 地址连接。\n");
   app.exit(1);
 } else if (!app.requestSingleInstanceLock()) {
   app.quit();

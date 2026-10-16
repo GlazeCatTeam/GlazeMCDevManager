@@ -9,6 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname } from "node:path";
+import { isMcpPort, MCP_DEFAULT_PORT } from "@glaze/contracts";
 import { emptyMcpData, type McpData } from "@glaze/mcp";
 import { safeStorage } from "electron";
 
@@ -42,5 +43,8 @@ export function loadMcpData(path: string): McpData {
     !data.draftKeys
   )
     throw new Error("MCP 授权文件无法读取，请保留原文件并检查日志");
+  // Older stores used a fixed port and have no port field
+  if (data.port === undefined) data.port = MCP_DEFAULT_PORT;
+  if (!isMcpPort(data.port)) throw new Error("MCP 端口配置无效，请保留原文件并检查日志");
   return data;
 }

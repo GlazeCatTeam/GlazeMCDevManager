@@ -33,6 +33,8 @@ try {
     const listeners = new Map();
     const account = { id: "account-a", nickname: "MCP 测试账号", status: "active", current: true };
     const state = {
+      port: 17839,
+      endpoint: "http://127.0.0.1:17839/mcp",
       enabled: true,
       status: "running",
       error: null,
@@ -59,9 +61,9 @@ try {
           draftId: "draft-a",
           revision: 2,
           action: "save_review",
-          state: "pending",
-          phase: "awaiting_approval",
-          message: "等待应用内确认",
+          state: "running",
+          phase: "saving",
+          message: "正在保存",
           createdAt: Date.now(),
           expiresAt: Date.now() + 900000,
         },
@@ -100,7 +102,11 @@ try {
         },
       ],
     };
-    globalThis.__mcpDecisions = [];
+    globalThis.__completeMcpOperation = () => {
+      state.operations[0].state = "succeeded";
+      state.operations[0].message = "操作已完成";
+      for (const handler of listeners.get("mcp.changed") ?? []) handler({ pendingCount: 0 });
+    };
     globalThis.__mcpCalls = [];
     globalThis.__changeDraft = () => {
       state.drafts[0].revision++;
@@ -150,12 +156,13 @@ try {
         }
         if (method === "account.list") return { ok: true, value: [account] };
         if (method === "mcp.snapshot") return { ok: true, value: structuredClone(state) };
-        if (method === "mcp.grant") Object.assign(state.clients[0], params.grant);
-        if (method === "mcp.decide") {
-          globalThis.__mcpDecisions.push(params);
-          state.operations[0].state = params.approve ? "succeeded" : "rejected";
-          state.operations[0].message = params.approve ? "操作已完成" : "用户拒绝了请求";
+        if (method === "mcp.setEnabled") {
+          state.enabled = params.enabled;
+          state.status = params.enabled ? "running" : "off";
+          if (params.enabled) state.port = params.port;
+          state.endpoint = params.enabled ? `http://127.0.0.1:${state.port}/mcp` : null;
         }
+        if (method === "mcp.grant") Object.assign(state.clients[0], params.grant);
         for (const handler of listeners.get("mcp.changed") ?? [])
           handler({ pendingCount: state.operations.filter((op) => op.state === "pending").length });
         return { ok: true, value: structuredClone(state) };
@@ -165,47 +172,61 @@ try {
   await page.goto(`${server.resolvedUrls.local[0]}tests/fixtures/mcp.html`);
   await page.getByText("运行中", { exact: true }).waitFor();
   await page.screenshot({ path: join(output, "mcp-settings.png"), fullPage: true });
+  assert.equal(await page.getByRole("textbox", { name: "MCP 连接地址" }).inputValue(), "http://127.0.0.1:17839/mcp");
+  await page.getByText("手动配置示例", { exact: true }).click();
+  assert.equal(
+    await page.getByRole("textbox", { name: "MCP 连接配置" }).inputValue(),
+    '[mcp_servers.glaze]\nurl = "http://127.0.0.1:17839/mcp"',
+  );
+  assert.equal(await page.getByRole("button", { name: "生成连接配置", exact: true }).count(), 0);
+  await page.getByRole("combobox", { name: "客户端", exact: true }).selectOption("Claude Code");
+  assert.equal(
+    JSON.parse(await page.getByRole("textbox", { name: "MCP 连接配置" }).inputValue()).mcpServers.glaze.type,
+    "http",
+  );
+  await page.getByText("手动配置示例", { exact: true }).click();
+  assert.equal(await page.getByRole("button", { name: "连接 AI 工具", exact: true }).count(), 0);
+  const portInput = page.getByRole("textbox", { name: "MCP 端口", exact: true });
+  for (const value of ["", "0", "65536", "1.5", "abc"]) {
+    await portInput.fill(value);
+    assert.equal(await page.getByRole("button", { name: "应用端口", exact: true }).isEnabled(), false);
+  }
+  await portInput.fill("17840");
+  await page.getByRole("button", { name: "应用端口", exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('[aria-label="MCP 连接地址"]').value.includes(":17840/"));
+  assert.equal(await portInput.inputValue(), "17840");
+  await page.screenshot({ path: join(output, "mcp-port.png"), fullPage: true });
+  await page.getByRole("switch", { name: "MCP 服务", exact: true }).click();
+  await page.getByText("未开启", { exact: true }).waitFor();
+  assert.equal(await page.getByRole("textbox", { name: "MCP 连接地址" }).count(), 0);
+  await page.getByRole("button", { name: "启用服务", exact: true }).click();
+  await page.getByText("运行中", { exact: true }).waitFor();
   await page.getByRole("button", { name: "管理权限", exact: true }).click();
   const grant = page.getByRole("dialog");
   assert.equal(await grant.getByRole("checkbox", { name: "收益与结算查询", exact: true }).isChecked(), false);
+  assert.equal(await grant.getByRole("checkbox", { name: "玩家评论与反馈查询", exact: true }).count(), 1);
+  assert.equal(await grant.getByRole("checkbox", { name: /草稿/ }).count(), 0);
+  await grant.getByRole("button", { name: "全部业务权限", exact: true }).click();
+  assert.equal(await grant.getByRole("checkbox", { name: "回复玩家评论与反馈", exact: true }).isChecked(), true);
+  await grant.getByRole("button", { name: "仅基础查询", exact: true }).click();
+  assert.equal(await grant.getByRole("checkbox", { name: "回复玩家评论与反馈", exact: true }).isChecked(), false);
   await page.screenshot({ path: join(output, "mcp-grant.png") });
   await grant.getByRole("button", { name: "取消", exact: true }).click();
-  await page.getByRole("button", { name: "查看请求", exact: true }).click();
+  await page.getByRole("button", { name: "查看结果", exact: true }).click();
   const review = page.getByRole("dialog");
-  await review.getByText("价格 · 重点变更", { exact: true }).waitFor();
+  await review.getByText("正在保存", { exact: true }).waitFor();
   await page.screenshot({ path: join(output, "mcp-review.png") });
-  await review.getByRole("button", { name: "确认保存并提交审核", exact: true }).click();
+  assert.equal(await review.getByRole("button", { name: /确认|拒绝/ }).count(), 0);
+  await page.evaluate(() => globalThis.__completeMcpOperation());
   await review.getByText("操作已完成", { exact: true }).waitFor();
-  assert.deepEqual(await page.evaluate(() => globalThis.__mcpDecisions), [
-    { operationId: "op-a", revision: 2, approve: true },
-  ]);
+  assert.equal(await page.evaluate(() => globalThis.__mcpCalls.some((call) => call.method === "mcp.decide")), false);
   await review.getByRole("button", { name: "关闭", exact: true }).click();
   await page.setViewportSize({ width: 720, height: 800 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto(`${server.resolvedUrls.local[0]}tests/fixtures/mcp.html?editor`);
-  await page.getByRole("button", { name: "更新基本信息", exact: true }).click();
-  const name = page.getByRole("textbox", { name: "资源名称 *", exact: true });
-  await name.fill("用户修改后的作品名");
-  await page.getByRole("button", { name: "保存 AI 草稿", exact: true }).click();
-  await page.getByRole("button", { name: "更新基本信息", exact: true }).waitFor();
-  assert.equal(
-    (await page.evaluate(() => globalThis.__mcpCalls.filter((call) => call.method === "mcp.editDraft")))[0].params.patch
-      .item_name,
-    "用户修改后的作品名",
-  );
-  await page.getByRole("button", { name: "更新基本信息", exact: true }).click();
-  await name.fill("用户尚未保存的修改");
-  await page.evaluate(() => globalThis.__changeDraft());
-  await page
-    .getByText("AI 草稿已在其他位置更新，当前输入已保留。请先检查并使用编辑器的「刷新」读取最新版本。", { exact: true })
-    .waitFor();
-  assert.equal(await name.inputValue(), "用户尚未保存的修改");
-  await page.getByRole("button", { name: "保存 AI 草稿", exact: true }).click();
-  await page.getByText("草稿版本已变化，请重新读取预览", { exact: true }).waitFor();
-  await page.screenshot({ path: join(output, "mcp-editor.png"), fullPage: true });
+  assert.equal(await page.getByRole("region", { name: "AI 草稿", exact: true }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: "打开作品草稿", exact: true }).count(), 0);
   assert.deepEqual(errors, []);
-  console.log("PASS: MCP settings, grant controls, approval diff, revision-bound decision and narrow layout");
+  console.log("PASS: MCP settings, grant controls, operation progress without confirmation and narrow layout");
 } finally {
   await browser?.close();
   await server.close();

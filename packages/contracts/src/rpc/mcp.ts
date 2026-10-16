@@ -1,5 +1,12 @@
 import type { WorkEditorDocument, WorkRecord, WorkUploadKind } from "./work-editor";
 
+export const MCP_DEFAULT_PORT = 17839;
+
+/** Accept only explicit TCP ports usable by a local MCP listener */
+export function isMcpPort(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 65535;
+}
+
 export const mcpPermissions = [
   "netease:account.read",
   "netease:works.read",
@@ -7,6 +14,12 @@ export const mcpPermissions = [
   "netease:rank.read",
   "netease:promotion.read",
   "netease:income.read",
+  "netease:works.write",
+  "netease:promotion.write",
+  "netease:community.read",
+  "netease:community.write",
+  "netease:messages.read",
+  "netease:messages.write",
   "works:draft",
   "works:upload",
   "works:save",
@@ -37,14 +50,16 @@ export type McpOperationState =
   | "unknown"
   | "platform_action"
   | "created_id_unresolved";
-export type McpAction = "import" | "upload" | "create" | "save" | "save_review" | "review";
+export type McpAction = "import" | "upload" | "create" | "save" | "save_review" | "review" | "business";
 export interface McpOperation {
+  method?: string;
+  itemId?: string;
   id: string;
   clientId: string;
   clientName: string;
   account: string;
-  draftId: string;
-  revision: number;
+  draftId?: string;
+  revision?: number;
   action: McpAction;
   state: McpOperationState;
   phase: string;
@@ -56,6 +71,7 @@ export interface McpOperation {
   resolvedAt?: number;
 }
 export interface McpDraft {
+  purpose?: "works" | "promotion";
   id: string;
   clientId: string;
   account: string;
@@ -90,6 +106,8 @@ export interface McpAudit {
   result: string;
 }
 export interface McpSnapshot {
+  port: number;
+  endpoint: string | null;
   enabled: boolean;
   status: "off" | "starting" | "running" | "error";
   error: string | null;
@@ -98,11 +116,4 @@ export interface McpSnapshot {
   drafts: McpDraft[];
   assets: McpAsset[];
   audit: McpAudit[];
-}
-export interface McpInvitation {
-  clientId: string;
-  command: string;
-  args: string[];
-  env: Record<string, string>;
-  expiresAt: number;
 }

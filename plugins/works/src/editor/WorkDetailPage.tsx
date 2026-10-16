@@ -4,7 +4,6 @@ import {
   Dialog,
   deferredWorkCreatePatch,
   emptyWorkCreateFields,
-  type McpDraft,
   matchPcClassification,
   Notice,
   normalizePcRequirements,
@@ -66,52 +65,6 @@ interface DetailProps {
   onClose: () => void;
   onSaved: () => void;
   creating?: boolean;
-  aiDraft?: McpDraft;
-}
-
-/** Reuse the full editor while keeping AI changes inside its independent host-owned draft */
-export function WorkAiDraftEditor({
-  draft,
-  onClose,
-  onSaved,
-}: {
-  draft: McpDraft;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const choices = useWorkOptions(draft.account);
-  const fields = draft.previewFields ?? { ...draft.document.fields, ...draft.patch };
-  const work: WorkSummary = {
-    itemId: draft.itemId ?? "",
-    name: String(fields.item_name || "AI 草稿"),
-    status: draft.document.status,
-    price: Number(fields.price ?? 0),
-    priceType: fields.price_type === "diamond" ? "diamond" : fields.price_type === "point" ? "point" : "free",
-    isOriginal: !!fields.is_original,
-    syncPc: !!fields.sync_pc_flag,
-    isPrerequisite: fields.pri_type === 9,
-    weakOffline: !!fields.weak_offline,
-    weakOfflineReason: null,
-    createTime: "",
-    applyReviewTime: null,
-  };
-  return (
-    <Editor
-      key={`${draft.id}:${draft.revision}`}
-      work={work}
-      account={draft.account}
-      works={[]}
-      aiDraft={draft}
-      creating={!draft.itemId}
-      initial={{ ...draft.document, fields }}
-      choices={choices.data}
-      optionsError={choices.error?.message ?? null}
-      reloadOptions={choices.reload}
-      reload={onSaved}
-      onClose={onClose}
-      onSaved={onSaved}
-    />
-  );
 }
 
 /** New works use the existing editor without requesting a nonexistent server detail */
@@ -223,9 +176,7 @@ function Editor({
   reloadOptions: () => void;
   reload: () => void;
 }) {
-  const draftKey = props.aiDraft
-    ? `mcp:${props.aiDraft.id}:${props.aiDraft.revision}`
-    : `${props.account}:${props.work.itemId}`;
+  const draftKey = `${props.account}:${props.work.itemId}`;
   const [restored] = useState(() => drafts.get(draftKey));
   const [document, setDocument] = useState(initial);
   const [base, setBase] = useState(restored?.base ?? initial.fields);
@@ -248,7 +199,7 @@ function Editor({
     (key) => JSON.stringify(value[key] ?? null) !== JSON.stringify(base[key] ?? null),
   );
   const writable = editableStatuses.has(document.status);
-  const blocked = busy || !writable || uncertain || props.aiDraft?.locked === true;
+  const blocked = busy || !writable || uncertain;
   const editing = (section: WorkSection) => props.creating === true || editingSections.includes(section);
   const activeSection = tab === "release" || tab === "media" ? null : (tab as WorkSection);
   const disabled = blocked || (activeSection !== null && !editing(activeSection));
@@ -334,22 +285,6 @@ function Editor({
       return false;
     }
     const patch = Object.fromEntries(keys.map((key) => [key, value[key] ?? null]));
-    if (props.aiDraft) {
-      const saved = await callHost("mcp.editDraft", {
-        draftId: props.aiDraft.id,
-        revision: props.aiDraft.revision,
-        patch,
-      });
-      if (!saved.ok) {
-        setError(saved.error.message);
-        return false;
-      }
-      drafts.delete(draftKey);
-      setBase(value);
-      setMessage("AI 草稿已更新，原确认请求失效；请重新生成保存或提审请求。");
-      props.onSaved();
-      return true;
-    }
     const baseline = Object.fromEntries(keys.map((key) => [key, base[key] ?? null]));
     const result = await callHost("works.save", {
       itemId: props.work.itemId,
@@ -408,7 +343,7 @@ function Editor({
     }
   };
   const save = (section?: WorkSection) => {
-    if (props.creating && !props.aiDraft) {
+    if (props.creating) {
       setConfirm("create");
       return;
     }
@@ -455,10 +390,6 @@ function Editor({
 
   /** Picked and dropped files share host validation and the same editor write lock */
   const upload: UploadFile = async (kind, channelId, platform = "pe", droppedFile) => {
-    if (props.aiDraft) {
-      setError("AI 草稿材料请通过 MCP 导入和上传请求处理，再引用材料 ID。");
-      return null;
-    }
     if (lock.current || !writable || uncertain) return null;
     const section: WorkSection =
       kind === "proof"
@@ -613,7 +544,7 @@ function Editor({
         <TextButton disabled={busy} onClick={() => (dirtyKeys.length ? setConfirm("back") : props.onClose())}>
           ‹ 返回作品管理
         </TextButton>
-        <span>/ {props.aiDraft ? "AI 草稿" : props.creating ? "新增作品" : "模组详情"}</span>
+        <span>/ {props.creating ? "新增作品" : "模组详情"}</span>
         <Tag>{props.creating ? "未创建" : statusLabels[document.status]}</Tag>
       </div>
       <PageHeader
@@ -624,7 +555,7 @@ function Editor({
             <Button disabled={busy} onClick={() => (dirtyKeys.length || uncertain ? setConfirm("reload") : reload())}>
               {props.creating ? "重置表单" : "刷新"}
             </Button>
-            {!props.creating && !props.aiDraft && (
+            {!props.creating && (
               <Button
                 disabled={blocked || dirtyKeys.some((key) => !canChange(key))}
                 onClick={() => setConfirm("review")}
@@ -637,19 +568,13 @@ function Editor({
               disabled={blocked || !dirtyKeys.some(canChange) || (props.creating && (!choices || !!optionsError))}
               onClick={() => save()}
             >
-              {busy ? "处理中…" : props.aiDraft ? "保存 AI 草稿" : props.creating ? "创建作品" : "保存"}
+              {busy ? "处理中…" : props.creating ? "创建作品" : "保存"}
             </Button>
           </>
         }
       />
       {error && <Notice>{error}</Notice>}
-      {props.aiDraft && (
-        <Notice>
-          AI 草稿 · 账号 {props.account} · 版本 {props.aiDraft.revision} ·
-          尚未保存到平台。修改后需重新生成确认请求；平台写入请返回「AI 接入」确认。
-        </Notice>
-      )}
-      {props.creating && !props.aiDraft && (
+      {props.creating && (
         <Notice>
           {uncertain
             ? "上次创建结果尚未确认，请先返回作品列表核对。重置表单不会撤销已发送的创建请求。"

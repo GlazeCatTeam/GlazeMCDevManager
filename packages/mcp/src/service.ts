@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { basename } from "node:path";
 import {
   emptyWorkCreateFields,
@@ -35,6 +35,7 @@ const mediaKeys = new Set(["res_url", "channel_url", "banner_pic", "corp_proof_i
 export class McpService {
   status: McpSnapshot["status"] = "off";
   error: string | null = null;
+  endpoint: string | null = null;
   readonly connections = new Map<string, Set<() => void>>();
   private readonly calls = new Set<string>();
   private importing = false;
@@ -63,7 +64,7 @@ export class McpService {
           (["unknown", "created_id_unresolved", "platform_action"].includes(operation.state) ||
             (operation.state !== "succeeded" && isWorkRecord(operation.result) && operation.result.saved === true)),
       );
-    this.commit();
+    this.pruneSnapshots();
   }
 
   /** Persist before notifying views; callers must not perform a write if persistence fails */
@@ -89,9 +90,11 @@ export class McpService {
   snapshot(): McpSnapshot {
     this.expire();
     return {
+      port: this.data.port,
       enabled: this.data.enabled,
       status: this.status,
       error: this.error,
+      endpoint: this.endpoint,
       clients: this.data.clients.map(({ token: _token, directories, ...client }) => ({
         ...client,
         connected: !!this.connections.get(client.id)?.size,
@@ -113,7 +116,7 @@ export class McpService {
     };
   }
 
-  /** Invalidate timed-out invitations and approvals without reviving them on reconnect */
+  /** Expire pending business approvals without reviving them on reconnect */
   private expire(): void {
     let changed = false;
     for (const operation of this.data.operations)
@@ -125,15 +128,19 @@ export class McpService {
     if (changed) this.commit();
   }
 
-  /** Create an expiring invitation; an authenticated connection is still unapproved */
-  invite(name: string): StoredClient {
+  /** Register a fresh HTTP connection without trusting a client-supplied identity */
+  registerClient(name: string): StoredClient {
     if (!this.data.enabled || this.status !== "running") throw new McpError("unavailable", "请先开启 MCP 服务");
     if (typeof name !== "string" || !name.trim() || name.length > 80)
       throw new McpError("validation", "客户端名称无效");
+    // A new session never resumes an old grant; retain offline clients only when drafts reference them
+    this.data.clients = this.data.clients.filter(
+      (client) =>
+        this.connections.get(client.id)?.size || this.data.drafts.some((draft) => draft.clientId === client.id),
+    );
     if (this.data.clients.length >= 50) throw new McpError("limit", "客户端数量已达上限，请撤销不用的客户端");
     const client: StoredClient = {
       id: randomUUID(),
-      token: randomBytes(32).toString("hex"),
       name: name.trim(),
       accounts: [],
       defaultAccount: "",
@@ -148,19 +155,7 @@ export class McpService {
     return client;
   }
 
-  /** Authenticate the local bridge by a random secret, never by its display name */
-  authenticate(id: string, token: string): boolean {
-    const client = this.data.clients.find((entry) => entry.id === id);
-    return (
-      !!client &&
-      this.data.enabled &&
-      (client.approved || client.expiresAt > Date.now()) &&
-      token.length === client.token.length &&
-      timingSafeEqual(Buffer.from(token), Buffer.from(client.token))
-    );
-  }
-
-  /** Track authenticated transports separately from persistent authorization */
+  /** Track live HTTP sessions separately from persistent authorization */
   connected(id: string, close: () => void): () => void {
     const set = this.connections.get(id) ?? new Set();
     set.add(close);
@@ -179,7 +174,7 @@ export class McpService {
   grant(id: string, grant: McpGrant): void {
     const client = this.client(id, false);
     if (!client.approved && (!this.connections.get(id)?.size || client.expiresAt < Date.now()))
-      throw new McpError("forbidden", "请先连接客户端，过期邀请需要重新生成");
+      throw new McpError("forbidden", "请先连接客户端，授权等待已过期时请重新连接");
     if (
       !grant ||
       !Array.isArray(grant.accounts) ||
@@ -202,7 +197,7 @@ export class McpService {
     this.connections.delete(id);
     this.commit();
   }
-  /** Remove credentials so an old configuration cannot reconnect */
+  /** Remove the grant and terminate the associated HTTP session */
   revoke(id: string): void {
     this.disconnect(id);
     this.data.clients = this.data.clients.filter((entry) => entry.id !== id);
@@ -302,7 +297,10 @@ export class McpService {
         if ((this.epochs.get(id) ?? 0) !== epoch) throw new McpError("forbidden", "请求期间授权发生变化");
       };
       let result: unknown;
-      if (tool.method.includes(".")) {
+      if (tool.invoke) result = await this.business(client, tool.invoke, { ...params, account }, tool.readOnly, guard);
+      else if (!params.draftId && !name.startsWith("works_draft_") && !tool.method.includes("."))
+        result = await this.direct(client, name, { ...params, account }, guard);
+      else if (tool.method.includes(".")) {
         this.ports.assertEnabled(tool.method);
         if (name === "account_list")
           result = this.ports
@@ -323,7 +321,7 @@ export class McpService {
         else result = await this.ports.read(tool.method, { ...params, account });
       } else result = await this.editing(client, name, { ...params, account }, draft, guard);
       guard();
-      outcome = "succeeded";
+      outcome = result && typeof result === "object" && "state" in result ? String(result.state) : "succeeded";
       return publicValue(result);
     } catch (error) {
       outcome = error instanceof McpError ? error.kind : "failed";
@@ -348,6 +346,235 @@ export class McpService {
     this.data.audit.length = Math.min(this.data.audit.length, 500);
     this.commit();
   }
+  /** Bind uploaded assets to the same client, account, work and business purpose */
+  private ownsAsset(snapshot: McpDraft, asset: StoredAsset): boolean {
+    const source = this.data.drafts.find((entry) => entry.id === asset.draftId);
+    return (
+      !!source &&
+      source.clientId === snapshot.clientId &&
+      source.account === snapshot.account &&
+      source.itemId === snapshot.itemId &&
+      (source.purpose ?? "works") === (snapshot.purpose ?? "works")
+    );
+  }
+
+  /** Drop completed editing snapshots while preserving material ownership and unresolved writes */
+  private pruneSnapshots(): void {
+    const retained = new Set(
+      this.data.assets.filter((asset) => asset.expiresAt > Date.now()).map((asset) => asset.draftId),
+    );
+    for (const op of this.data.operations)
+      if (
+        ["pending", "running", "unknown", "created_id_unresolved", "platform_action"].includes(op.state) ||
+        (op.state === "failed" && isWorkRecord(op.result) && op.result.saved === true)
+      )
+        retained.add(op.draftId);
+    this.data.drafts = this.data.drafts.filter((snapshot) => retained.has(snapshot.id));
+    const ids = new Set(this.data.drafts.map((snapshot) => snapshot.id));
+    this.data.draftKeys = Object.fromEntries(Object.entries(this.data.draftKeys).filter(([, id]) => ids.has(id)));
+    this.commit();
+  }
+
+  /** Read current fields, apply the requested patch and finish a write in a single MCP call */
+  private async direct(
+    client: StoredClient,
+    name: string,
+    params: Record<string, unknown>,
+    guard: () => void,
+  ): Promise<unknown> {
+    const account = params.account as string;
+    if (name === "materials_directories") return client.directories.map(({ id, name }) => ({ id, name }));
+    if (["works_editor", "works_options", "works_operation_get"].includes(name))
+      return this.editing(client, name, params, undefined, guard);
+    const key = `direct:${client.id}:${account}:${name}:${params.idempotencyKey}`;
+    const fingerprint = createHash("sha256").update(canonical({ name, params })).digest("hex");
+    const previous = this.data.operations.find((op) => op.key === key);
+    if (previous) {
+      if (previous.fingerprint !== fingerprint) throw new McpError("conflict", "幂等键已用于其他内容");
+      return this.operationView(previous);
+    }
+    const uploading = name === "works_upload" || name === "promotion_upload";
+    if (name === "promotion_upload" && !["richImage", "banner", "video"].includes(String(params.kind)))
+      throw new McpError("validation", "推广材料只支持 richImage、banner、video");
+    const document = params.itemId
+      ? await this.ports.editor(account, params.itemId as string)
+      : {
+          itemId: "",
+          status: "init" as const,
+          version: "0.1",
+          modCode: "",
+          guides: [],
+          fields: emptyWorkCreateFields(),
+        };
+    guard();
+    const snapshot: McpDraft = {
+      id: randomUUID(),
+      clientId: client.id,
+      account,
+      itemId: (params.itemId as string) ?? null,
+      purpose: name === "promotion_upload" ? "promotion" : "works",
+      document,
+      revision: 1,
+      patch: {},
+      updatedAt: Date.now(),
+      locked: false,
+    };
+    this.data.drafts.push(snapshot);
+    try {
+      const patch = name === "works_create" ? params.fields : params.patch;
+      if (patch) {
+        if (params.base) {
+          const base = params.base as WorkRecord;
+          if (
+            !isWorkRecord(patch) ||
+            Object.keys(base).some(
+              (key) => !(key in patch) || canonical(base[key]) !== canonical(document.fields[key] ?? null),
+            )
+          )
+            throw new McpError("conflict", "作品内容已变化，请重新读取后修改");
+        }
+        this.patchDraft(snapshot, 1, patch);
+      }
+      const result = await this.editing(
+        client,
+        uploading ? "works_asset_import" : name,
+        {
+          ...params,
+          draftId: snapshot.id,
+          revision: snapshot.revision,
+          operationKey: key,
+          operationFingerprint: fingerprint,
+          directMethod: name,
+        },
+        snapshot,
+        guard,
+      );
+      return result;
+    } finally {
+      this.pruneSnapshots();
+    }
+  }
+
+  /** Execute a whitelisted host business method with durable deduplication and per-target locking */
+  private async business(
+    client: StoredClient,
+    method: string,
+    params: Record<string, unknown>,
+    readOnly: boolean,
+    guard: () => void,
+  ): Promise<unknown> {
+    this.ports.assertEnabled(method);
+    if (!this.ports.invoke) throw new McpError("unavailable", "业务适配器未注册");
+    const account = params.account as string;
+    if (readOnly) return this.ports.invoke(method, params, guard, guard);
+    const key = `business:${client.id}:${account}:${method}:${params.idempotencyKey}`;
+    const fingerprint = createHash("sha256").update(canonical(params)).digest("hex");
+    const prior = this.data.operations.find((op) => op.key === key);
+    if (prior) {
+      if (prior.fingerprint !== fingerprint) throw new McpError("conflict", "幂等键已用于其他内容");
+      return this.operationView(prior);
+    }
+    const target = `${account}:${method.startsWith("works.") ? String(params.itemId) : method.split(".")[0]}`;
+    if (
+      this.writes.has(target) ||
+      this.data.operations.some(
+        (op) =>
+          !op.resolvedAt &&
+          (["unknown", "platform_action", "created_id_unresolved"].includes(op.state) ||
+            (op.state === "failed" && isWorkRecord(op.result) && op.result.saved === true)) &&
+          (op.target === target ||
+            (method.startsWith("works.") && op.account === account && op.itemId === params.itemId)),
+      )
+    )
+      throw new McpError("conflict", "目标存在执行中或结果待核实的操作");
+    if (this.data.operations.length >= 5000) throw new McpError("limit", "操作记录达到上限，请先整理历史记录");
+    const op: StoredOperation = {
+      id: randomUUID(),
+      clientId: client.id,
+      clientName: client.name,
+      account,
+      draftId: "",
+      revision: 1,
+      action: "business",
+      method,
+      target,
+      ...(typeof params.itemId === "string" ? { itemId: params.itemId } : {}),
+      state: "running",
+      phase: "validating",
+      message: "正在执行",
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 15 * 60_000,
+      key,
+      fingerprint,
+    };
+    this.data.operations.unshift(op);
+    this.writes.add(target);
+    let sent = false;
+    try {
+      this.commit();
+      const check = () => {
+        guard();
+        this.ports.assertEnabled(method);
+      };
+      const beforeWrite = () => {
+        check();
+        op.phase = "writing";
+        this.commit();
+        sent = true;
+      };
+      const { idempotencyKey: _key, ...input } = params;
+      // Upload receipts stay inside the host; public callers reference material IDs only
+      if (method === "promotion.join" || method === "promotion.saveBanner") {
+        const material = (id: unknown, kind: string) => {
+          const asset = this.data.assets.find(
+            (asset) => asset.id === id && asset.uploaded && asset.expiresAt > Date.now(),
+          );
+          const source = this.data.drafts.find((snapshot) => snapshot.id === asset?.draftId);
+          if (
+            !asset?.receipt ||
+            source?.clientId !== client.id ||
+            source.account !== account ||
+            source.purpose !== "promotion" ||
+            asset.kind !== kind
+          )
+            throw new McpError("forbidden", "推广材料未上传、类型不匹配或不属于此客户端账号");
+          return asset.receipt;
+        };
+        if (method === "promotion.join") {
+          input.images = (input.imageAssetIds as string[]).map((id) => material(id, "richImage").receipt);
+          input.videos = (input.videoAssetIds as string[]).map((id) => material(id, "video").receipt);
+          delete input.imageAssetIds;
+          delete input.videoAssetIds;
+        } else {
+          input.imageUrl = material(input.imageAssetId, "banner").url;
+          delete input.imageAssetId;
+        }
+      }
+      op.result = await this.ports.invoke(method, input, check, beforeWrite);
+      if (op.result && typeof op.result === "object" && "outcome" in op.result && op.result.outcome === "uncertain") {
+        op.state = "unknown";
+        op.message = "平台结果待核实，禁止自动重试";
+      } else {
+        op.state = "succeeded";
+        op.phase = "completed";
+        op.message = "操作已完成";
+      }
+    } catch (error) {
+      const kind = error && typeof error === "object" && "kind" in error ? String(error.kind) : "internal";
+      op.state = sent && ["network", "timeout", "parse", "internal"].includes(kind) ? "unknown" : "failed";
+      op.message =
+        op.state === "unknown"
+          ? "平台写入结果待核实，禁止自动重试"
+          : error instanceof Error
+            ? error.message
+            : "操作失败";
+    } finally {
+      this.writes.delete(target);
+      this.commit();
+    }
+    return this.operationView(op);
+  }
+
   /** Look up drafts with owner binding before revealing any fields */
   private draft(id: string, draftId: string): McpDraft {
     const draft = this.data.drafts.find((entry) => entry.id === draftId && entry.clientId === id);
@@ -363,7 +590,7 @@ export class McpService {
   private resolvePatch(draft: McpDraft, patch: WorkRecord): WorkRecord {
     const original = canonical(draft.document.fields);
     const assets = this.data.assets.filter(
-      (asset) => asset.draftId === draft.id && asset.receipt && asset.expiresAt > Date.now(),
+      (asset) => this.ownsAsset(draft, asset) && asset.receipt && asset.expiresAt > Date.now(),
     );
     const allowedUrl = (url: string) =>
       !url || original.includes(JSON.stringify(url)) || assets.some((asset) => asset.receipt?.url === url);
@@ -435,7 +662,7 @@ export class McpService {
 
   /** Compare signed upload references with the equivalent platform URL after a successful save */
   private reviewFields(draft: McpDraft, fields: WorkRecord): WorkRecord {
-    const assets = this.data.assets.filter((asset) => asset.draftId === draft.id && asset.receipt);
+    const assets = this.data.assets.filter((asset) => this.ownsAsset(draft, asset) && asset.receipt);
     const normalize = (value: WorkValue): WorkValue => {
       if (Array.isArray(value)) return value.map(normalize);
       if (isWorkRecord(value)) {
@@ -511,7 +738,7 @@ export class McpService {
     this.audit(operation.clientId, "human_reconciliation", operation.account, operation.state);
   }
 
-  /** Route draft tools while keeping platform writes behind trusted approval */
+  /** Route draft tools and execute platform operations within the client grant */
   private async editing(
     client: StoredClient,
     name: string,
@@ -529,7 +756,9 @@ export class McpService {
       this.expire();
       return this.operationView(operation);
     }
-    this.ports.assertEnabled(name.startsWith("works_") ? "works.save" : name);
+    this.ports.assertEnabled(
+      draft?.purpose === "promotion" ? "promotion.upload" : name.startsWith("works_") ? "works.save" : name,
+    );
     if (name === "works_editor") return this.ports.editor(account, params.itemId as string);
     if (name === "works_options") return this.ports.options(account);
     if (name === "works_draft_create") {
@@ -594,8 +823,10 @@ export class McpService {
     };
     const action = actions[name];
     if (!action) throw new McpError("unknown_tool", "工具不存在");
-    const key = `${client.id}:${account}:${params.idempotencyKey}`;
-    const fingerprint = createHash("sha256").update(canonical({ name, params })).digest("hex");
+    const key = (params.operationKey as string | undefined) ?? `${client.id}:${account}:${params.idempotencyKey}`;
+    const fingerprint =
+      (params.operationFingerprint as string | undefined) ??
+      createHash("sha256").update(canonical({ name, params })).digest("hex");
     const existing = this.data.operations.find((operation) => operation.key === key);
     if (existing) {
       if (existing.fingerprint !== fingerprint) throw new McpError("conflict", "幂等键不能用于不同操作");
@@ -620,9 +851,12 @@ export class McpService {
       draftId: draft.id,
       revision: draft.revision,
       action,
+      ...(params.directMethod
+        ? { method: String(params.directMethod), ...(draft.itemId ? { itemId: draft.itemId } : {}) }
+        : {}),
       state: "pending",
-      phase: "awaiting_approval",
-      message: "等待应用内确认",
+      phase: "queued",
+      message: "准备执行",
       createdAt: Date.now(),
       expiresAt: Date.now() + 15 * 60_000,
       key,
@@ -645,7 +879,18 @@ export class McpService {
     }
     this.data.operations.unshift(operation);
     this.commit();
-    if (operation.directoryId) await this.decide(operation.id, operation.revision, true);
+    try {
+      await this.execute(operation);
+    } catch (error) {
+      // A failed preflight must not leave a request waiting for an approval that no longer exists
+      if (operation.state === "pending") {
+        operation.state = "failed";
+        operation.phase = "preflight_failed";
+        operation.message = error instanceof McpError ? error.message : "操作无法开始";
+        this.commit();
+      }
+      throw error;
+    }
     return this.operationView(operation);
   }
 
@@ -662,12 +907,17 @@ export class McpService {
     if (!editStates.has(draft.document.status)) return [{ field: "status", message: "作品当前状态不允许编辑" }];
     return this.ports.validate(draft, this.resolvePatch(draft, draft.patch));
   }
-  /** Separate draft permission from upload, save and non-waivable review permission */
+  /** Check distinct permissions for drafts, uploads, saves and review */
   private checkAction(id: string, draft: McpDraft, action: McpAction): void {
-    this.authorize(id, "works:draft", draft.account);
     this.authorize(
       id,
-      ["import", "upload"].includes(action) ? "works:upload" : action === "review" ? "works:review" : "works:save",
+      draft.purpose === "promotion"
+        ? "netease:promotion.write"
+        : ["import", "upload"].includes(action)
+          ? "works:upload"
+          : action === "review"
+            ? "works:review"
+            : "works:save",
       draft.account,
     );
     if (action === "save_review") this.authorize(id, "works:review", draft.account);
@@ -682,7 +932,7 @@ export class McpService {
       )
         return false;
       const previous = this.data.drafts.find((entry) => entry.id === operation.draftId);
-      return draft.itemId ? previous?.itemId === draft.itemId : previous?.itemId === null;
+      return draft.itemId ? (operation.itemId ?? previous?.itemId) === draft.itemId : previous?.itemId === null;
     });
     if (unresolved) throw new McpError("conflict", "此账号作品存在待核实的写入，请先在应用内核对平台结果");
     if (action === "create" && draft.itemId) throw new McpError("validation", "已有作品不能再次创建");
@@ -698,23 +948,19 @@ export class McpService {
     assetParams: _params,
     directoryId: _directory,
     relativePath: _relative,
+    target: _target,
     ...operation
   }: StoredOperation): McpOperation {
+    if (operation.method) {
+      const { draftId: _snapshot, revision: _revision, ...result } = operation;
+      return structuredClone(result);
+    }
     return structuredClone(operation);
   }
 
-  /** Approve only from trusted host UI; durable phase writes precede each external action */
-  async decide(operationId: string, revision: number, approve: boolean): Promise<void> {
-    this.expire();
-    const operation = this.data.operations.find((entry) => entry.id === operationId);
-    if (operation?.state !== "pending" || operation.revision !== revision)
-      throw new McpError("conflict", "请求已处理、过期或版本不匹配");
-    if (!approve) {
-      operation.state = "rejected";
-      operation.message = "用户拒绝了请求";
-      this.commit();
-      return;
-    }
+  /** Execute under the granted capability; persist phases before each external action */
+  private async execute(operation: StoredOperation): Promise<void> {
+    const revision = operation.revision;
     const draft = this.draft(operation.clientId, operation.draftId);
     this.revision(draft, revision);
     this.checkAction(operation.clientId, draft, operation.action);
@@ -733,7 +979,7 @@ export class McpService {
     const epoch = this.epochs.get(operation.clientId) ?? 0;
     const guard = () => {
       this.checkAction(operation.clientId, draft, operation.action);
-      this.ports.assertEnabled("works.save");
+      this.ports.assertEnabled(draft.purpose === "promotion" ? "promotion.upload" : "works.save");
       if (epoch !== (this.epochs.get(operation.clientId) ?? 0) || draft.revision !== revision)
         throw new McpError("conflict", "授权或内容已变化，执行已停止");
     };
@@ -771,6 +1017,15 @@ export class McpService {
         this.data.assets.push(asset);
         operation.assetId = asset.id;
         operation.result = { assetId: asset.id, name: asset.name, size: asset.size, hash: asset.hash };
+        if (operation.method === "works_upload" || operation.method === "promotion_upload") {
+          await verifyMaterial(asset);
+          guard();
+          operation.phase = "uploading";
+          this.commit();
+          asset.receipt = await this.ports.upload(draft, asset, beforeWrite);
+          asset.uploaded = true;
+          operation.result = { ...(operation.result as object), uploaded: true };
+        }
       } else if (operation.action === "upload") {
         if (!operation.assetId) throw new McpError("validation", "材料 ID 缺失");
         const asset = this.asset(draft, operation.assetId);
