@@ -56,7 +56,7 @@ flowchart TD
 | [03 模块与依赖规则](03-modules.md) | 仓库结构、各包职责、分层依赖约束 |
 | [04 插件系统](04-plugin-system.md) | 插件清单、贡献点、生命周期、上下文 API、权限、隔离 |
 | [05 主题系统](05-theme-system.md) | 设计令牌、主题包格式、运行时、Ore UI 设计原则 |
-| [06 布局系统](06-layout-system.md) | 页面、组件、布局文档、编辑模式、存储与迁移 |
+| [06 布局系统](06-layout-system.md) | 已移出范围（决定 #69）：原拖拽排版设计，仅作历史保留 |
 | [07 会话与网易接入](07-session-and-netease.md) | 账号身份、会话状态机、登录协议、请求管线、错误模型 |
 | [08 数据与存储](08-data-storage.md) | SQLite 表设计、迁移、加密字段、缓存策略 |
 | [09 IPC 与契约](09-ipc-and-contracts.md) | RPC 设计、契约定义、调用者身份、事件推送 |
