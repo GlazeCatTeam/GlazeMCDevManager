@@ -1,0 +1,24 @@
+name: Setup
+description: Install Node.js from .nvmrc, the pinned pnpm and workspace dependencies with a cached store
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v5
+      with:
+        node-version-file: .nvmrc
+    - name: Install pnpm
+      shell: pwsh
+      # Same version as packageManager in package.json
+      run: npm install -g "pnpm@$((Get-Content package.json | ConvertFrom-Json).packageManager.Split('@')[1])"
+    - name: Locate pnpm store
+      id: store
+      shell: pwsh
+      run: echo "path=$(pnpm store path)" >> $env:GITHUB_OUTPUT
+    - uses: actions/cache@v4
+      with:
+        path: ${{ steps.store.outputs.path }}
+        key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: pnpm-${{ runner.os }}-
+    - name: Install dependencies
+      shell: pwsh
+      run: pnpm install --frozen-lockfile
