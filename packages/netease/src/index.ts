@@ -41,7 +41,7 @@ export {
 export { performWorkOperation } from "./endpoints/work-operations";
 export { searchWorkReferences } from "./endpoints/work-references";
 export { uploadWorkFile } from "./endpoints/work-upload";
-export { getReviewFeedback, getWork, getWorksPage, listWorks } from "./endpoints/works";
+export { getReviewFeedback, getWork, getWorksPage, listWorks, searchWorks } from "./endpoints/works";
 export { describeError, fail, type NeteaseError, ok, type Result } from "./errors";
 export type { McDevResponse, NeteaseSession } from "./http/client";
 export {

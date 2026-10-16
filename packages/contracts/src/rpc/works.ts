@@ -76,3 +76,16 @@ export interface WorkPage {
   items: WorkSummary[];
   total: number;
 }
+
+export interface WorkSearchPageParams extends WorkPageParams {
+  account: string;
+  query: string;
+  kind: "name" | "id";
+}
+
+export type WorkSearchItem = Pick<WorkSummary, "itemId" | "name" | "status">;
+
+export interface WorkSearchPage {
+  items: WorkSearchItem[];
+  total: number;
+}

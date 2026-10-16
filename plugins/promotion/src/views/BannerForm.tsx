@@ -9,12 +9,14 @@ import {
   TextButton,
   useHostQuery,
 } from "@glaze/plugin-sdk";
-import { type Dispatch, type SetStateAction, useEffect, useRef, useState } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { dateText, QueryMessage } from "../shared";
 import { BannerImage } from "./BannerImage";
 import { BannerPreview } from "./BannerPreview";
 import styles from "./BannerWorkspace.module.css";
 import { type BannerDraft, type BannerStep, bannerCopyFields } from "./banner-model";
+import { BannerWorkIcons } from "./banner-work-icons";
+import { useBannerWorks } from "./useBannerWorks";
 
 const steps = ["选择作品与日期", "准备宣传内容", "核对提交"];
 const workStates: Record<string, string> = {
@@ -29,34 +31,36 @@ const workStates: Record<string, string> = {
 };
 
 /** Read a visible work's icon through the existing image proxy, with a text fallback */
-function WorkIconImage({ account, itemId, name }: { account: string; itemId: string; name: string }) {
-  const detail = useHostQuery("works.get", { account, itemId });
-  const src = remoteImageUrl(detail.data?.iconUrl);
+function WorkIconImage({ icons, itemId, name }: { icons: BannerWorkIcons; itemId: string; name: string }) {
+  const [url, setUrl] = useState(() => icons.peek(itemId));
+  useEffect(() => icons.subscribe(itemId, setUrl), [icons, itemId]);
+  const src = remoteImageUrl(url);
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   return src && failedSrc !== src ? (
-    <img src={src} alt="" draggable={false} onError={() => setFailedSrc(src)} />
+    <img src={src} alt="" decoding="async" draggable={false} onError={() => setFailedSrc(src)} />
   ) : (
     name.slice(0, 1)
   );
 }
 
 /** Defer detail requests until the icon enters the visible list area */
-function WorkIcon({ account, itemId, name }: { account: string; itemId: string; name: string }) {
+function WorkIcon({ icons, itemId, name }: { icons: BannerWorkIcons; itemId: string; name: string }) {
   const element = useRef<HTMLSpanElement>(null);
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) {
-        setVisible(true);
-        observer.disconnect();
-      }
+      setVisible(entries.some((entry) => entry.isIntersecting));
     });
     if (element.current) observer.observe(element.current);
     return () => observer.disconnect();
   }, []);
   return (
     <span ref={element} className={styles.workIcon} aria-hidden="true">
-      {visible ? <WorkIconImage account={account} itemId={itemId} name={name} /> : name.slice(0, 1)}
+      {visible || icons.peek(itemId) !== undefined ? (
+        <WorkIconImage icons={icons} itemId={itemId} name={name} />
+      ) : (
+        name.slice(0, 1)
+      )}
     </span>
   );
 }
@@ -76,9 +80,21 @@ export function BannerForm({
   onSuccess: () => void;
 }) {
   const dates = useHostQuery("promotion.dates", { account });
-  const works = useHostQuery("works.list", { account, platform: "pe" });
   const { fields, editing, step } = draft;
-  const [search, setSearch] = useState("");
+  const works = useBannerWorks(account, fields.itemId);
+  const icons = useMemo(
+    () =>
+      new BannerWorkIcons(async (itemId) => {
+        const result = await callHost("works.get", { account, itemId });
+        if (!result.ok) throw new Error(result.error.message);
+        return result.value.iconUrl;
+      }),
+    [account],
+  );
+  useLayoutEffect(() => {
+    icons.setPaused(works.searching || step !== 1);
+    return () => icons.setPaused(true);
+  }, [icons, works.searching, step]);
   const [copyTab, setCopyTab] = useState<(typeof bannerCopyFields)[number]["key"]>("feature");
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -87,19 +103,18 @@ export function BannerForm({
   const pending = useRef(false);
   const content = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
-  const selectedWork = works.data?.find((work) => work.itemId === fields.itemId);
+  const workList = useRef<HTMLDivElement>(null);
+  const selectedWork = works.selectedWork;
   const workName = selectedWork?.name ?? (editing?.itemId === fields.itemId ? editing.itemName : "尚未选择作品");
-  const filtered = [...(works.data ?? [])]
-    .filter((work) => `${work.name} ${work.itemId}`.toLowerCase().includes(search.trim().toLowerCase()))
-    .sort((a, b) => Number(b.status === "online") - Number(a.status === "online"));
+  const filtered = works.data ?? [];
   const originalDate = Boolean(editing && editing.startTime === fields.startTime);
   const dateReady = Boolean(
     dates.data?.dates.some((date) => date.time === fields.startTime && date.allowed) || originalDate,
   );
   const workReady = Boolean(selectedWork || (editing && fields.itemId === editing.itemId));
   const selectionReady = workReady && dateReady;
-  const loading = dates.loading || works.loading;
-  const loadError = Boolean(dates.error || works.error);
+  const loading = dates.loading || (!selectedWork && !works.data && works.loading);
+  const loadError = Boolean(dates.error || (!selectedWork && !works.data && works.error));
   const busy = saving || uploading;
   const copy = bannerCopyFields.find((field) => field.key === copyTab) ?? bannerCopyFields[0];
   const longCopy = bannerCopyFields.find(({ key }) => fields[key].length > 20000);
@@ -124,6 +139,11 @@ export function BannerForm({
     content.current?.scrollTo({ top: 0 });
     heading.current?.focus({ preventScroll: true });
   }, [step]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Restore once when switching query/step or receiving its first page
+  useLayoutEffect(() => {
+    if (workList.current) workList.current.scrollTop = works.getScroll();
+  }, [works.query, works.kind, works.data === null, step]);
 
   /** Preserve every other field when moving backward or changing one part of the draft */
   function update(patch: Partial<BannerDraft["fields"]>) {
@@ -183,7 +203,7 @@ export function BannerForm({
         </div>
         <Button
           size="xs"
-          disabled={busy || loading}
+          disabled={busy || dates.loading || works.loading}
           onClick={() => {
             dates.reload();
             works.reload();
@@ -209,21 +229,88 @@ export function BannerForm({
       </ol>
       <div ref={content} className={styles.body}>
         {(dates.error || (!dates.data && dates.loading)) && <QueryMessage query={dates} />}
-        {(works.error || (!works.data && works.loading)) && <QueryMessage query={works} />}
         {step === 1 && (
           <div className={styles.selectionGrid}>
             <div className={styles.workSection}>
               <div className={styles.sectionTitle}>
                 <h3>推广哪个作品？</h3>
-                <span className={styles.muted}>{works.data ? `${filtered.length} 个作品` : "正在加载"}</span>
+                <span className={styles.muted}>
+                  {works.preview && works.data
+                    ? `已缓存 ${works.data.length} 项${works.error ? "" : " · 正在更新…"}`
+                    : works.data
+                      ? `${works.query ? "搜索结果" : "已加载"} ${works.data.length} / ${works.total} 个作品`
+                      : works.error
+                        ? "加载失败"
+                        : works.query
+                          ? "正在搜索…"
+                          : "正在加载…"}
+                </span>
               </div>
-              <SearchField
-                value={search}
-                onChange={setSearch}
-                label="搜索推广作品"
-                placeholder="输入作品名称或 ID，直接点选"
-              />
-              <div className={styles.workList} role="radiogroup" aria-label="推广作品">
+              <form
+                className={styles.workSearch}
+                aria-label="查找推广作品"
+                onCompositionStart={() => works.setComposing(true)}
+                onCompositionEnd={() => works.setComposing(false)}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  works.searchNow();
+                }}
+              >
+                <SearchField
+                  value={works.search}
+                  onChange={works.setSearch}
+                  label="搜索推广作品"
+                  placeholder="输入作品名称或完整 ID"
+                />
+                <select
+                  aria-label="作品搜索方式"
+                  value={works.mode}
+                  onChange={(event) => works.setMode(event.target.value as "auto" | "name" | "id")}
+                >
+                  <option value="auto">自动识别</option>
+                  <option value="name">作品名称</option>
+                  <option value="id">完整 ID</option>
+                </select>
+              </form>
+              <div
+                ref={workList}
+                className={styles.workList}
+                role="radiogroup"
+                aria-label="推广作品"
+                aria-busy={works.loading}
+                onScroll={(event) => {
+                  const list = event.currentTarget;
+                  const movingDown = list.scrollTop > works.getScroll();
+                  works.saveScroll(list.scrollTop);
+                  if (
+                    movingDown &&
+                    list.scrollHeight - list.scrollTop - list.clientHeight < 180 &&
+                    works.hasMore &&
+                    !works.error
+                  ) {
+                    void works.loadMore();
+                  }
+                }}
+              >
+                {!works.data &&
+                  (works.error ? (
+                    <QueryMessage query={{ ...works, reload: () => void works.loadMore() }} />
+                  ) : (
+                    <div className={styles.workPlaceholders}>
+                      <span className={styles.srOnly} role="status">
+                        {works.query ? "正在搜索作品…" : "正在加载作品…"}
+                      </span>
+                      {[1, 2, 3, 4, 5].map((key) => (
+                        <div key={key} className={styles.workSkeleton} aria-hidden="true">
+                          <i />
+                          <span>
+                            <b />
+                            <small />
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
                 {filtered.map((work) => (
                   <label key={work.itemId} className={styles.workOption} data-selected={fields.itemId === work.itemId}>
                     <input
@@ -232,12 +319,7 @@ export function BannerForm({
                       checked={fields.itemId === work.itemId}
                       onChange={() => update({ itemId: work.itemId })}
                     />
-                    <WorkIcon
-                      key={`${account}:${work.itemId}`}
-                      account={account}
-                      itemId={work.itemId}
-                      name={work.name}
-                    />
+                    <WorkIcon key={`${account}:${work.itemId}`} icons={icons} itemId={work.itemId} name={work.name} />
                     <span className={styles.workInfo}>
                       <strong>{work.name}</strong>
                       <small>ID {work.itemId}</small>
@@ -245,11 +327,30 @@ export function BannerForm({
                     <span className={styles.workState}>{workStates[work.status] ?? "其他状态"}</span>
                   </label>
                 ))}
-                {works.data && !filtered.length && (
+                {works.data && !filtered.length && !works.hasMore && !works.preview && !works.loading && (
                   <EmptyState
-                    title={works.data.length ? "没有找到匹配的作品" : "暂无作品"}
-                    hint={works.data.length ? "换个关键词试试，或使用作品 ID 搜索" : "发布作品后，可回到这里申请推广"}
+                    title={works.query ? "没有找到匹配的作品" : "暂无作品"}
+                    hint={
+                      works.query
+                        ? "换个关键词试试，或检查完整 ID；查询范围为当前账号的 PE 作品"
+                        : "发布作品后，可回到这里申请推广"
+                    }
                   />
+                )}
+                {works.data && (works.hasMore || works.loading || works.error) && (
+                  <div className={styles.loadMore}>
+                    {works.error ? (
+                      <QueryMessage query={{ ...works, reload: () => void works.loadMore() }} />
+                    ) : works.preview ? (
+                      <span className={styles.muted} role="status">
+                        正在更新作品结果…
+                      </span>
+                    ) : (
+                      <Button size="xs" disabled={works.loading} onClick={() => void works.loadMore()}>
+                        {works.loading ? "正在加载下一批…" : "加载更多（5 个）"}
+                      </Button>
+                    )}
+                  </div>
                 )}
               </div>
               <div className={styles.chosen}>

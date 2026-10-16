@@ -142,6 +142,7 @@ export const capabilities: Record<RpcMethod, Capability> = {
   "works.delete": shellOnly("netease:works.write", "dangerous"),
   "works.changePrice": shellOnly("netease:works.write", "write"),
   "works.page": shellOnly("netease:works.read", "read"),
+  "works.search": shellOnly("netease:works.read", "read"),
   "works.editor": shellOnly("netease:works.read", "read"),
   "works.options": shellOnly("netease:works.read", "read"),
   "works.save": shellOnly("netease:works.write", "write"),

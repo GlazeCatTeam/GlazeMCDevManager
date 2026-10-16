@@ -52,7 +52,16 @@ import type {
 } from "./work-editor";
 import type { WorkOperationParams, WorkOperationResult } from "./work-operations";
 import type { WorkResourceUploadParams } from "./work-resource";
-import type { WorkDetail, WorkPage, WorkPageParams, WorkParams, WorkReviewFeedback, WorkSummary } from "./works";
+import type {
+  WorkDetail,
+  WorkPage,
+  WorkPageParams,
+  WorkParams,
+  WorkReviewFeedback,
+  WorkSearchPage,
+  WorkSearchPageParams,
+  WorkSummary,
+} from "./works";
 
 export const RPC_CHANNEL = "glaze:rpc";
 export const EVENT_CHANNEL = "glaze:event";
@@ -144,6 +153,7 @@ export interface RpcMethods {
   "rank.page": { params: RankPageParams; result: RankPage };
   "works.list": { params: (AccountParams & { platform?: IncomePlatform }) | undefined; result: WorkSummary[] };
   "works.page": { params: WorkPageParams; result: WorkPage };
+  "works.search": { params: WorkSearchPageParams; result: WorkSearchPage };
   "works.create": { params: WorkCreateParams; result: undefined };
   "works.searchReferences": { params: WorkSearchParams; result: WorkReference[] };
   "works.prepareImage": { params: WorkImageParams; result: WorkImageDraft | null };

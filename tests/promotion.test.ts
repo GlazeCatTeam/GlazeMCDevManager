@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import "./work-search.test";
 import { afterEach, test } from "node:test";
 import {
   isBannerSave,

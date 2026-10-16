@@ -36,7 +36,7 @@
 .panel {
   display: flex;
   flex-direction: column;
-  height: clamp(280px, calc(100dvh - 282px), 680px);
+  height: clamp(680px, calc(100dvh - 160px), 960px);
   overflow: hidden;
   min-width: 0;
   box-sizing: border-box;
@@ -138,12 +138,71 @@
   width: 100%;
   box-sizing: border-box;
 }
+.workSearch {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+.workSearch > label {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+.workSearch select {
+  padding: 0 8px;
+  min-width: 96px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--g-text-primary);
+  background: var(--g-surface-sunken);
+  border: var(--g-border-width) solid var(--g-field-borderColor);
+  border-radius: var(--g-radius-control);
+}
 .workList {
   flex: 1;
   min-height: 150px;
   overflow-y: auto;
+  scrollbar-gutter: stable;
+  overscroll-behavior-y: contain;
   border: var(--g-border-width) solid var(--g-border-subtle);
   background: var(--g-surface-sunken);
+}
+.workPlaceholders {
+  height: 100%;
+  overflow: hidden;
+}
+.workSkeleton {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 66px;
+  box-sizing: border-box;
+  padding: 12px 16px;
+  opacity: 0.55;
+  border-bottom: var(--g-border-width) solid var(--g-border-subtle);
+}
+.workSkeleton i {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  background: var(--g-surface-panel);
+}
+.workSkeleton span {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+}
+.workSkeleton b,
+.workSkeleton small {
+  display: block;
+  width: 65%;
+  height: 12px;
+  background: var(--g-surface-panel);
+}
+.workSkeleton small {
+  width: 45%;
+  height: 9px;
 }
 .workOption {
   display: flex;
@@ -153,6 +212,12 @@
   border-bottom: var(--g-border-width) solid var(--g-border-subtle);
   cursor: pointer;
   min-width: 0;
+}
+.loadMore {
+  padding: 12px;
+  min-height: 52px;
+  box-sizing: border-box;
+  text-align: center;
 }
 .workOption:last-child {
   border-bottom: 0;

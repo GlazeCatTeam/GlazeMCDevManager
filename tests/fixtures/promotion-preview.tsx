@@ -28,6 +28,7 @@ const account: AccountSummary = {
 };
 const now = Math.floor(Date.now() / 1000);
 const richDescriptions = new URLSearchParams(location.search).has("richDescriptions");
+const manyWorks = new URLSearchParams(location.search).has("manyWorks");
 const activity: PromotionActivity = {
   id: "a1",
   name: "秋日创作季 · 探索无限可能",
@@ -89,13 +90,33 @@ const applications: BannerApplication[] = [
 ];
 let writes = 0;
 let moduleReads = 0;
+let workPageReads = 0;
+let workSearchReads = 0;
+let workIconReads = 0;
 let serverEnded = false;
+
+/** Include matches beyond the first browse page to exercise server-side search */
+function previewWorks(empty: boolean) {
+  const rows = empty ? [] : candidates.map((item) => ({ itemId: item.id, name: item.name, status: "online" }));
+  if (manyWorks && !empty) {
+    for (let index = 4; index <= 13; index++)
+      rows.push({ itemId: String(10000 + index), name: `分页作品 ${index}`, status: "online" });
+    rows.push({ itemId: "4690983497279236403", name: "完整 ID 测试作品", status: "online" });
+    rows.push({ itemId: "10015", name: "2026", status: "online" });
+  }
+  return rows;
+}
 
 /** Mock only the host boundary; use production navigation, queries, components and styles */
 const rpc: GlazeBridge["rpc"] = async (method, params) => {
-  const query = params as { account: string; page?: number; kind?: string; moduleId?: string };
+  const query = params as { account: string; page?: number; kind?: string; moduleId?: string; query?: string };
   const failNow = failed;
-  await new Promise((resolve) => setTimeout(resolve, query.account === account.id ? 80 : 10));
+  await new Promise((resolve) =>
+    setTimeout(
+      resolve,
+      method === "works.search" && query.query === "分页作品" ? 700 : query.account === account.id ? 80 : 10,
+    ),
+  );
   if (failNow) return { ok: false, error: { kind: "network", message: "模拟网络不可用" } };
   let value: unknown;
   const empty = query.account !== account.id;
@@ -128,7 +149,28 @@ const rpc: GlazeBridge["rpc"] = async (method, params) => {
     case "works.list":
       value = empty ? [] : candidates.map((item) => ({ itemId: item.id, name: item.name, status: "online" }));
       break;
+    case "works.page": {
+      const { page, pageSize } = params as RpcMethods["works.page"]["params"];
+      workPageReads++;
+      const counter = document.getElementById("work-page-reads");
+      if (counter) counter.textContent = String(workPageReads);
+      const rows = previewWorks(empty);
+      value = { items: rows.slice(page * pageSize, (page + 1) * pageSize), total: rows.length };
+      break;
+    }
+    case "works.search": {
+      const { query: text, kind, page, pageSize } = params as RpcMethods["works.search"]["params"];
+      const counter = document.getElementById("work-search-reads");
+      if (counter) counter.textContent = String(++workSearchReads);
+      const rows = previewWorks(empty).filter((item) =>
+        kind === "id" ? item.itemId === text : item.name.toLowerCase().includes(text.toLowerCase()),
+      );
+      value = { items: rows.slice(page * pageSize, (page + 1) * pageSize), total: rows.length };
+      break;
+    }
     case "works.get": {
+      const counter = document.getElementById("work-icon-reads");
+      if (counter) counter.textContent = String(++workIconReads);
       const { itemId } = params as RpcMethods["works.get"]["params"];
       value = {
         itemId,
@@ -287,6 +329,15 @@ function Preview() {
         </label>
         <span>
           赛道读取 <b id="module-reads">0</b>
+        </span>
+        <span>
+          作品分页读取 <b id="work-page-reads">0</b>
+        </span>
+        <span>
+          作品搜索读取 <b id="work-search-reads">0</b>
+        </span>
+        <span>
+          作品图标读取 <b id="work-icon-reads">0</b>
         </span>
       </div>
       <SessionProvider value={{ current, accounts: [current] }}>

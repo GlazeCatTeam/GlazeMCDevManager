@@ -60,6 +60,7 @@ import {
   replyFeedback,
   saveWorkEditor,
   searchWorkReferences,
+  searchWorks,
   submitWorkReview,
 } from "@glaze/netease";
 import { BrowserWindow, type IpcMainInvokeEvent, ipcMain } from "electron";
@@ -491,6 +492,16 @@ function createHandlers(
       const pageSize = optionalInteger(params, "pageSize", 1, 50);
       if (page === undefined || pageSize === undefined) throw new CapabilityError("validation", "作品分页参数无效");
       return sessions.request(optionalString(params, "account"), (session) => getWorksPage(session, page, pageSize));
+    },
+    "works.search": (params) => {
+      const query = requireString(params, "query");
+      const kind = optionalOneOf(params, "kind", ["name", "id"] as const);
+      const page = optionalInteger(params, "page", 0, 100_000_000);
+      const pageSize = optionalInteger(params, "pageSize", 1, 50);
+      if (!kind || page === undefined || pageSize === undefined)
+        throw new CapabilityError("validation", "作品搜索参数无效");
+      const account = requireString(params, "account");
+      return sessions.request(account, (session) => searchWorks(session, { account, query, kind, page, pageSize }));
     },
     "works.get": (params) => {
       const itemId = requireItemId(params);

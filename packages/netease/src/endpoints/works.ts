@@ -4,6 +4,9 @@ import type {
   WorkPage,
   WorkPriceType,
   WorkReviewFeedback,
+  WorkSearchItem,
+  WorkSearchPage,
+  WorkSearchPageParams,
   WorkStatus,
   WorkSummary,
 } from "@glaze/contracts";
@@ -125,6 +128,67 @@ export async function getWorksPage(session: NeteaseSession, page: number, pageSi
     const work = readWork(row);
     if (!work) return fail({ kind: "parse", endpoint: "items.pe.page" });
     items.push(work);
+  }
+  return ok({ items, total });
+}
+
+/** Search the authenticated management endpoint without scanning unrelated pages or loading icons */
+export async function searchWorks(
+  session: NeteaseSession,
+  params: WorkSearchPageParams,
+): Promise<Result<WorkSearchPage>> {
+  const { page, pageSize, kind } = params;
+  const query = typeof params.query === "string" ? params.query.trim() : "";
+  if (
+    !query ||
+    query.length > 200 ||
+    !["name", "id"].includes(kind) ||
+    !Number.isSafeInteger(page) ||
+    page < 0 ||
+    !Number.isInteger(pageSize) ||
+    pageSize < 1 ||
+    pageSize > 50 ||
+    !Number.isSafeInteger(page * pageSize) ||
+    (kind === "id" && !/^\d{1,32}$/.test(query))
+  ) {
+    return fail({ kind: "business", code: "validation", message: "作品搜索参数无效" });
+  }
+  if (kind === "id" && page > 0) return ok({ items: [], total: 0 });
+  const endpoint = "items.pe.search";
+  const path =
+    kind === "id"
+      ? `/items/categories/pe/${encodeURIComponent(query)}`
+      : withQuery("/items/categories/pe/", { item_name: query, start: page * pageSize, span: pageSize });
+  const result = await getMcDevData(endpoint, path, session);
+  if (!result.ok) {
+    if (
+      kind === "id" &&
+      result.error.kind === "business" &&
+      (result.error.httpStatus === 404 || result.error.code === "404")
+    )
+      return ok({ items: [], total: 0 });
+    return result;
+  }
+  const raw = readRecord(result.value);
+  const rows = kind === "id" ? [raw] : readArray(raw.item);
+  const total = kind === "id" ? 1 : readNumber(raw.count);
+  if (
+    !rows ||
+    total === null ||
+    !Number.isSafeInteger(total) ||
+    total < 0 ||
+    rows.length > pageSize ||
+    rows.length > total ||
+    (!rows.length && page * pageSize < total)
+  ) {
+    return fail({ kind: "parse", endpoint });
+  }
+  const items: WorkSearchItem[] = [];
+  for (const row of rows) {
+    const itemId = readString(row.item_id) ?? (kind === "id" ? query : null);
+    const name = readString(row.item_name);
+    if (!itemId || !name || (kind === "id" && itemId !== query)) return fail({ kind: "parse", endpoint });
+    items.push({ itemId, name, status: readWorkStatus(row.status) });
   }
   return ok({ items, total });
 }
