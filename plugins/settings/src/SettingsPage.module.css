@@ -1,23 +1,33 @@
 .page {
-  max-width: 1120px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-width: 1280px;
   margin: 0 auto;
-  padding: 36px 40px 48px;
+  padding: 24px 28px;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 20px;
+  container: settings-page / inline-size;
+}
+
+.page > :first-child {
+  flex: none;
 }
 
 .columns {
+  flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: 176px minmax(0, 1fr);
   align-items: stretch;
   gap: 20px;
 }
 
-/* Category list and content panel keep one fixed height whatever the content */
+/* Keep scrolling inside the panels, with the page heading always visible */
 .categories,
 .content {
-  height: 680px;
+  min-height: 0;
   min-width: 0;
 }
 
@@ -85,16 +95,18 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding-top: 24px;
+  padding: 20px 20px 12px 0;
   scrollbar-gutter: stable;
+  container: settings-content / inline-size;
 }
 
 .notice {
   flex: none;
-  height: 56px;
+  min-height: 40px;
+  max-height: 72px;
   display: flex;
   align-items: center;
-  margin-top: 16px;
+  margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--g-border-divider);
   color: var(--g-text-muted);
@@ -107,4 +119,22 @@
 .dialogClient {
   margin: 0 0 12px;
   font-weight: 700;
+}
+
+@container settings-page (max-width: 800px) {
+  .columns {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .categories {
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 8px;
+  }
+
+  .category {
+    white-space: nowrap;
+  }
 }

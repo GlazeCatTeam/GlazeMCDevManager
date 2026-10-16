@@ -18,8 +18,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 10px 0;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  padding: 14px 0;
 }
 
 .copy {
@@ -39,10 +40,24 @@
   color: var(--g-text-muted);
   font-size: 12px;
   line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .control {
   flex: none;
   display: flex;
   align-items: center;
+  max-width: 100%;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@container settings-content (max-width: 480px) {
+  .row {
+    align-items: flex-start;
+  }
+
+  .copy {
+    flex-basis: 100%;
+  }
 }
