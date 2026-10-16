@@ -1,4 +1,5 @@
 // Temporary hand-written contracts; replaced by Zod schemas in M1
+import type { AboutInfo, DependencyLicense, ProjectLink } from "./about";
 import type { AccountChanged, AccountSummary, InitialRoute, LoginStep } from "./account";
 import type {
   AnalyticsDailyParams,
@@ -92,6 +93,10 @@ export interface RpcMethods {
   "promotion.prepareImage": { params: { account: string }; result: WorkImageDraft | null };
   "promotion.uploadImage": { params: WorkCropParams; result: WorkUpload };
   "promotion.discardImage": { params: { account: string; token: string }; result: undefined };
+  "app.getAbout": { params: undefined; result: AboutInfo };
+  "app.getLicenses": { params: undefined; result: DependencyLicense[] };
+  "app.openProjectLink": { params: { link: ProjectLink }; result: undefined };
+  "app.openRuntimeNotices": { params: undefined; result: undefined };
   "sessionSettings.get": { params: undefined; result: SessionSettings };
   "sessionSettings.set": { params: SessionSettings; result: SessionSettings };
   "app.reportRendererError": { params: { kind: "error" | "unhandled-rejection" }; result: undefined };

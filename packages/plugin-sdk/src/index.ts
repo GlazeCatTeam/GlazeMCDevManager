@@ -1,6 +1,7 @@
 // Plugins depend only on this package; UI building blocks are re-exported from @glaze/ui
 
 export type {
+  AboutInfo,
   AccountSummary,
   AnalyticsIncomeAllocation,
   AnalyticsMetric,
@@ -20,6 +21,7 @@ export type {
   CommentPage,
   CommentReplyParams,
   CommentTypeCode,
+  DependencyLicense,
   DeveloperLevel,
   FeedbackListParams,
   FeedbackPageData,
@@ -55,6 +57,8 @@ export type {
   PlayerFeedback,
   PluginInstallPreview,
   PluginSnapshot,
+  ProjectLicense,
+  ProjectLink,
   PromotionActivity,
   PromotionDates,
   PromotionJoinParams,

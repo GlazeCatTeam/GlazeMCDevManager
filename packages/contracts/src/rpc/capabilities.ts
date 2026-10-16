@@ -82,6 +82,28 @@ export const capabilities: Record<RpcMethod, Capability> = {
   "promotion.prepareImage": shellOnly("netease:promotion.write", "read"),
   "promotion.uploadImage": shellOnly("netease:promotion.write", "write"),
   "promotion.discardImage": shellOnly("netease:promotion.write", "write"),
+  "app.getAbout": {
+    caller: "any",
+    permission: null,
+    risk: "read",
+    mcp: {
+      title: "应用信息",
+      description:
+        "读取应用版本、开发或打包状态、操作系统与架构、Electron / Chromium / Node.js 版本及项目许可证标识、完整原文和 NOTICE。不含账号或本地路径，不检查更新。",
+    },
+  },
+  "app.getLicenses": {
+    caller: "any",
+    permission: null,
+    risk: "read",
+    mcp: {
+      title: "依赖许可",
+      description:
+        "读取构建时收集的生产依赖、Electron 与内置第三方资源的版本、许可标识及声明原文。离线可用；Chromium 等运行时第三方声明在随应用分发的 LICENSES.chromium.html 中单独提供。",
+    },
+  },
+  "app.openProjectLink": shellOnly(null, "write"),
+  "app.openRuntimeNotices": shellOnly(null, "write"),
   "sessionSettings.get": shellOnly("netease:account.read", "read"),
   "sessionSettings.set": shellOnly("netease:account.manage", "write"),
   "app.reportRendererError": shellOnly(null, "write"),

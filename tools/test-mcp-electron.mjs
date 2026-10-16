@@ -119,7 +119,7 @@ try {
   const denied = await client.callTool({ name: "income_list", arguments: { platform: "pe" } });
   assert.equal(denied.isError, true);
   assert.equal(readFileSync(join(directory, "mcp/state.bin")).includes(Buffer.from("MCP 测试账号")), false);
-  const info = await client.callTool({ name: "account_current", arguments: {} });
+  const info = await client.callTool({ name: "app_getAbout", arguments: {} });
   assert.equal(info.isError, undefined);
   await page.getByRole("button", { name: "撤销", exact: true }).click();
   await page.getByRole("button", { name: "撤销授权", exact: true }).click();

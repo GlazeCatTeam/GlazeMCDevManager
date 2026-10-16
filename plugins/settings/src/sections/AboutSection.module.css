@@ -13,3 +13,65 @@
   margin: 0;
   font-size: 18px;
 }
+
+.environment {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 24px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.environment div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.environment dt {
+  color: var(--g-text-muted);
+}
+
+.environment dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.licenseDialog {
+  width: 760px;
+}
+
+.projectLicense {
+  margin-bottom: 24px;
+}
+
+.projectLicense h3 {
+  color: var(--g-text-primary);
+}
+
+.license {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--g-panel-borderColor);
+}
+
+.license summary {
+  cursor: pointer;
+  color: var(--g-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.license summary span {
+  margin-left: 12px;
+  color: var(--g-text-muted);
+}
+
+.license pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.runtimeNotices {
+  margin-top: 24px;
+}

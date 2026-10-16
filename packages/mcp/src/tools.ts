@@ -28,6 +28,8 @@ export const assetShape = {
 export const readSchemas: Partial<Record<RpcMethod, z.ZodObject>> = {
   "account.list": z.strictObject({}),
   "account.current": z.strictObject({}),
+  "app.getAbout": z.strictObject({}),
+  "app.getLicenses": z.strictObject({}),
   "developer.level": z.strictObject(account),
   "analytics.overview": z.strictObject(account),
   "analytics.daily": z.strictObject({

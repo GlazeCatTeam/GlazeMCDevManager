@@ -75,6 +75,7 @@ import type { SessionSettingsService } from "../preferences/session-settings";
 import type { SessionManager } from "../session/session-manager";
 import { closeLoginWindow, loginWithOfficialWindow } from "../windows/login-window";
 import { appWindows } from "../windows/main-window";
+import { getAboutInfo, getDependencyLicenses, openProjectLink, openRuntimeNotices } from "./about";
 import { CapabilityError, fromNeteaseError } from "./errors";
 import { createPromotionHandlers } from "./promotion";
 import { exportLogs, openLogs, pickPlugin } from "./settings-files";
@@ -168,6 +169,10 @@ function createHandlers(
   };
   return {
     ...mcp.handlers,
+    "app.getAbout": () => getAboutInfo(),
+    "app.getLicenses": () => getDependencyLicenses(),
+    "app.openProjectLink": (params) => openProjectLink(params?.link),
+    "app.openRuntimeNotices": () => openRuntimeNotices(),
     "sessionSettings.get": () => sessionSettings.get(),
     "sessionSettings.set": (params) => {
       const saved = sessionSettings.set(params);
@@ -555,6 +560,10 @@ export function registerRpc(
           method.startsWith("general.") ||
           method === "app.rememberRoute" ||
           method === "app.reportRendererError" ||
+          method === "app.getAbout" ||
+          method === "app.getLicenses" ||
+          method === "app.openProjectLink" ||
+          method === "app.openRuntimeNotices" ||
           method.startsWith("appearance.") ||
           method.startsWith("layout.") ||
           method.startsWith("works.") ||

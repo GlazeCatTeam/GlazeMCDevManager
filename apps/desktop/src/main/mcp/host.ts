@@ -42,6 +42,7 @@ import {
   validateWorkPatch,
 } from "@glaze/netease";
 import { app, dialog, safeStorage } from "electron";
+import { getAboutInfo, getDependencyLicenses } from "../ipc/about";
 import { uploadSelectedWorkFile } from "../ipc/work-files";
 import type { PluginRegistry } from "../plugins/registry";
 import type { SessionManager } from "../session/session-manager";
@@ -71,6 +72,8 @@ export function createMcpHost(sessions: SessionManager, plugins: PluginRegistry,
   let http: McpHttpServer | undefined;
   let lastTools = "";
   const reads: Record<string, (params: Record<string, unknown>) => Promise<unknown>> = {
+    "app.getAbout": async () => getAboutInfo(),
+    "app.getLicenses": async () => getDependencyLicenses(),
     "developer.level": (p) => sessions.request(p.account as string, getDeveloperLevel),
     "analytics.overview": (p) => sessions.request(p.account as string, getAnalyticsOverview),
     "analytics.daily": (p) => {

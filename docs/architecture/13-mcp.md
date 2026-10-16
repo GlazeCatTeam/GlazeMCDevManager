@@ -129,6 +129,7 @@ type CallerIdentity =
 | 收益 | `income_summary`、`income_monthly`（`income_estimate` 见首页）；`income_settle` | read；dangerous |
 | 反馈与评论 | 已接入 `feedback.list`、`feedback.reply`、`feedback.log`、`comments.list`、`comments.reply`，仅供应用主界面调用；MCP 的 `community_list`、`community_reply` 暂未暴露，详见 [玩家反馈数据接入](player-feedback-data.md) 与 [玩家评论数据接入](player-comments-data.md) | read / write |
 | 消息 | `messages_list`、`messages_mark_read` | read / write |
+| 关于 | `app.getAbout` 返回版本和 Apache-2.0 项目许可原文、NOTICE；`app.getLicenses` 返回第三方依赖及内置资源独立声明。均已接入主界面与 MCP 只读工具，无账号权限要求。`app.openProjectLink` / `app.openRuntimeNotices` 触发系统浏览器或文件打开，仅主界面可用，不向 MCP 开放 | read；本机打开动作 write |
 
 ### 作品列表八项能力（2026-10-16）
 

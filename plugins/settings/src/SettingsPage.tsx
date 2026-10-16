@@ -163,7 +163,7 @@ export function SettingsPage({
                   setAutoUpdate(enabled);
                   setNotice("已更新自动检查选项，更新服务尚未接入。");
                 }}
-                onUnavailable={setNotice}
+                onNotice={setNotice}
               />
             )}
           </div>
@@ -177,9 +177,11 @@ export function SettingsPage({
                     ? "插件启停自动保存；本地安装支持无代码主题包。"
                     : category === "logs"
                       ? "运行日志自动记录并脱敏，可导出当前级别的最近 500 条。"
-                      : category === "ai"
-                        ? "MCP 按已授予的账号与权限直接执行，操作结果保存在本机。"
-                        : "界面预览 · 系统功能与业务服务尚待接入")}
+                      : category === "about"
+                        ? "项目链接通过默认浏览器打开；依赖许可支持离线查看。"
+                        : category === "ai"
+                          ? "MCP 按已授予的账号与权限直接执行，操作结果保存在本机。"
+                          : "界面预览 · 系统功能与业务服务尚待接入")}
           </div>
         </Panel>
       </div>
