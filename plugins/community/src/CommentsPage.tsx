@@ -48,7 +48,7 @@ export function CommentsPage() {
   );
 }
 
-/** Reset pagination when filters change and apply ratings to the complete server query */
+/** Reset pagination when filters change and show rating matches as batches arrive */
 function AccountComments({ account }: { account: string }) {
   const [cache] = useState(() => new CommentPageCache());
   const replies = useCommentReplies(account);
@@ -138,7 +138,7 @@ function AccountComments({ account }: { account: string }) {
                 <DrumstickIcon />
               </Chip>
             ))}
-            <span className={styles.filterNote}>可多选 · 筛选后分页</span>
+            <span className={styles.filterNote}>可多选 · 分批加载，筛选后分页</span>
           </fieldset>
           <div className={styles.filterGroup}>
             <span className={styles.filterLabel}>评论类型</span>
@@ -207,10 +207,10 @@ function CommentResults({ query, stars, page, onPage, onRefresh, onReplySent, re
   const pageCount = Math.max(1, Math.ceil((query.data?.total ?? 0) / COMMENTS_PER_PAGE));
 
   useEffect(() => {
-    if (query.data) {
+    if (query.data && !query.loading) {
       if (page >= pageCount) onPage(pageCount - 1);
     }
-  }, [query.data, page, pageCount, onPage]);
+  }, [query.data, query.loading, page, pageCount, onPage]);
 
   return (
     <>
@@ -223,26 +223,32 @@ function CommentResults({ query, stars, page, onPage, onRefresh, onReplySent, re
           }
         >
           评论加载失败：{query.error.message}
-          {query.data ? "；当前显示上次成功加载的结果" : ""}
+          {query.data
+            ? query.partial
+              ? "；已保留加载到的部分结果，重试可继续更新"
+              : "；当前显示上次成功加载的结果"
+            : ""}
         </Notice>
       )}
       <div role="status">
         {query.loading
-          ? query.data
-            ? "正在更新评论，当前显示上次加载结果…"
-            : stars.length
-              ? "正在加载全部评论并筛选评分…"
-              : "正在加载评论…"
+          ? query.progress
+            ? `已检查 ${query.progress.scanned} / ${query.progress.total} 条评论，已找到 ${query.progress.matched} 条匹配 · ${query.partial ? "继续加载中…" : "继续加载中，当前显示上次结果…"}`
+            : query.data
+              ? "正在更新评论，当前显示上次加载结果…"
+              : stars.length
+                ? "正在分批加载评论并筛选评分，匹配结果会陆续显示…"
+                : "正在加载评论…"
           : query.data
-            ? `${stars.length ? "筛选后共" : "共"} ${query.data.total} 条评论 · 当前页 ${entries.length} 条`
+            ? `${query.partial ? "已加载匹配" : stars.length ? "筛选后共" : "共"} ${query.data.total} 条评论 · 当前页 ${entries.length} 条`
             : "评论暂未加载"}
       </div>
       <div className={styles.columns} aria-busy={query.loading}>
-        {!query.data && (query.loading || query.error) ? (
+        {(!query.data || !entries.length) && (query.loading || query.error) ? (
           <section className={detailStyles.panel} aria-label="评论列表">
             <EmptyState
-              title={query.loading ? "正在加载评论…" : "评论加载失败"}
-              hint={query.loading ? "请稍候" : "点击重试，或调整评论类型和日期"}
+              title={query.loading ? "正在查找匹配评论…" : "评论加载失败"}
+              hint={query.loading ? "匹配结果会陆续显示，可随时调整筛选条件" : "点击重试，或调整评论类型和日期"}
             />
           </section>
         ) : (
@@ -285,7 +291,12 @@ function CommentResults({ query, stars, page, onPage, onRefresh, onReplySent, re
           )}
         </section>
       </div>
-      <Pagination page={page} pageCount={pageCount} onChange={onPage} note="每页 20 条 · 按筛选结果分页" />
+      <Pagination
+        page={page}
+        pageCount={pageCount}
+        onChange={onPage}
+        note={query.partial ? "每页 20 条 · 仅显示已加载结果" : "每页 20 条 · 按筛选结果分页"}
+      />
     </>
   );
 }

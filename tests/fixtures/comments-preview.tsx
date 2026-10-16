@@ -30,6 +30,8 @@ let replyRequests = 0;
 let listRequests = 0;
 const sentReplies = new Map<string, string>();
 const sparseRatings = new URLSearchParams(location.search).has("sparse-ratings");
+const progressive = new URLSearchParams(location.search).has("progressive");
+let failLater = new URLSearchParams(location.search).has("fail-later");
 
 /** Fixture bridge supports pagination, filtering, failures and intentionally late responses */
 const rpc: GlazeBridge["rpc"] = async (method, input) => {
@@ -51,18 +53,19 @@ const rpc: GlazeBridge["rpc"] = async (method, input) => {
   if (listCount) listCount.textContent = `列表请求数：${listRequests}`;
   const output = document.getElementById("query");
   if (output) output.textContent = JSON.stringify(params);
-  const failed = failure;
-  await new Promise((resolve) => setTimeout(resolve, delay));
+  const failed = failure || (failLater && params.start >= 100);
+  if (params.start >= 100) failLater = false;
+  await new Promise((resolve) => setTimeout(resolve, progressive && params.start >= 100 ? 1500 : delay));
   if (failed) return { ok: false, error: { kind: "network", message: "离线测试网络失败" } };
   const items: PlayerComment[] = Array.from(
-    { length: params.account === account.id ? (sparseRatings ? 30 : 43) : 1 },
+    { length: params.account === account.id ? (progressive ? 230 : sparseRatings ? 30 : 43) : 1 },
     (_, index) => ({
       id: `${params.account}-${index}`,
       resourceId: "4686664860310207622",
       nickname: `${params.account === account.id ? "玩家甲" : "玩家乙"}${index + 1}`,
       uid: String(12345 + index),
       work: "空岛奇境",
-      stars: sparseRatings ? (index === 0 || index === 21 ? 1 : 5) : (index % 5) + 1,
+      stars: sparseRatings ? (index === 0 || index === (progressive ? 121 : 21) ? 1 : 5) : (index % 5) + 1,
       publishTime: Math.floor(new Date(2026, 9, 15 - index, 14, 30).getTime() / 1000),
       content: index === 0 ? "非常喜欢这个组件，希望增加更多冒险地图。" : `评论内容 ${index + 1}`,
       tag: index % 2 ? "问题求助" : "默认类型",

@@ -7,9 +7,11 @@ interface CommentQuery {
   data: CommentPage | null;
   error: RpcError | null;
   loading: boolean;
+  partial: boolean;
+  progress: { scanned: number; total: number; matched: number } | null;
 }
 
-/** Cache complete queries and apply rating filters before calculating display pages */
+/** Keep cached rows visible and publish rating matches as source batches arrive */
 export function useComments(
   params: CommentListParams,
   revision: number,
@@ -35,9 +37,12 @@ export function useComments(
     data: cache.peek(paramsKey),
     error: null,
     loading: !cache.fresh(paramsKey),
+    partial: false,
+    progress: null,
   }));
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
     void revision;
     void changes;
     setQuery((current) => ({
@@ -45,24 +50,57 @@ export function useComments(
       data: cache.peek(paramsKey) ?? (current.key === paramsKey ? current.data : null),
       error: null,
       loading: !cache.fresh(paramsKey),
+      partial: current.key === paramsKey && current.partial,
+      progress: null,
     }));
     const { stars: ratings = [], ...source } = JSON.parse(paramsKey);
-    cache
-      .read(paramsKey, () => loadCommentPage(cache, source, ratings, (input) => callHost("comments.list", input)))
-      .then((result) => {
-        if (!active) return;
-        setQuery((current) => ({
-          key: paramsKey,
-          data: result.ok ? result.value : (cache.peek(paramsKey) ?? (current.key === paramsKey ? current.data : null)),
-          error: result.ok ? null : result.error,
-          loading: false,
-        }));
-      });
+    const load = () =>
+      loadCommentPage(
+        cache,
+        source,
+        ratings,
+        (input) => callHost("comments.list", input),
+        (progress) => {
+          if (!active) return;
+          setQuery((current) => {
+            const previous = current.key === paramsKey ? current.data : null;
+            const data =
+              previous && !current.partial
+                ? previous
+                : progress.data.items.length || !previous?.items.length
+                  ? progress.data
+                  : previous;
+            return {
+              key: paramsKey,
+              data,
+              error: null,
+              loading: true,
+              partial: data === progress.data || current.partial,
+              progress: { scanned: progress.scanned, total: progress.total, matched: progress.data.total },
+            };
+          });
+        },
+        controller.signal,
+      );
+    // Subscribe on every effect, including StrictMode replay, even when the source scan is shared
+    const pending = ratings.length ? load() : cache.read(paramsKey, load);
+    pending.then((result) => {
+      if (!active) return;
+      setQuery((current) => ({
+        key: paramsKey,
+        data: result.ok ? result.value : current.key === paramsKey ? current.data : cache.peek(paramsKey),
+        error: result.ok ? null : result.error,
+        loading: false,
+        partial: !result.ok && current.partial,
+        progress: result.ok ? null : current.progress,
+      }));
+    });
     return () => {
       active = false;
+      controller.abort();
     };
   }, [paramsKey, revision, cache, changes]);
   return query.key === paramsKey
     ? query
-    : { data: cache.peek(paramsKey), error: null, loading: !cache.fresh(paramsKey) };
+    : { data: cache.peek(paramsKey), error: null, loading: !cache.fresh(paramsKey), partial: false, progress: null };
 }
