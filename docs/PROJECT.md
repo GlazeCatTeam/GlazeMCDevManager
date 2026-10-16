@@ -119,6 +119,8 @@
 | 67 | 2026-10-16 | 全项目体验优化分四期顺序推进：① 插件 SDK 统一查询缓存，加载无感（有缓存先显示、后台刷新，切页不再空白，页面代码悬停预载）；② 代码风格统一，各插件自建缓存与加载状态收敛到 SDK；③ 插件注册表驱动，外壳不再写死页面，页面、导航、首页组件、设置分区和 MCP 工具都从插件清单注册，暂不开放第三方代码插件安装；④ MCP 深度开放应用设置、插件启停与日志、打开页面与切换界面账号、插件贡献的工具，凭据能力仍不开放。MCP 深度开放的应用部分交给 Codex 并行实现 | 用户要求 |
 
 | 68 | 2026-10-16 | 数据分析周期收益的日统计周期改为每月 22 日至下月 21 日（含起止当天），相邻周期不再重叠；北京时间 22 日切换新周期，当天没有完整日数据时可查看上一周期。平台月汇总、月份归属、分成与税额算法不变 | 用户确认，[15 数据分析](architecture/15-analytics-data.md)「周期日统计消除交界日重叠」 |
+| 69 | 2026-10-16 | 测试沿用 `node:test`，不引入 Vitest：`pnpm test` 自动收集 `tests/*.test.ts` 一次打包运行，需要 Electron 主进程的测试单独登记；Playwright 界面回归用 `pnpm test:ui`，默认用系统 Edge | M0 收尾评估，[ADR-0015](adr/0015-node-test-runner.md)、[11 工程规范](architecture/11-engineering.md) |
+| 70 | 2026-10-16 | 安装包用 electron-builder 打 Windows x64 NSIS 向导式安装包（默认按用户安装、可改目录），应用 ID `com.glaze.mcdevmanager` 与通知/快捷方式一致，`LICENSE`、`NOTICE` 和 Electron 运行时声明放在程序旁，暂不签名；安装版与开发版共用 `%APPDATA%\@glaze\desktop`。CI 用 GitHub Actions（windows-latest），主任务跑类型检查、Biome、测试和构建，界面回归为独立任务 | M0 收尾，[11 工程规范](architecture/11-engineering.md)「安装包」「持续集成」 |
 
 ## 4. 待定事项
 
@@ -133,6 +135,8 @@
 | 打包后 MCP stdio 桥的形式：应用本体加 `--mcp` 参数，还是单独的小程序 | 安装包结构、AI 工具配置 | M1 实现 MCP 骨架时 |
 
 ## 5. 当前进度
+
+**M0 收尾：测试入口、安装包与 CI（2026-10-16，本地验证完成，已本地提交未推送）**：按决定 #69、#70。① `pnpm test`（`tools/run-tests.mjs`）一键运行 15 个 Node 测试文件共 301 项和 2 个 Electron 宿主测试，约 5 秒，全部通过；评估后不引入 Vitest（[ADR-0015](adr/0015-node-test-runner.md)）。② `pnpm dist` 生成 `GlazeMCDevManager-0.0.0-x64-setup.exe`（约 100 MB）；静默安装后核对 LICENSE、NOTICE、LICENSES.chromium.html、LICENSE.electron.txt 均在程序旁，开始菜单与桌面快捷方式 AppUserModelID 为 `com.glaze.mcdevmanager`；用独立数据目录启动安装版进入登录页、无页面错误，静默卸载后目录、快捷方式和卸载项已清除。③ 新增 `.github/workflows/ci.yml`；本机无法用 act 模拟 Windows 运行器，改为在干净副本中逐条执行：安装、类型检查、Biome、测试、构建通过；新增根依赖 playwright 后 `pnpm test:ui` 15 个界面回归 11 个通过，`license`、`mcp`、`promotion`、`rank` 四个为既有失败；Electron 模式回归另有 4 个超时，暂不进 CI。Biome 忽略 `release/`。未推送，GitHub 上的首次运行待确认。详见 [11 工程规范](architecture/11-engineering.md)。
 
 **设置与 AI 助手页布局自适应（2026-10-16，本地验证完成）**：设置页改为占满可用高度、面板内滚动、标题常驻，窄窗口下分类改为横向滚动、设置行自动换行；AI 助手页的已连接工具列表随卡片数量增长，不再出现内部滚动条。
 
@@ -216,7 +220,7 @@
 |---|---|
 | 架构设计与文档 | ✅ 完成 |
 | 界面设计（登录、登录过期、账号管理） | ✅ 完成，设计稿在 [claude.ai 画布](https://claude.ai/artifact/34YyQXXBeBUctuCUbnQSEk) |
-| M0 工程骨架 | 🟡 进行中 |
+| M0 工程骨架 | ✅ 本地完成：测试入口、安装包、CI 已接入；CI 待首次推送后确认，界面回归任务有 4 个既有失败 |
 | M1 内核 | 🟡 已开始：主题令牌解析（`packages/theme`）、临时手写的 RPC 通道（`packages/contracts/src/rpc/bridge.ts`，只有窗口控制，M1 换成 Zod 契约）、侧边栏暂时直接读内置插件清单代替插件注册表；外壳暂时静态引入各插件的页面（`apps/desktop/src/renderer/routes/pages.tsx`），都等插件注册表替换；`@glaze/plugin-sdk` 提供页面导航 `useNavigation()`（路由 + 参数），清单里 `chrome: "none"` 的页面不显示侧边栏 |
 | M2 账号 | 🟡 登录已接入真实数据：官方登录窗口、Cookie 导入、会话加密保存、启动恢复与后台验证、过期重登、切换 / 退出 / 删除账号；首页和账号管理页等级卡片已接入 `developer.level`；自动登录和过期提醒已持久化并接入启动恢复与系统通知 |
 | M3 ~ M5 | ⬜ 未开始 |
@@ -227,9 +231,9 @@
 - [x] pnpm 与依赖安装（Electron 44、electron-vite 6 beta、Vite 8、React 19、TypeScript 7）
 - [x] 第一个 Electron 窗口能打开，安全基线已开（contextIsolation、sandbox、禁用 nodeIntegration）
 - [x] 无边框窗口 + Ore UI 自定义标题栏，侧边导航和账号卡片按设计稿「账号管理」画板实现
-- [ ] Vitest 接入
-- [ ] electron-builder 打安装包
-- [ ] CI
+- [x] 测试入口：`pnpm test` 沿用 `node:test`，不引入 Vitest（决定 #69，[ADR-0015](adr/0015-node-test-runner.md)）
+- [x] electron-builder 打安装包：`pnpm dist` 生成 Windows x64 NSIS 安装包，已本地安装、启动、卸载验证（决定 #70）；代码签名和应用图标待定
+- [x] CI：`.github/workflows/ci.yml`（windows-latest），主任务类型检查、Biome、测试、构建；界面回归独立任务（4 个既有失败待修）
 
 **前端界面（按决定 #15，先用模拟数据）**
 
@@ -265,7 +269,7 @@
 
 **作品管理接入（2026-10-15）**：`@glaze/contracts` 新增 `works.list`、`works.get`、`works.reviewFeedback`，`@glaze/netease` 新增作品接口（收益速算改为复用作品列表）；作品 ID 只允许数字进入请求路径。用真实账号核验：116 个作品（已上架 55、待提交审核 46、审核中 6、待上架 5、未通过 3、自测中 1），每页 9 个正方形图标经代理加载，未通过作品的审核反馈正常显示，已上架作品显示「暂时没有审核反馈」；非法 ID 被拒绝。
 
-**下一步**：作品列表与详情扩展已完成本地验收；指定测试作品的名称保存已获授权并通过真实验证，其他真实写入仍须明确选定作品与操作。攻略上传等待可靠协议；账号管理页的等级与会话设置均已接入；设计画布的登录页画板待按新登录方式更新。作品活动、折扣特卖、PE 轮播图申请已集中至收益管理下方的活动推广栏目，完成本地验收，真实平台写入尚未验收；Vitest、安装包、CI 仍待接入。
+**下一步**：作品列表与详情扩展已完成本地验收；指定测试作品的名称保存已获授权并通过真实验证，其他真实写入仍须明确选定作品与操作。攻略上传等待可靠协议；账号管理页的等级与会话设置均已接入；设计画布的登录页画板待按新登录方式更新。作品活动、折扣特卖、PE 轮播图申请已集中至收益管理下方的活动推广栏目，完成本地验收，真实平台写入尚未验收；测试入口、安装包、CI 已接入（M0 收尾），待修复 4 个界面回归和 4 个 Electron 模式回归后让 CI 界面任务转绿。
 
 **接口资料整理（2026-10-15）**：按用户要求核对参考项目 `mp-master` 的 `d7ecc75` 提交，整理 [网易接口总清单](reference/netease-api-catalog.md)、[请求体字段](reference/netease-request-bodies.md) 与 [JSON 索引](reference/netease-api-catalog.json)。覆盖 68 条固定网易接口声明和一类动态上传协议，区分业务调用、仅包装层、仅声明、重复与筛选变体；31 个请求/嵌套模型的 392 个字段已列明。此次仅形成接入参考资料，当前应用仍沿用决定 #34 的模拟数据状态。
 
@@ -328,3 +332,4 @@
 | 2026-10-16 | 新增决定 #44；删除通知设置分类、组件及相关模拟状态与文案 |
 | 2026-10-16 | 接入数据分析真实查询；修复实时订单缺少币种导致整资源收益丢失，完善失败重试与收益降序；实现及验证见 15-analytics-data |
 | 2026-10-16 | 新增决定 #45；接入插件管理、无代码主题安装和真实运行日志，补充隔离验证与安装格式说明 |
+| 2026-10-16 | 新增决定 #69、#70 与 ADR-0015；M0 补齐测试入口、安装包和 CI，更新 11 工程规范、12 路线图、20 关于页面、07 会话中的相关说明 |
