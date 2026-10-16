@@ -1,0 +1,37 @@
+# Windows x64 NSIS installer; code signing is pending (docs/PROJECT.md section 4)
+# Must match app.setAppUserModelId in src/main/index.ts so notifications and shortcuts share one identity
+appId: com.glaze.mcdevmanager
+productName: Glaze MC Dev Manager
+copyright: Copyright © 2026 GlazeMCDevManager contributors
+directories:
+  output: release
+  buildResources: resources
+# electron-vite bundles everything the app needs into out/; the main process only requires Node built-ins
+files:
+  - out/**/*
+  - package.json
+  - "!node_modules/**/*"
+# Keep the project license and notice beside the executable; Electron's LICENSES.chromium.html stays there by default
+extraFiles:
+  - from: ../../LICENSE
+    to: LICENSE
+  - from: ../../NOTICE
+    to: NOTICE
+npmRebuild: false
+electronLanguages:
+  - zh-CN
+  - en-US
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Glaze MC Dev Manager
+  uninstallDisplayName: Glaze MC Dev Manager
+  artifactName: GlazeMCDevManager-${version}-x64-setup.${ext}

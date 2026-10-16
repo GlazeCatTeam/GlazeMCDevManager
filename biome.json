@@ -1,6 +1,6 @@
 {
   "files": {
-    "includes": ["**", "!**/dist", "!**/out", "!**/node_modules", "!**/.turbo"]
+    "includes": ["**", "!**/dist", "!**/out", "!**/node_modules", "!**/.turbo", "!**/release"]
   },
   "formatter": {
     "indentStyle": "space",

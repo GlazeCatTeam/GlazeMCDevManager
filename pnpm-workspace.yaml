@@ -3,3 +3,5 @@ packages:
   - "packages/*"
   - "plugins/*"
   - "themes/*"
+allowBuilds:
+  electron-winstaller: false

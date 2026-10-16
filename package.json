@@ -12,6 +12,7 @@
   "scripts": {
     "dev": "turbo run dev --filter=@glaze/desktop",
     "build": "turbo run build",
+    "dist": "pnpm --filter @glaze/desktop dist",
     "typecheck": "turbo run typecheck",
     "test": "node tools/run-tests.mjs",
     "test:ui": "node tools/run-ui-tests.mjs",
