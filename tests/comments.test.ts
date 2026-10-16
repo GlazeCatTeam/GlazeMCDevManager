@@ -110,24 +110,47 @@ test("failed later source pages preserve explicit partial progress and can be re
   const cache = new CommentPageCache();
   const items = ratingRows(130);
   const progress: number[] = [];
+  const starts: number[] = [];
   const failed = await loadCommentPage(
     cache,
     params,
     [1],
-    async (input) =>
-      input.start === 0
+    async (input) => {
+      starts.push(input.start);
+      return input.start === 0
         ? { ok: true, value: { total: 130, items: items.slice(0, 100) } }
-        : { ok: false, error: { kind: "network", message: "offline" } },
+        : { ok: false, error: { kind: "network", message: "offline" } };
+    },
     (value) => progress.push(value.scanned),
   );
   assert.equal(failed.ok, false);
   assert.deepEqual(progress, [100]);
-  const retry = await loadCommentPage(cache, params, [1], async (input) => ({
-    ok: true,
-    value: { total: 130, items: items.slice(input.start, input.start + input.span) },
-  }));
+  const retry = await loadCommentPage(cache, params, [1], async (input) => {
+    starts.push(input.start);
+    return { ok: true, value: { total: 130, items: items.slice(input.start, input.start + input.span) } };
+  });
   assert.ok(retry.ok);
   assert.equal(retry.value.total, 2);
+  assert.deepEqual(starts, [0, 100, 100]);
+});
+
+test("many source batches do not evict the complete snapshot needed by other filters", async () => {
+  const cache = new CommentPageCache(Date.now, 30_000, 3);
+  const items = ratingRows(430);
+  let calls = 0;
+  const load = async (input: typeof params): Promise<RpcResult<CommentPage>> => {
+    calls++;
+    return { ok: true, value: { total: items.length, items: items.slice(input.start, input.start + input.span) } };
+  };
+  const first = await loadCommentPage(cache, params, [1], load);
+  const second = await loadCommentPage(cache, params, [5], load);
+  assert.ok(first.ok && second.ok);
+  assert.equal(first.value.total, 2);
+  assert.equal(second.value.total, 428);
+  assert.equal(calls, 5);
+  cache.expire();
+  await loadCommentPage(cache, params, [1], load);
+  assert.equal(calls, 10);
 });
 
 test("rating matches publish before a slow later batch and new subscribers receive progress", async () => {

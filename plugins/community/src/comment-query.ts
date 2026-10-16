@@ -42,8 +42,7 @@ export async function loadCommentPage(
         if (!isCurrent()) return { ok: false, error: { kind: "business", message: "评论查询已失效，请重试" } };
         const source = { ...first, start };
         const key = JSON.stringify(source);
-        const cached = cache.fresh(key) ? cache.peek(key) : null;
-        const result = cached ? { ok: true as const, value: cached } : await load(source);
+        const result = await cache.readBatch(key, () => load(source));
         if (!isCurrent()) return { ok: false, error: { kind: "business", message: "评论查询已失效，请重试" } };
         if (!result.ok) return result;
         total = result.value.total;
