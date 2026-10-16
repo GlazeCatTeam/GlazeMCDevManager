@@ -31,7 +31,7 @@
 
 配置加载时将清单嵌入主进程构建，无运行时 node_modules 路径依赖。缺少生产依赖或许可原文时构建失败，避免展示空的许可承诺。升级依赖后重新构建即可同步清单。
 
-Chromium 及运行时包含的其他第三方组件使用 Electron 自带的 `LICENSES.chromium.html` 完整声明，按固定路径离线打开。后续打包必须保留该文件；缺失或打开失败时提示错误，不把失败显示为成功。当前尚未接入安装包构建，安装包内声明文件的验证属于后续发布验收。
+Chromium 及运行时包含的其他第三方组件使用 Electron 自带的 `LICENSES.chromium.html` 完整声明，按固定路径离线打开。后续打包必须保留该文件；缺失或打开失败时提示错误，不把失败显示为成功。安装包（[11 工程规范](11-engineering.md)「安装包」）把项目 `LICENSE`、`NOTICE` 放在可执行文件旁，Electron 的 `LICENSES.chromium.html` 和 `LICENSE.electron.txt` 也保留在同一目录；2026-10-16 已静默安装核对这四个文件。
 
 ## 验证与操作记录
 
@@ -44,4 +44,4 @@ Chromium 及运行时包含的其他第三方组件使用 Electron 自带的 `LI
 
 `tools/test-license-ui.mjs` 提供独立离线页面验证，覆盖项目许可读取失败重试、原文与 NOTICE 展开、资源声明和短窗口滚动；用于其他模块尚在修改时也能单独验证许可界面。2026-10-16 两套回归、全仓类型检查、桌面构建及变更代码 Biome 均通过。
 
-许可依据：[Apache License 2.0 原文](https://www.apache.org/licenses/LICENSE-2.0.txt) 与 [Apache 官方许可 FAQ](https://www.apache.org/foundation/license-faq.html)。发布安装包时还需核验 LICENSE、NOTICE 和运行时声明均随包保留。
+许可依据：[Apache License 2.0 原文](https://www.apache.org/licenses/LICENSE-2.0.txt) 与 [Apache 官方许可 FAQ](https://www.apache.org/foundation/license-faq.html)。每次发布前仍需按 11 工程规范的安装包验证步骤核对上述文件。

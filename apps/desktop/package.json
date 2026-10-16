@@ -1,6 +1,7 @@
 {
   "name": "@glaze/desktop",
   "license": "Apache-2.0",
+  "author": "GlazeCatTeam",
   "version": "0.0.0",
   "private": true,
   "description": "Electron 桌面应用：主进程、preload、渲染进程外壳",
@@ -10,7 +11,8 @@
     "dev": "electron-vite dev -w",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "dist": "electron-vite build && electron-builder --config electron-builder.yml --win nsis --x64 --publish never"
   },
   "dependencies": {
     "@glaze/contracts": "workspace:*",
@@ -41,6 +43,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "electron": "^44.7.1",
+    "electron-builder": "^26.15.3",
     "electron-vite": "6.0.0-beta.8",
     "vite": "^8.3.4"
   }

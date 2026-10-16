@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: 类型检查、Biome、测试与构建
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Biome check
+        run: pnpm lint
+      - name: Tests
+        run: pnpm test
+      - name: Desktop build
+        run: pnpm build
+
+  ui:
+    name: 界面回归（Playwright + Edge）
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      # Pages are served from source by Vite; the preinstalled Edge avoids downloading Playwright browsers
+      - name: Playwright UI regressions
+        run: pnpm test:ui

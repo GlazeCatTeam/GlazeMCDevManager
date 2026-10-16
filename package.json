@@ -12,8 +12,10 @@
   "scripts": {
     "dev": "turbo run dev --filter=@glaze/desktop",
     "build": "turbo run build",
+    "dist": "pnpm --filter @glaze/desktop dist",
     "typecheck": "turbo run typecheck",
-    "test": "turbo run test",
+    "test": "node tools/run-tests.mjs",
+    "test:ui": "node tools/run-ui-tests.mjs",
     "test:works": "node tools/test-work-editor.mjs",
     "test:mcp": "node tools/test-mcp.mjs",
     "test:mcp:electron": "node tools/test-mcp-electron.mjs",
@@ -26,6 +28,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
+    "playwright": "^1.64.1",
     "turbo": "^2.11.8",
     "typescript": "^7.0.2"
   }

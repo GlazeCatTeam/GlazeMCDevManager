@@ -123,6 +123,8 @@
 
 | 69 | 2026-10-16 | 排版自由移出项目范围，以固定布局为准：页面由固定大小的面板组成，不提供拖拽、缩放、增删组件；保留首页排行榜显示项与「恢复默认排版」。`@glaze/layout` 骨架与插件清单中的 `widgets` 贡献点不再推进。目标 4 与 [06 布局系统](architecture/06-layout-system.md) 的编辑模式设计由本条取代 | 用户决定 |
 | 70 | 2026-10-16 | （补记）MCP 传输改为应用主进程内置的本机 Streamable HTTP（默认 `http://127.0.0.1:17839/mcp`），移除 stdio 桥、`--mcp` 参数和命名管道。原第 4 节两项待定事项随之失效：不再有需要打包的 `--mcp` 桥；MCP 服务随应用运行，应用没运行时 AI 工具连不上，需要先打开应用，没有做后台自动启动。M1 里「stdio 桥、命名管道、客户端配对」的目标由本条和 #66 取代 | 提交 `9169d37`，[13 能力层与 MCP 接入](architecture/13-mcp.md)「传输与启动」、[22 MCP 实装](architecture/22-mcp-runtime.md) |
+| 71 | 2026-10-16 | 测试沿用 `node:test`，不引入 Vitest：`pnpm test` 自动收集 `tests/*.test.ts` 一次打包运行，需要 Electron 主进程的测试单独登记；Playwright 界面回归用 `pnpm test:ui`，默认用系统 Edge | M0 收尾评估，[ADR-0015](adr/0015-node-test-runner.md)、[11 工程规范](architecture/11-engineering.md) |
+| 72 | 2026-10-16 | 安装包用 electron-builder 打 Windows x64 NSIS 向导式安装包（默认按用户安装、可改目录），应用 ID `com.glaze.mcdevmanager` 与通知/快捷方式一致，`LICENSE`、`NOTICE` 和 Electron 运行时声明放在程序旁，暂不签名；安装版与开发版共用 `%APPDATA%\@glaze\desktop`。CI 用 GitHub Actions（windows-latest），主任务跑类型检查、Biome、测试和构建，界面回归为独立任务 | M0 收尾，[11 工程规范](architecture/11-engineering.md)「安装包」「持续集成」 |
 
 ## 4. 待定事项
 
@@ -137,6 +139,8 @@
 | ~~打包后 MCP stdio 桥的形式：应用本体加 `--mcp` 参数，还是单独的小程序~~ | 已失效：stdio 桥已移除，见决定 #70 | — |
 
 ## 5. 当前进度
+
+**M0 收尾：测试入口、安装包与 CI（2026-10-16，本地验证完成，已本地提交未推送）**：按决定 #71、#72。① `pnpm test`（`tools/run-tests.mjs`）一键运行 15 个 Node 测试文件共 301 项和 2 个 Electron 宿主测试，约 5 秒，全部通过；评估后不引入 Vitest（[ADR-0015](adr/0015-node-test-runner.md)）。② `pnpm dist` 生成 `GlazeMCDevManager-0.0.0-x64-setup.exe`（约 100 MB）；静默安装后核对 LICENSE、NOTICE、LICENSES.chromium.html、LICENSE.electron.txt 均在程序旁，开始菜单与桌面快捷方式 AppUserModelID 为 `com.glaze.mcdevmanager`；用独立数据目录启动安装版进入登录页、无页面错误，静默卸载后目录、快捷方式和卸载项已清除。③ 新增 `.github/workflows/ci.yml`；本机无法用 act 模拟 Windows 运行器，改为在干净副本中逐条执行：安装、类型检查、Biome、测试、构建通过；新增根依赖 playwright 后 `pnpm test:ui` 15 个界面回归 11 个通过，`license`、`mcp`、`promotion`、`rank` 四个为既有失败；Electron 模式回归另有 4 个超时，暂不进 CI。Biome 忽略 `release/`。未推送，GitHub 上的首次运行待确认。详见 [11 工程规范](architecture/11-engineering.md)。
 
 **文档与遗留代码对齐（2026-10-16，本地验证完成，待提交）**：不改业务行为。文档：第 2 节范围、第 5 节里程碑和前端界面清单按代码现状改正；补记决定 #70（MCP 改用 Streamable HTTP），第 4 节两项 `--mcp` 待定事项标为失效；两条 #57 加注区分；架构 README、13、23 中过时段落加后注。代码：删除 `plugins/community` 未引用的模拟数据、`useReplies.ts` 和未使用的 `EntryDetail` / `ReplyEditor` 组件，共享类型移到 `types.ts`；account、settings 的 `mock.ts` 改名为 `constants.ts`。`apps/desktop` 的插件依赖保留，原因见 [23 插件注册表与开发](architecture/23-plugin-registry.md)。
 
@@ -224,7 +228,7 @@
 |---|---|
 | 架构设计与文档 | ✅ 完成 |
 | 界面设计（登录、登录过期、账号管理） | ✅ 完成，设计稿在 [claude.ai 画布](https://claude.ai/artifact/34YyQXXBeBUctuCUbnQSEk) |
-| M0 工程骨架 | 🟡 进行中 |
+| M0 工程骨架 | ✅ 本地完成：测试入口、安装包、CI 已接入；CI 待首次推送后确认，界面回归任务有 4 个既有失败 |
 | M1 内核 | 🟡 大部分完成：能力契约带权限 / `risk` / `mcp` 元数据（`@glaze/contracts`，参数用手写校验函数，未换成 Zod）；插件注册表驱动外壳，页面、导航、设置分区、首页组件和 MCP 工具都从内置插件清单注册（决定 #67 ③、[ADR-0014](adr/0014-plugin-registry-driven-shell.md)）；主题引擎与 Ore UI / Fluent 深色；`node:sqlite` 与顺序迁移（#39）；凭据保险箱（#38）；MCP 服务改为 Streamable HTTP（#70）。布局引擎按决定 #69 移出范围，`packages/layout` 空骨架不再推进，页面按 #20 用固定面板 |
 | M2 账号 | ✅ 完成：官方登录窗口（取代邮箱密码协议，#37）、Cookie 导入、会话加密保存、启动恢复与后台验证、过期重登、切换 / 退出 / 删除账号；账号管理页等级卡片接入 `developer.level`；自动登录和过期提醒已持久化并接入系统通知；`account_list` / `account_current` 已开放 MCP，凭据不开放 |
 | M3 业务模块 | 🟡 大部分完成：首页、作品（列表、七项状态操作、详情编辑与提审）、数据分析、收益管理（只读，申请结算不做，#24）、玩家反馈与评论、系统消息、活动推广都已接入真实接口，并通过 MCP 开放（[22 MCP 实装](architecture/22-mcp-runtime.md)「业务能力范围」）。未完成：攻略上传与编辑；活动推广和多数作品写操作的真实平台写入还没逐项验收。路线图里「写操作需确认」已被 #66 的权限档位取代 |
@@ -237,9 +241,9 @@
 - [x] pnpm 与依赖安装（Electron 44、electron-vite 6 beta、Vite 8、React 19、TypeScript 7）
 - [x] 第一个 Electron 窗口能打开，安全基线已开（contextIsolation、sandbox、禁用 nodeIntegration）
 - [x] 无边框窗口 + Ore UI 自定义标题栏，侧边导航和账号卡片按设计稿「账号管理」画板实现
-- [ ] Vitest 接入
-- [ ] electron-builder 打安装包
-- [ ] CI
+- [x] 测试入口：`pnpm test` 沿用 `node:test`，不引入 Vitest（决定 #71，[ADR-0015](adr/0015-node-test-runner.md)）
+- [x] electron-builder 打安装包：`pnpm dist` 生成 Windows x64 NSIS 安装包，已本地安装、启动、卸载验证（决定 #72）；代码签名和应用图标待定
+- [x] CI：`.github/workflows/ci.yml`（windows-latest），主任务类型检查、Biome、测试、构建；界面回归独立任务（4 个既有失败待修）
 
 **前端界面（按决定 #15 先用模拟数据做界面；各页现已接入真实数据，下面按现状记录）**
 
@@ -278,7 +282,7 @@
 
 **作品管理接入（2026-10-15）**：`@glaze/contracts` 新增 `works.list`、`works.get`、`works.reviewFeedback`，`@glaze/netease` 新增作品接口（收益速算改为复用作品列表）；作品 ID 只允许数字进入请求路径。用真实账号核验：116 个作品（已上架 55、待提交审核 46、审核中 6、待上架 5、未通过 3、自测中 1），每页 9 个正方形图标经代理加载，未通过作品的审核反馈正常显示，已上架作品显示「暂时没有审核反馈」；非法 ID 被拒绝。
 
-**下一步**：作品列表与详情扩展已完成本地验收；指定测试作品的名称保存已获授权并通过真实验证，其他真实写入仍须明确选定作品与操作。攻略上传等待可靠协议；账号管理页的等级与会话设置均已接入；设计画布的登录页画板待按新登录方式更新。作品活动、折扣特卖、PE 轮播图申请已集中至收益管理下方的活动推广栏目，完成本地验收，真实平台写入尚未验收；Vitest、安装包、CI 仍待接入。
+**下一步**：作品列表与详情扩展已完成本地验收；指定测试作品的名称保存已获授权并通过真实验证，其他真实写入仍须明确选定作品与操作。攻略上传等待可靠协议；账号管理页的等级与会话设置均已接入；设计画布的登录页画板待按新登录方式更新。作品活动、折扣特卖、PE 轮播图申请已集中至收益管理下方的活动推广栏目，完成本地验收，真实平台写入尚未验收；测试入口、安装包、CI 已接入（M0 收尾），待修复 4 个界面回归和 4 个 Electron 模式回归后让 CI 界面任务转绿。
 
 **接口资料整理（2026-10-15）**：按用户要求核对参考项目 `mp-master` 的 `d7ecc75` 提交，整理 [网易接口总清单](reference/netease-api-catalog.md)、[请求体字段](reference/netease-request-bodies.md) 与 [JSON 索引](reference/netease-api-catalog.json)。覆盖 68 条固定网易接口声明和一类动态上传协议，区分业务调用、仅包装层、仅声明、重复与筛选变体；31 个请求/嵌套模型的 392 个字段已列明。此次仅形成接入参考资料，当前应用仍沿用决定 #34 的模拟数据状态。
 
@@ -342,3 +346,4 @@
 | 2026-10-16 | 接入数据分析真实查询；修复实时订单缺少币种导致整资源收益丢失，完善失败重试与收益降序；实现及验证见 15-analytics-data |
 | 2026-10-16 | 新增决定 #45；接入插件管理、无代码主题安装和真实运行日志，补充隔离验证与安装格式说明 |
 | 2026-10-16 | 补记决定 #70，标注两条 #57；第 2、4、5 节按代码现状对齐；删除 community 模拟数据死代码，mock.ts 改名为 constants.ts / types.ts |
+| 2026-10-16 | 新增决定 #71、#72 与 ADR-0015；M0 补齐测试入口、安装包和 CI，更新 11 工程规范、12 路线图、20 关于页面、07 会话中的相关说明 |

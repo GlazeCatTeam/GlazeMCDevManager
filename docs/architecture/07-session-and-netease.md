@@ -152,7 +152,7 @@ type NeteaseError =
 
 ## 业务规则
 
-收益速算等本地规则（分成档位、补贴、统计窗口）放在 `netease` 包的纯函数模块中（`packages/netease/src/income/rules.ts`），界面上明确标注"估算"与平台结算记录的区别。边界测试等 Vitest 接入后补上。
+收益速算等本地规则（分成档位、补贴、统计窗口）放在 `netease` 包的纯函数模块中（`packages/netease/src/income/rules.ts`），界面上明确标注"估算"与平台结算记录的区别。边界测试在 `tests/income-estimate.test.ts`，随 `pnpm test` 运行。
 
 当前规则（按参考项目的行为整理，未经网易官方文档核对）：
 
