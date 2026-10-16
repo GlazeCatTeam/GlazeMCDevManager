@@ -118,7 +118,21 @@
 - `pnpm test:mcp` 35 项通过，新增：密钥客户端两次重连保留授权且不新增客户端、伪造名称不影响身份、未知密钥 401、移除后密钥失效；缺权限请求的拒绝 / 仅这一次 / 一直允许 / 超时后补点「仅这一次」；手动连接的允许连接流程；Codex TOML 只替换 `glaze` 及其子表。
 - 全仓类型检查、桌面构建、变更文件 Biome 通过。
 - 内置浏览器打开 `tests/fixtures/mcp.html`（内置模拟宿主 `tests/fixtures/mcp-mock.ts`）核对：全局请求弹窗与允许后的档位变化、连接弹窗（检测标记、默认选中）、「其他 AI 工具」一句话、开始使用引导、720px 无横向滚动、无控制台错误。
-- `tools/test-mcp-ui.mjs`、`tools/test-mcp-electron.mjs` 已按新页面重写，但本机没有 Playwright，**这两项未运行**；一键写入真实 AI 工具配置也未在真实环境执行。
+- `tools/test-mcp-ui.mjs`、`tools/test-mcp-electron.mjs` 已按新页面重写，但本机没有 Playwright，**这两项未运行**。
+
+### 实机测试（2026-10-16）
+
+在开发版真实应用（真实账号数据）中完成，未执行任何平台写操作：
+
+1. 「AI 助手」页显示开始使用引导；连接弹窗检测到本机已安装 Claude Code、Codex、VS Code。
+2. 一键连接 Claude Code（帮我打理）：本机没有 `claude` 命令，走 `~/.claude.json` 写入。比对前后文件，只新增 `mcpServers.glaze`（`type: http`、带密钥地址），其他字段不变，并生成 `.glaze-backup`。
+3. Claude Code 自带 CLI 执行 `claude mcp list` 显示 `glaze … ✔ Connected`。CLI 单独运行未登录，无法用模型做完整对话，后续步骤用 MCP SDK 读取同一份配置地址完成。
+4. 连接后看到 59 个工具、5 个内置指令；`glaze_status` 返回已允许、帮我打理、当前账号与还需申请的三项权限；只读 `developer_level` 返回真实等级与贡献。
+5. AI 用 `glaze_request_access` 申请「提交作品审核」：应用弹出请求，侧边栏变为「AI 等你允许 · 1」，页面出现「等你允许」；点「仅这一次」后调用约 10 秒返回 `once`，档位保持帮我打理。
+6. 发现并修复：提前申请时选「仅这一次」原本不会保留，导致 AI 随后真正调用时还要再问一次；现在留给下一次同类调用使用一次，并补充单元测试（共 36 项通过）。
+7. 修改触发开发版主进程自动重启后，Claude Code 用原密钥重新连接：仍为已允许、帮我打理，真实数据可读，无需再次授权。
+
+未实测：Windows 系统通知（测试时应用窗口一直在前台，按设计不发通知）、「移除」时清理 Claude Code 配置（保留连接供用户继续使用）、其他 AI 工具的配置写入。
 
 ## 操作记录
 

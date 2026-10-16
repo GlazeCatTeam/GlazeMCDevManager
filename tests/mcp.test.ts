@@ -1152,3 +1152,27 @@ test("Codex config edits replace only the glaze server table", () => {
   assert.equal(withoutTomlServer(text, (block) => !block.includes("old")).includes("glaze"), false);
   assert.ok(withoutTomlServer(text, (block) => !block.includes("other-key")).includes("[mcp_servers.glaze]"));
 });
+
+test("an advance one-time approval from glaze_request_access is used by the next matching call", async () => {
+  const f = fixture(false);
+  f.service.accessWaitMs = 1000;
+  f.service.grant(f.client.id, { accounts: ["a"], defaultAccount: "a", permissions: [...mcpLevels.view.permissions] });
+  f.ports.invoke = async (_method, _params, _guard, beforeWrite) => {
+    beforeWrite();
+    return null;
+  };
+  const asked = f.service.call(f.client.id, "glaze_request_access", {
+    permissions: ["netease:community.write"],
+    reason: "回复一条评论",
+  });
+  for (let attempt = 0; attempt < 50 && !f.service.snapshot().requests.length; attempt++) await delay(5);
+  f.service.answer(f.service.snapshot().requests[0]?.id ?? "", "once");
+  assert.equal(((await asked) as { outcome: string }).outcome, "once");
+  f.service.accessWaitMs = 0;
+  await f.call("comments_reply", { id: "comment-1", content: "谢谢", idempotencyKey: "first" });
+  assert.equal(f.service.snapshot().requests.length, 0);
+  await assert.rejects(
+    f.call("comments_reply", { id: "comment-1", content: "谢谢", idempotencyKey: "second" }),
+    /权限/,
+  );
+});

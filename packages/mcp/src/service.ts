@@ -380,6 +380,12 @@ export class McpService {
     const entry = this.openRequest(client, "permission", missing, reason);
     this.commit();
     const outcome = await this.waitFor(entry);
+    // An advance "only this time" must survive until the AI's actual call
+    if (outcome === "once") {
+      const set = this.once.get(id) ?? new Set();
+      for (const permission of missing) set.add(permission);
+      this.once.set(id, set);
+    }
     return { outcome, status: this.describe(id) };
   }
 
