@@ -1,5 +1,6 @@
 import {
   isAnalyticsRange,
+  isAnalyticsRealtimeParams,
   isCommentListParams,
   isFeedbackListParams,
   isMessageListParams,
@@ -247,9 +248,10 @@ export const businessTools: ToolDefinition[] = [
     "analytics.realtime",
     "查询实时收益",
     "netease:income.read",
-    { date: z.string().date(), resourceIds },
+    { date: z.string().date(), endDate: z.string().date().optional(), resourceIds },
     true,
-    "查询指定作品和日期的实时收益。",
+    "查询指定作品的实时收益与订单明细。date 为北京时间起始日，可选 endDate 为结束日，包含起止日；省略时查询单日，最多 366 天。",
+    isAnalyticsRealtimeParams,
   ),
   tool(
     "promotion.join",

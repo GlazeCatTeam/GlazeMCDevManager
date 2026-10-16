@@ -9,6 +9,7 @@ import {
   type AnalyticsValues,
   isAnalyticsDate,
   isAnalyticsRange,
+  isAnalyticsRealtimeParams,
   isAnalyticsResourceIds,
 } from "@glaze/contracts";
 import { describeError, fail, ok, type Result } from "../errors";
@@ -313,14 +314,15 @@ export function readRealtimeIncome(value: unknown, resourceId: string): Result<A
   });
 }
 
-/** Fetch each selected resource's real orders for a Beijing calendar day, with partial failures */
+/** Fetch platform totals and orders for an inclusive Beijing date interval, with partial failures */
 export async function getAnalyticsRealtime(
   session: NeteaseSession,
   params: AnalyticsRealtimeParams,
 ): Promise<Result<AnalyticsRealtime>> {
-  if (!params || !isAnalyticsDate(params.date) || !isAnalyticsResourceIds(params.resourceIds))
+  if (!isAnalyticsRealtimeParams(params))
     return fail({ kind: "business", code: "invalid_params", message: "实时收益日期或资源参数无效" });
   const start = Date.parse(`${params.date}T00:00:00+08:00`);
+  const end = Date.parse(`${params.endDate ?? params.date}T00:00:00+08:00`) + 86_400_000 - 1;
   const resources: AnalyticsResourceIncome[] = [];
   const failedResourceIds: string[] = [];
   const failures: NonNullable<AnalyticsRealtime["failures"]> = [];
@@ -330,7 +332,7 @@ export async function getAnalyticsRealtime(
         "items.pe.incomes",
         withQuery(`/items/categories/pe/${id}/incomes/`, {
           begin_time: new Date(start).toISOString(),
-          end_time: new Date(start + 86_400_000 - 1).toISOString(),
+          end_time: new Date(end).toISOString(),
         }),
         session,
         { timeoutMs: 60_000 },

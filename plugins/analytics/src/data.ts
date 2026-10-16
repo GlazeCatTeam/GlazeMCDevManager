@@ -44,6 +44,32 @@ export function daysInRange(days: DayRange, today = todayKey()): string[] {
   return Array.from({ length: days }, (_, index) => shiftDay(today, index - days));
 }
 
+/** Explain invalid custom intervals before issuing a daily query */
+export function dateRangeError(start: string, end: string, today = todayKey()): string | null {
+  if (!start || !end) return "请选择开始和结束日期";
+  for (const date of [start, end]) {
+    const time = Date.parse(`${date}T00:00:00Z`);
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+      !Number.isFinite(time) ||
+      new Date(time).toISOString().slice(0, 10) !== date
+    ) {
+      return "请输入有效日期";
+    }
+  }
+  if (start > end) return "开始日期不能晚于结束日期";
+  if (end >= today) return "只能选择昨天及以前的完整日数据";
+  if (Date.parse(end) - Date.parse(start) >= 366 * 86_400_000) return "一次最多选择 366 天（含起止日期）";
+  return null;
+}
+
+/** Enumerate an inclusive, validated interval without local timezone or daylight-saving shifts */
+export function datesBetween(start: string, end: string, today = todayKey()): string[] {
+  if (dateRangeError(start, end, today)) return [];
+  const length = (Date.parse(end) - Date.parse(start)) / 86_400_000 + 1;
+  return Array.from({ length }, (_, index) => shiftDay(start, index));
+}
+
 /** Calendar months including the current partial month */
 export function monthsInRange(months: MonthRange, today = todayKey()): string[] {
   const date = new Date(`${today}T00:00:00Z`);

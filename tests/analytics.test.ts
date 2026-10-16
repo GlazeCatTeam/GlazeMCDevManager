@@ -16,6 +16,8 @@ import { getMcDevData } from "../packages/netease/src/http/client";
 import { getAnalyticsPeriodIncome } from "../packages/netease/src/income/period";
 import {
   aggregate,
+  dateRangeError,
+  datesBetween,
   daysInRange,
   formatValue,
   isAnalyzableWork,
@@ -510,6 +512,27 @@ test("calendar helpers handle Beijing midnight, leap years and year boundaries",
   assert.equal(todayKey(new Date("2026-10-14T16:00:00Z")), "2026-10-15");
   assert.equal(daysInRange(7, "2024-03-01").at(-1), "2024-02-29");
   assert.deepEqual(monthsInRange(3, "2026-01-01"), ["2025-11", "2025-12", "2026-01"]);
+});
+
+test("custom daily intervals include endpoints and reject invalid, unfinished or excessive ranges", () => {
+  const today = "2026-10-17";
+  assert.deepEqual(datesBetween("2026-10-16", "2026-10-16", today), ["2026-10-16"]);
+  assert.deepEqual(datesBetween("2024-02-28", "2024-03-01", today), ["2024-02-28", "2024-02-29", "2024-03-01"]);
+  assert.deepEqual(datesBetween("2025-12-31", "2026-01-01", today), ["2025-12-31", "2026-01-01"]);
+  assert.equal(datesBetween("2024-01-01", "2024-12-31", today).length, 366);
+  for (const [start, end] of [
+    ["", "2026-10-16"],
+    ["2026-10-16", ""],
+    ["2026-02-30", "2026-03-01"],
+    ["bad", "2026-10-16"],
+    ["2026-10-16", "2026-10-15"],
+    ["2026-10-16", today],
+    [today, "2026-10-18"],
+    ["2024-01-01", "2025-01-01"],
+  ]) {
+    assert.ok(dateRangeError(start, end, today));
+    assert.deepEqual(datesBetween(start, end, today), []);
+  }
 });
 
 test("income cycles run from the 22nd through the next 21st and exclude today's unfinished data", () => {

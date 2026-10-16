@@ -54,7 +54,7 @@ if (worksPreview && works[0])
 let activeAccount = account.id;
 let failure = false;
 let calls = 0;
-const realtimeRequests: { date: string; resourceIds: string[] }[] = [];
+const realtimeRequests: { date: string; endDate?: string; resourceIds: string[] }[] = [];
 const requests: { method: string; params: unknown }[] = [];
 const controls = { delay: 400, failureKind: "network" };
 Object.assign(globalThis, { __realtimeRequests: realtimeRequests });
@@ -191,7 +191,7 @@ const rpc: GlazeBridge["rpc"] = async (method, params) => {
     const query = params as { startDate: string };
     value = callAccount === account.id ? works.map((work) => record(work.itemId, query.startDate.slice(0, 7))) : [];
   } else if (method === "analytics.realtime") {
-    const query = params as { date: string; resourceIds: string[] };
+    const query = params as { date: string; endDate?: string; resourceIds: string[] };
     realtimeRequests.push(query);
     if (
       new URLSearchParams(location.search).has("slow-yesterday") &&

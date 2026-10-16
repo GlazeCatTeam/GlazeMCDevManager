@@ -3,8 +3,8 @@ import {
   type EventMessage,
   type EventName,
   type EventPayloads,
-  isAnalyticsDate,
   isAnalyticsRange,
+  isAnalyticsRealtimeParams,
   isAnalyticsResourceIds,
   isCommentListParams,
   isCommentReplyParams,
@@ -450,8 +450,7 @@ function createHandlers(
       return sessions.request(optionalString(params, "account"), (session) => getAnalyticsMonthly(session, params));
     },
     "analytics.realtime": (params) => {
-      if (!params || !isAnalyticsDate(params.date) || !isAnalyticsResourceIds(params.resourceIds))
-        throw new CapabilityError("internal", "实时收益日期或资源参数无效");
+      if (!isAnalyticsRealtimeParams(params)) throw new CapabilityError("internal", "实时收益日期或资源参数无效");
       return sessions.request(optionalString(params, "account"), (session) => getAnalyticsRealtime(session, params));
     },
     "income.list": (params) => {

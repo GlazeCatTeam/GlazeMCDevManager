@@ -65,7 +65,9 @@ export interface AnalyticsPeriodIncomeParams extends AnalyticsDailyParams {
 }
 
 export interface AnalyticsRealtimeParams extends AccountParams {
+  /** First Beijing calendar day; omitting endDate keeps the existing single-day query */
   date: string;
+  endDate?: string;
   resourceIds: string[];
 }
 
@@ -125,5 +127,20 @@ export function isAnalyticsResourceIds(value: unknown): value is string[] {
     value.length <= 500 &&
     value.every((id) => typeof id === "string" && /^\d{1,32}$/.test(id)) &&
     new Set(value).size === value.length
+  );
+}
+
+/** Accept bounded Beijing date intervals while preserving legacy single-day callers */
+export function isAnalyticsRealtimeParams(value: unknown): value is AnalyticsRealtimeParams {
+  const params = value as AnalyticsRealtimeParams | null;
+  return (
+    !!params &&
+    isAnalyticsDate(params.date) &&
+    isAnalyticsRange({
+      startDate: params.date,
+      endDate: params.endDate === undefined ? params.date : params.endDate,
+    }) &&
+    Date.parse(params.endDate ?? params.date) - Date.parse(params.date) < 366 * 86_400_000 &&
+    isAnalyticsResourceIds(params.resourceIds)
   );
 }
