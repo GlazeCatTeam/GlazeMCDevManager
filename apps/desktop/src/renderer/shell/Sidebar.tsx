@@ -2,6 +2,7 @@ import { type AccountSummary, remoteImageUrl, type SessionStatus } from "@glaze/
 import { callHost, onHostEvent } from "@glaze/plugin-sdk";
 import { Avatar, avatarColorsFor, Icon } from "@glaze/ui";
 import { useEffect, useState } from "react";
+import { preloadRoute } from "../routes/pages";
 import type { NavEntry } from "./nav";
 import styles from "./Sidebar.module.css";
 
@@ -70,6 +71,8 @@ export function Sidebar({ entries, activeRoute, account, onNavigate }: SidebarPr
         className={active ? `${styles.item} ${styles.active}` : styles.item}
         aria-current={active ? "page" : undefined}
         onClick={() => onNavigate(entry.route)}
+        onPointerEnter={() => preloadRoute(entry.route)}
+        onFocus={() => preloadRoute(entry.route)}
       >
         {entry.icon && <Icon name={entry.icon} size={20} />}
         {entry.title}

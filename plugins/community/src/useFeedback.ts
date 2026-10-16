@@ -4,6 +4,8 @@ import { type FeedbackReplyFilter, filterFeedbackPage, loadAllFeedback } from ".
 import { createFeedbackLoader } from "./feedback-requests";
 
 export const FEEDBACK_PER_PAGE = 20;
+// Last result per query so returning to the page shows rows at once while they refresh
+const lastStates = new Map<string, FeedbackState>();
 
 interface FeedbackState {
   key: string;
@@ -24,8 +26,10 @@ export function useFeedback(
   const sourcePage = filtered ? -1 : page;
   const key = JSON.stringify([account, type, search, filtered]);
   const requestKey = JSON.stringify([key, sourcePage]);
-  const [state, setState] = useState<FeedbackState>({ key: "", entries: [], total: 0, page: -1 });
-  const [loading, setLoading] = useState(true);
+  const [state, setState] = useState<FeedbackState>(
+    () => lastStates.get(requestKey) ?? { key: "", entries: [], total: 0, page: -1 },
+  );
+  const [loading, setLoading] = useState(() => !lastStates.has(requestKey));
   const [error, setError] = useState("");
   const [version, setVersion] = useState(0);
   const [load] = useState(() => createFeedbackLoader((params) => callHost("feedback.list", params)));
@@ -67,14 +71,13 @@ export function useFeedback(
     result
       .then((result) => {
         if (!active() || !result) return;
-        if (result.ok)
-          setState({
-            key,
-            entries: result.value.entries,
-            total: result.value.total,
-            page: sourcePage,
-          });
-        else setError(result.error.message);
+        if (result.ok) {
+          const next = { key, entries: result.value.entries, total: result.value.total, page: sourcePage };
+          lastStates.delete(requestKey);
+          lastStates.set(requestKey, next);
+          while (lastStates.size > 20) lastStates.delete(lastStates.keys().next().value as string);
+          setState(next);
+        } else setError(result.error.message);
       })
       .catch(() => {
         if (request.current === token) setError("反馈加载失败，请重试");

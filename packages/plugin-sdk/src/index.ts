@@ -151,9 +151,22 @@ export { PluginProvider, usePluginRegistry } from "./context/plugins";
 export {
   callHost,
   onHostEvent,
+  onHostWrite,
   type Session,
   SessionProvider,
   useSession,
 } from "./context/session";
-export { type HostQuery, useHostQuery } from "./hooks/useHostQuery";
+export { formatDate, formatDateTime, formatShortDateTime } from "./format";
+export { type HostQuery, type HostQueryOptions, useHostQuery, usePrefetchHostQuery } from "./hooks/useHostQuery";
+export {
+  clearHostQueries,
+  DEFAULT_QUERY_TTL,
+  expireHostQueries,
+  hostQueryKey,
+  hostQuerySnapshot,
+  type QuerySnapshot,
+  readHostQuery,
+  sessionKeyOf,
+} from "./query/host-query";
+export { clearQueryCaches, QueryCache, type QueryCacheOptions, type QueryKeyMatch } from "./query/query-cache";
 export { uploadDroppedResource } from "./work-files";

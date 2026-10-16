@@ -109,6 +109,23 @@ stateDiagram-v2
 
 渲染侧通过 SDK 提供的 hooks 使用这些能力：`useAccount()`、`useNeteaseQuery(endpointId, params)`、`useSetting(id)`、`usePluginStorage(key)`。
 
+### 数据加载（2026-10-16 已实现）
+
+所有插件读取宿主数据都走 SDK 的统一缓存，目标是加载无感：回到看过的页面立即显示上次结果，过期数据在后台刷新，不再整块变空。
+
+| API | 用途 |
+|---|---|
+| `useHostQuery(method, params, { ttl, enabled, keepPrevious })` | 读能力的标准入口。按「账号 + 登录批次 + 是否过期 + 方法 + 参数」做键，账号之间、登录前后绝不串数据；默认 30 秒内复用，过期后保留旧数据后台刷新（`refreshing`）；参数变化时先显示上一组结果并标 `isPrevious`，新结果到达后整体替换；同键请求合并 |
+| `usePrefetchHostQuery()`、`query.prefetch(next)` | 悬停、聚焦等意图出现时预热下一次读取 |
+| `QueryCache` | 插件需要自管缓存（分页、详情、快照）时使用的通用读缓存：LRU 容量、TTL、同键合并、失败不当成空结果、保留最后一次成功值；`expire` 标记过期不清空，`invalidate` 直接丢弃，在途旧请求不能回填 |
+| `expireHostQueries`、`clearHostQueries`、`clearQueryCaches` | 宿主写入成功后自动把同模块读取标为过期并刷新屏上数据；用户「清除本地缓存」时清空全部 `useHostQuery` 与 `QueryCache` |
+| `onHostWrite(listener)` | 订阅成功的写能力调用（按能力元数据 `risk !== "read"` 判定） |
+| `formatDate`、`formatDateTime`、`formatShortDateTime` | 平台时间统一按本地时区显示 |
+
+外壳侧：侧边栏悬停或聚焦导航项时预载该页面代码；页面代码 300 毫秒内加载完成时不显示「正在加载页面…」，避免闪烁。
+
+各插件现状：首页、分析、作品、玩家评论、收益详情原有的自建缓存已改为 `QueryCache` 或 SDK 统一缓存的薄封装（保留原接口与测试）；系统消息首页、玩家反馈改为先显示上次结果再刷新；活动推广、账号等级、关于页等直接使用 `useHostQuery` 的页面自动获得缓存。
+
 ## 权限
 
 | 权限 | 含义 |

@@ -1,4 +1,4 @@
-import { Button, EmptyState, type MessageSummary } from "@glaze/plugin-sdk";
+import { Button, EmptyState, formatShortDateTime, type MessageSummary } from "@glaze/plugin-sdk";
 import styles from "./MessageList.module.css";
 import { MessageTypeBadge } from "./MessageTypeBadge";
 
@@ -47,7 +47,7 @@ export function MessageList({
               </span>
               <span className={styles.meta}>
                 <MessageTypeBadge type={message.type} />
-                <time>{message.sentAt}</time>
+                <time dateTime={message.sentAt}>{formatShortDateTime(message.sentAt)}</time>
               </span>
             </button>
           ))}

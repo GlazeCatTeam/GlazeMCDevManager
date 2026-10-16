@@ -1,4 +1,11 @@
-import { Button, EmptyState, type MessageContent, type MessageSummary, TextButton } from "@glaze/plugin-sdk";
+import {
+  Button,
+  EmptyState,
+  formatDateTime,
+  type MessageContent,
+  type MessageSummary,
+  TextButton,
+} from "@glaze/plugin-sdk";
 import { messageText } from "../data";
 import styles from "./MessageDetail.module.css";
 import { MessageTypeBadge } from "./MessageTypeBadge";
@@ -26,7 +33,7 @@ export function MessageDetail({ message, content, loading, error, disabled, onRe
       <div className={styles.content}>
         <div className={styles.meta}>
           <MessageTypeBadge type={message.type} />
-          <time>{message.sentAt}</time>
+          <time dateTime={message.sentAt}>{formatDateTime(message.sentAt)}</time>
         </div>
         <h2 className={styles.title}>{message.title}</h2>
         {loading && <p role="status">正在加载详情…</p>}

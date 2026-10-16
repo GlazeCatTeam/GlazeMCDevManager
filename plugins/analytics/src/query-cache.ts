@@ -1,77 +1,35 @@
-import type { RpcResult } from "@glaze/plugin-sdk";
-
-interface Entry {
-  value: unknown;
-  hasValue: boolean;
-  expires: number;
-  pending?: Promise<RpcResult<unknown>>;
-}
+import { QueryCache, type RpcResult } from "@glaze/plugin-sdk";
 
 /** Small renderer-memory cache; callers key every entry by account, method and exact parameters */
 export class AnalyticsQueryCache {
-  private entries = new Map<string, Entry>();
+  private cache: QueryCache;
 
-  constructor(
-    private capacity = 30,
-    private now = Date.now,
-  ) {}
+  constructor(capacity = 30, now = Date.now) {
+    this.cache = new QueryCache({ ttl: 0, capacity, now });
+  }
 
   /** Previously fetched data can render while its expired entry is refreshed */
   peek<T>(key: string): T | null {
-    const entry = this.entries.get(key);
-    return entry?.hasValue ? (entry.value as T) : null;
+    return this.cache.peek(key) as T | null;
   }
 
   /** Only unexpired successful results may skip a request */
   fresh(key: string): boolean {
-    const entry = this.entries.get(key);
-    return !!entry?.hasValue && entry.expires > this.now();
+    return this.cache.fresh(key);
   }
 
   /** Coalesce concurrent reads, cache successes, and ignore results invalidated during flight */
   read<T>(key: string, ttl: number, load: () => Promise<RpcResult<T>>): Promise<RpcResult<T>> {
-    const entry = this.entries.get(key) ?? { value: null, hasValue: false, expires: 0 };
-    this.entries.delete(key);
-    this.entries.set(key, entry);
-    while (this.entries.size > this.capacity) this.entries.delete(this.entries.keys().next().value as string);
-    if (entry.pending) return entry.pending as Promise<RpcResult<T>>;
-    if (this.fresh(key)) return Promise.resolve({ ok: true, value: entry.value as T });
-    const pending = Promise.resolve()
-      .then(load)
-      .catch(
-        (error: unknown): RpcResult<T> => ({
-          ok: false,
-          error: { kind: "internal", message: error instanceof Error ? error.message : "查询失败，请重试" },
-        }),
-      )
-      .then((result) => {
-        if (this.entries.get(key) === entry) {
-          delete entry.pending;
-          if (result.ok) {
-            entry.value = result.value;
-            entry.hasValue = true;
-            entry.expires = this.now() + ttl;
-          } else if (result.error.kind === "session_expired" || !entry.hasValue) {
-            this.entries.delete(key);
-          } else {
-            entry.expires = 0;
-          }
-        }
-        return result;
-      });
-    entry.pending = pending;
-    return pending;
+    return this.cache.read(key, load, ttl) as Promise<RpcResult<T>>;
   }
 
   /** Revalidate in place so refreshes share pending work and retain the last successful result */
   expire(key: string): void {
-    const entry = this.entries.get(key);
-    if (entry) entry.expires = 0;
+    this.cache.expire(key);
   }
 
   /** Account/session changes and explicit cache clearing discard reusable results */
   invalidate(key?: string): void {
-    if (key === undefined) this.entries.clear();
-    else this.entries.delete(key);
+    this.cache.invalidate(key);
   }
 }

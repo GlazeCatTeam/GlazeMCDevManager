@@ -1,11 +1,12 @@
-import type {
-  AccountSummary,
-  EventName,
-  EventPayloads,
-  GlazeBridge,
-  RpcMethod,
-  RpcMethods,
-  RpcResult,
+import {
+  type AccountSummary,
+  capabilities,
+  type EventName,
+  type EventPayloads,
+  type GlazeBridge,
+  type RpcMethod,
+  type RpcMethods,
+  type RpcResult,
 } from "@glaze/contracts";
 import { createContext, useContext } from "react";
 
@@ -38,12 +39,25 @@ function bridge(): GlazeBridge {
   return glaze;
 }
 
+const writeListeners = new Set<(method: RpcMethod) => void>();
+
+/** Run a listener after every successful write capability, e.g. to refresh cached reads */
+export function onHostWrite(listener: (method: RpcMethod) => void): () => void {
+  writeListeners.add(listener);
+  return () => writeListeners.delete(listener);
+}
+
 /** Call a host capability; failures come back as { ok: false, error } and never throw */
 export function callHost<M extends RpcMethod>(
   method: M,
   params?: RpcMethods[M]["params"],
 ): Promise<RpcResult<RpcMethods[M]["result"]>> {
-  return bridge().rpc(method, params);
+  return bridge()
+    .rpc(method, params)
+    .then((result) => {
+      if (result.ok && capabilities[method]?.risk !== "read") for (const notify of writeListeners) notify(method);
+      return result;
+    });
 }
 
 /** Subscribe to a host event; returns the unsubscribe function */

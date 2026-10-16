@@ -5,10 +5,13 @@ import {
   type MessagePage,
   type MessageSummary,
   type MessageType,
+  QueryCache,
 } from "@glaze/plugin-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const PAGE_SIZE = 20;
+// First pages survive page switches so returning to the mailbox shows rows at once
+const firstPages = new QueryCache<MessagePage>({ ttl: 30_000, capacity: 20, errorMessage: "消息加载失败，请重试" });
 
 /** Own account-scoped mailbox requests; ignore stale responses and serialize mutations */
 export function useMessages(account: string, filters: Omit<MessageListParams, "account" | "start" | "span">) {
@@ -29,6 +32,8 @@ export function useMessages(account: string, filters: Omit<MessageListParams, "a
   const filterKey = JSON.stringify(filters);
   const currentKey = useRef(filterKey);
   currentKey.current = filterKey;
+  const cacheKey = JSON.stringify([account, filterKey]);
+  const mounted = useRef(false);
 
   useEffect(() => {
     alive.current = true;
@@ -38,15 +43,17 @@ export function useMessages(account: string, filters: Omit<MessageListParams, "a
     };
   }, []);
 
-  /** Refresh a page or append the next offset, retaining loaded rows when a request fails */
+  /** Refresh a page or append the next offset, retaining loaded rows when a request fails; cached reuses a fresh first page */
   const load = useCallback(
-    async (append = false) => {
+    async (append = false, cached = false) => {
       const request = ++generation.current;
       const start = append ? offset.current : 0;
       setLoading(true);
       setError("");
       try {
-        const result = await callHost("messages.list", { ...JSON.parse(filterKey), account, start, span: PAGE_SIZE });
+        const fetch = () => callHost("messages.list", { ...JSON.parse(filterKey), account, start, span: PAGE_SIZE });
+        if (!append && !cached) firstPages.invalidate(cacheKey);
+        const result = append ? await fetch() : await firstPages.read(cacheKey, fetch);
         if (!alive.current || request !== generation.current || currentKey.current !== filterKey) return;
         if (result.ok) {
           const received = result.value;
@@ -63,24 +70,30 @@ export function useMessages(account: string, filters: Omit<MessageListParams, "a
         if (alive.current && request === generation.current) setLoading(false);
       }
     },
-    [account, filterKey],
+    [account, filterKey, cacheKey],
   );
 
   useEffect(() => {
-    setPage(null);
+    const cached = firstPages.peek(cacheKey);
+    setPage(cached);
     setSelected(undefined);
     setContent(undefined);
     setDetailError("");
-    setHasMore(false);
+    setHasMore(!!cached && cached.messages.length >= PAGE_SIZE && cached.messages.length < cached.total);
     setNotice("");
-    offset.current = 0;
-    setLoading(true);
-    const timer = setTimeout(() => void load(), 250);
+    offset.current = cached?.messages.length ?? 0;
+    setLoading(!cached);
+    // Only typing in filters is debounced; entering the page or a cached view loads at once
+    const delay = cached || !mounted.current ? 0 : 250;
+    mounted.current = true;
+    const timer = setTimeout(() => {
+      if (!firstPages.fresh(cacheKey)) void load(false, true);
+    }, delay);
     return () => {
       clearTimeout(timer);
       generation.current++;
     };
-  }, [load]);
+  }, [load, cacheKey]);
 
   /** Open an explicit selection; acknowledge its implicit read only after detail succeeds */
   const open = async (id: string) => {
@@ -100,6 +113,7 @@ export function useMessages(account: string, filters: Omit<MessageListParams, "a
       if (result.ok) {
         setContent(result.value);
         setDetailLoading(false);
+        firstPages.expire();
         setSelected({ ...message, read: true });
         setPage((previous) => {
           if (!previous) return previous;

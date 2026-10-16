@@ -1,41 +1,26 @@
-import { type HostQuery, type RpcMethods, useSession } from "@glaze/plugin-sdk";
-import { useCallback, useEffect, useSyncExternalStore } from "react";
-import { type HomeMethod, homeEntry, readHome } from "./home-query";
+import { type HostQuery, type RankEntry, type RpcMethods, useHostQuery, useSession } from "@glaze/plugin-sdk";
+import { useCallback, useEffect } from "react";
+import { HOME_TTL, type HomeMethod, warmImages } from "./home-query";
 
-/** Cached home reads with immediate key isolation and shared intent prefetch */
+/** Cached home reads pinned to the current account, with shared intent prefetch */
 export function useHomeQuery<M extends HomeMethod>(
   method: M,
   params?: RpcMethods[M]["params"],
 ): HostQuery<RpcMethods[M]["result"]> & { prefetch: (next: RpcMethods[M]["params"]) => void } {
   const { current } = useSession();
   const account = current?.id;
-  const sessionKey = JSON.stringify([account, current?.lastLoginAt, current?.status === "expired"]);
-  const paramsKey = JSON.stringify({ ...params, account });
-  const key = JSON.stringify([sessionKey, method, paramsKey]);
-  const entry = homeEntry(key);
-  const subscribe = useCallback(
-    (notify: () => void) => {
-      entry.listeners.add(notify);
-      return () => {
-        entry.listeners.delete(notify);
-      };
-    },
-    [entry],
-  );
-  const snapshot = useSyncExternalStore(subscribe, () => entry.snapshot);
+  // Pin requests to the account they were issued for so a switch mid-flight cannot mix data
+  const query = useHostQuery(method, { ...params, account } as RpcMethods[M]["params"], { ttl: HOME_TTL });
+  const { data } = query;
   useEffect(() => {
-    void readHome(key, method, JSON.parse(paramsKey));
-  }, [key, method, paramsKey]);
-  const reload = useCallback(() => {
-    void readHome(key, method, JSON.parse(paramsKey), true);
-  }, [key, method, paramsKey]);
+    if (!data) return;
+    if (method === "rank.list") warmImages(data as RankEntry[]);
+    if (method === "rank.page") warmImages((data as RpcMethods["rank.page"]["result"]).items);
+  }, [data, method]);
+  const { prefetch: warm } = query;
   const prefetch = useCallback(
-    (next: RpcMethods[M]["params"]) => {
-      const nextParams = { ...next, account };
-      const nextKey = JSON.stringify([sessionKey, method, JSON.stringify(nextParams)]);
-      void readHome(nextKey, method, nextParams);
-    },
-    [sessionKey, method, account],
+    (next: RpcMethods[M]["params"]) => warm({ ...next, account } as RpcMethods[M]["params"]),
+    [warm, account],
   );
-  return { ...snapshot, data: snapshot.data as RpcMethods[M]["result"] | null, reload, prefetch };
+  return { ...query, prefetch };
 }
