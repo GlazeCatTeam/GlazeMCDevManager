@@ -34,6 +34,7 @@ export interface StoredOperation extends McpOperation {
   assetParams?: { kind: McpAsset["kind"]; platform: "pe" | "pc"; channelId?: number; resourceType?: number };
   directoryId?: string;
   relativePath?: string;
+  filePath?: string;
 }
 export interface McpData {
   port: number;
@@ -124,7 +125,7 @@ export function publicValue(value: unknown): unknown {
       Object.entries(value)
         .filter(
           ([key]) =>
-            !/^(cookie|password|ticket|token|sessionCookie|authorization|sign|receipt|path|fingerprint|key|body)$/i.test(
+            !/^(cookie|password|ticket|token|sessionCookie|authorization|sign|receipt|path|filePath|fingerprint|key|body)$/i.test(
               key,
             ),
         )

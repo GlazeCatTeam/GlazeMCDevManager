@@ -41,7 +41,7 @@ import { StreamableHTTPClientTransport } from "../packages/mcp/node_modules/@mod
 import { InMemoryTransport } from "../packages/mcp/node_modules/@modelcontextprotocol/sdk/dist/esm/inMemory.js";
 import { ToolListChangedNotificationSchema } from "../packages/mcp/node_modules/@modelcontextprotocol/sdk/dist/esm/types.js";
 import { appTools } from "../packages/mcp/src/app-tools";
-import { resolveMaterial, snapshotMaterial, verifyMaterial } from "../packages/mcp/src/assets";
+import { resolveLocalMaterial, resolveMaterial, snapshotMaterial, verifyMaterial } from "../packages/mcp/src/assets";
 import { emptyMcpData, McpError, type McpPorts } from "../packages/mcp/src/model";
 import { createMcpServer, McpHttpServer } from "../packages/mcp/src/server";
 import { McpService } from "../packages/mcp/src/service";
@@ -1257,6 +1257,106 @@ test("direct unknown writes remain blocked across new requests without retaining
   assert.equal(((await f.call("works_save", args)) as McpOperation).id, result.id);
 });
 
+test("local material paths reject network paths, streams, links, directories and unrelated file types", async () => {
+  const root = await mkdtemp(join(tmpdir(), "glaze-mcp-local-path-"));
+  try {
+    const file = join(root, "宣传图.PNG");
+    await writeFile(file, "image");
+    assert.equal(await resolveLocalMaterial(file, "image"), await realpath(file));
+    for (const path of [
+      "image.png",
+      "https://example.com/image.png",
+      "\\\\server\\share\\image.png",
+      "//server/share/image.png",
+      `${file}:secret`,
+      `${root}/../image.png`,
+      `${file}\0`,
+      join(root, "secret.txt"),
+    ])
+      await assert.rejects(resolveLocalMaterial(path, "image"), /绝对路径|格式/);
+    await assert.rejects(resolveLocalMaterial(join(root, "missing.png"), "image"), /无法读取指定素材文件/);
+    await mkdir(join(root, "folder.png"));
+    await assert.rejects(resolveLocalMaterial(join(root, "folder.png"), "image"), /普通文件/);
+    await mkdir(join(root, "real"));
+    await writeFile(join(root, "real", "image.png"), "image");
+    await symlink(join(root, "real"), join(root, "linked"), "junction");
+    await assert.rejects(resolveLocalMaterial(join(root, "linked", "image.png"), "image"), /链接|联接点/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("direct uploads require one explicit source before permissions and never default to a picker", async () => {
+  const f = fixture(false);
+  let picked = 0;
+  f.ports.pickFile = async () => {
+    picked++;
+    return null;
+  };
+  f.service.grant(f.client.id, { accounts: ["a"], defaultAccount: "a", permissions: ["netease:works.read"] });
+  for (const name of ["works_upload", "promotion_upload"])
+    for (const source of [
+      {},
+      { directoryId: "d" },
+      { relativePath: "image.png" },
+      { filePath: "image.png", interactive: true },
+      { filePath: "image.png", directoryId: "d", relativePath: "image.png" },
+    ])
+      await assert.rejects(
+        f.call(name, { kind: "image", idempotencyKey: "invalid", ...source }),
+        /素材来源|必须同时提供/,
+      );
+  assert.equal(f.service.snapshot().requests.length, 0);
+  assert.equal(picked, 0);
+  await assert.rejects(
+    f.call("works_upload", { kind: "image", filePath: join(tmpdir(), "image.png"), idempotencyKey: "denied" }),
+    /权限/,
+  );
+  assert.equal(picked, 0);
+  f.service.grant(f.client.id, { accounts: ["a"], defaultAccount: "a", permissions: [...mcpPermissions] });
+  const cancelled = (await f.call("works_upload", {
+    kind: "image",
+    interactive: true,
+    idempotencyKey: "picker",
+  })) as McpOperation;
+  assert.equal(cancelled.state, "rejected");
+  assert.equal(picked, 1);
+});
+
+test("background uploads preserve snapshots, deduplicate and stop before upload after revocation", async () => {
+  const root = await mkdtemp(join(tmpdir(), "glaze-mcp-background-"));
+  const f = fixture(false);
+  try {
+    const filePath = join(root, "image.png");
+    await writeFile(filePath, "original");
+    f.ports.assetRoot = join(root, "snapshots");
+    f.ports.pickFile = async () => {
+      throw new Error("Unexpected picker");
+    };
+    const upload = f.ports.upload;
+    f.ports.upload = async (draft, asset, guard) => {
+      await writeFile(filePath, "changed");
+      assert.equal(await readFile(asset.path, "utf8"), "original");
+      return upload(draft, asset, guard);
+    };
+    const args = { itemId: "123", kind: "image", filePath, idempotencyKey: "background" };
+    const result = (await f.call("works_upload", args)) as McpOperation;
+    assert.equal(result.state, "succeeded");
+    assert.equal(((await f.call("works_upload", args)) as McpOperation).id, result.id);
+    assert.equal(f.counts.upload, 1);
+    assert.equal(JSON.stringify(f.service.snapshot()).includes(filePath.replace(/\\/g, "\\\\")), false);
+    await assert.rejects(f.call("works_upload", { ...args, filePath: join(root, "other.png") }), /幂等键/);
+    f.ports.upload = async (draft, asset, guard) => {
+      f.service.grant(f.client.id, { accounts: ["a"], defaultAccount: "a", permissions: ["netease:works.read"] });
+      return upload(draft, asset, guard);
+    };
+    await assert.rejects(f.call("works_upload", { ...args, idempotencyKey: "revoked" }), /权限|授权/);
+    assert.equal(f.counts.upload, 1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("direct uploads are reusable by their work and cannot cross work or client boundaries", async () => {
   const root = await mkdtemp(join(tmpdir(), "glaze-mcp-direct-assets-"));
   const f = fixture(false);
@@ -1264,20 +1364,32 @@ test("direct uploads are reusable by their work and cannot cross work or client 
     const source = join(root, "image.png");
     await writeFile(source, "material");
     f.ports.assetRoot = join(root, "snapshots");
-    f.ports.pickFile = async () => source;
+    f.ports.pickFile = async () => {
+      throw new Error("Background uploads must not open a picker");
+    };
     const uploaded = (await f.call("works_upload", {
       itemId: "123",
       kind: "image",
+      filePath: source,
       channelId: 1,
       idempotencyKey: "upload",
     })) as McpOperation;
     assert.equal(uploaded.state, "succeeded");
     assert.ok(uploaded.assetId);
+    assert.equal(JSON.stringify(uploaded).includes(root), false);
+    assert.equal("filePath" in uploaded, false);
     const patch = { channel: [{ channel_id: 1, channel_url: { $asset: uploaded.assetId, as: "receipt" } }] };
     await assert.rejects(f.call("works_save", { itemId: "456", patch, idempotencyKey: "other-work" }), /材料/);
     const saved = (await f.call("works_save", { itemId: "123", patch, idempotencyKey: "save" })) as McpOperation;
     assert.equal(saved.state, "succeeded");
     assert.equal(JSON.stringify(uploaded).includes("host-only"), false);
+    const details = (await f.call("works_save", {
+      itemId: "123",
+      patch: { info: `<p><img src="glaze-asset:${uploaded.assetId}"></p>` },
+      idempotencyKey: "save-detail-image",
+    })) as McpOperation;
+    assert.equal(details.state, "succeeded");
+    assert.equal(f.remote.fields.info, '<p><img src="https://x.nosdn.127.net/a.png"></p>');
     const other = f.service.registerClient("Other");
     f.service.connected(other.id, () => {});
     f.service.grant(other.id, { accounts: ["a"], defaultAccount: "a", permissions: [...mcpPermissions] });
@@ -1367,8 +1479,14 @@ test("promotion resolves only host-uploaded materials and never exposes signed r
     const source = join(root, "banner.png");
     await writeFile(source, "banner");
     f.ports.assetRoot = join(root, "snapshots");
-    f.ports.pickFile = async () => source;
-    const upload = (await f.call("promotion_upload", { kind: "banner", idempotencyKey: "banner" })) as McpOperation;
+    f.ports.pickFile = async () => {
+      throw new Error("Background uploads must not open a picker");
+    };
+    const upload = (await f.call("promotion_upload", {
+      kind: "banner",
+      filePath: source,
+      idempotencyKey: "banner",
+    })) as McpOperation;
     assert.equal(upload.state, "succeeded");
     let received: Record<string, unknown> = {};
     f.ports.invoke = async (_m, params, guard, beforeWrite) => {

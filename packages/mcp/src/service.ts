@@ -23,7 +23,7 @@ import {
   workSections,
 } from "@glaze/contracts";
 import sanitizeHtml from "sanitize-html";
-import { cleanMaterials, resolveMaterial, snapshotMaterial, verifyMaterial } from "./assets";
+import { cleanMaterials, resolveLocalMaterial, resolveMaterial, snapshotMaterial, verifyMaterial } from "./assets";
 import {
   canonical,
   type McpData,
@@ -968,7 +968,7 @@ export class McpService {
         return Object.fromEntries(Object.entries(value).map(([field, entry]) => [field, resolve(entry, field)]));
       }
       if (typeof value === "string" && key === "info") {
-        return sanitizeHtml(value, {
+        const html = sanitizeHtml(value, {
           allowedTags: [
             "p",
             "br",
@@ -994,12 +994,14 @@ export class McpService {
               if (src.startsWith("glaze-asset:"))
                 src = assets.find((asset) => asset.id === src.slice(12))?.receipt?.url ?? "";
               if (!allowedUrl(src)) throw new McpError("forbidden", "详情图片必须来自本作品或已上传材料");
-              return { tagName: "img", attribs: { src, alt: attrs.alt ?? "" } };
+              return { tagName: "img", attribs: { src, ...(attrs.alt ? { alt: attrs.alt } : {}) } };
             },
           },
           allowedSchemes: ["https"],
           allowProtocolRelative: false,
         });
+        // Match the editor's HTML void tags rather than XML-style self-closing images
+        return html.replace(/<(img|br)\b([^>]*)\s\/>/g, "<$1$2>");
       }
       if (typeof value === "string" && mediaKeys.has(key) && !allowedUrl(value))
         throw new McpError("forbidden", "媒体必须来自本作品或已上传材料");
@@ -1212,6 +1214,7 @@ export class McpService {
     };
     if (action === "upload") operation.assetId = params.assetId as string;
     if (action === "import") {
+      if (params.filePath !== undefined) operation.filePath = params.filePath as string;
       operation.assetParams = {
         kind: params.kind as StoredAsset["kind"],
         platform: params.platform as "pe" | "pc",
@@ -1296,6 +1299,7 @@ export class McpService {
     assetParams: _params,
     directoryId: _directory,
     relativePath: _relative,
+    filePath: _file,
     target: _target,
     ...operation
   }: StoredOperation): McpOperation {
@@ -1350,16 +1354,18 @@ export class McpService {
         const client = this.client(operation.clientId);
         const directory = client.directories.find((entry) => entry.id === operation.directoryId);
         if (operation.directoryId && !directory) throw new McpError("forbidden", "素材目录未授权");
-        const source = directory
-          ? await resolveMaterial(directory.path, operation.relativePath ?? "")
-          : await this.ports.pickFile();
+        if (!operation.assetParams) throw new McpError("validation", "材料用途缺失");
+        const source = operation.filePath
+          ? await resolveLocalMaterial(operation.filePath, operation.assetParams.kind)
+          : directory
+            ? await resolveMaterial(directory.path, operation.relativePath ?? "")
+            : await this.ports.pickFile();
         guard();
         if (!source) {
           operation.state = "rejected";
           operation.message = "已取消文件选择";
           return;
         }
-        if (!operation.assetParams) throw new McpError("validation", "材料用途缺失");
         const asset = await snapshotMaterial(this.ports.assetRoot, source, {
           draftId: draft.id,
           ...operation.assetParams,
