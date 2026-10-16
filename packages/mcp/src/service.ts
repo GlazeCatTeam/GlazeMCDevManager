@@ -121,6 +121,18 @@ export class McpService {
     this.ports.changed();
   }
 
+  /** Clear displayed history without losing operation results or durable replay protection */
+  clearAudit(): void {
+    const previous = this.data.audit;
+    this.data.audit = [];
+    try {
+      this.commit();
+    } catch (error) {
+      this.data.audit = previous;
+      throw error;
+    }
+  }
+
   /** Keep recent results and every unresolved write visible without discarding durable replay protection */
   private archiveOperations(): void {
     let recent = 0;

@@ -121,6 +121,72 @@ try {
   // Port and service switches moved to Settings through the settingsSections contribution point
   await page.getByRole("button", { name: "设置 → AI 连接服务", exact: true }).waitFor();
 
+  // Clearing is explicit, retryable and leaves unresolved writes available for reconciliation
+  const activity = page.getByRole("region", { name: "AI 操作记录", exact: true });
+  await page.evaluate(() => {
+    const state = globalThis.__mcpState;
+    state.audit = Array.from({ length: 60 }, (_, index) => ({ ...state.audit[0], id: `clear-${index}` }));
+    globalThis.__mcpEmit();
+  });
+  await activity.getByRole("button", { name: "查看更多", exact: true }).click();
+  assert.equal(await activity.locator("time").count(), 60);
+  await activity.getByRole("button", { name: "清空记录", exact: true }).click();
+  const clear = page.getByRole("dialog", { name: "清空 AI 操作记录？", exact: true });
+  await clear.getByText("将清空所有 AI 工具、所有账号的历史操作记录，此操作无法撤销。", { exact: true }).waitFor();
+  await clear.getByRole("button", { name: "取消", exact: true }).click();
+  assert.equal(
+    await page.evaluate(() => globalThis.__mcpCalls.filter((call) => call.method === "mcp.clearAudit").length),
+    0,
+  );
+  assert.equal(await activity.locator("time").count(), 60);
+  await activity.getByRole("button", { name: "清空记录", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await clear.waitFor({ state: "hidden" });
+  assert.equal(
+    await page.evaluate(() => globalThis.__mcpCalls.filter((call) => call.method === "mcp.clearAudit").length),
+    0,
+  );
+  await page.evaluate(() => {
+    globalThis.__mcpFailures.clearAudit = "记录保存失败";
+  });
+  await activity.getByRole("button", { name: "清空记录", exact: true }).click();
+  await clear.getByRole("button", { name: "确认清空", exact: true }).click();
+  await clear.getByText("记录保存失败", { exact: true }).waitFor();
+  assert.equal(await activity.locator("time").count(), 60);
+  await page.screenshot({ path: join(output, "mcp-clear-audit-error.png"), fullPage: true });
+  await page.evaluate(() => {
+    globalThis.__mcpFailures.clearAudit = "";
+  });
+  await clear.getByRole("button", { name: "确认清空", exact: true }).click();
+  await clear.waitFor({ state: "hidden" });
+  assert.equal(await activity.getByRole("button", { name: "清空记录", exact: true }).isDisabled(), true);
+  assert.equal(await activity.locator("time").count(), 0);
+  assert.equal(await activity.getByRole("button", { name: "收起", exact: true }).count(), 0);
+  await activity.getByText("请到开发者平台确认结果", { exact: false }).waitFor();
+  assert.equal(await page.evaluate(() => globalThis.__mcpState.operations[0].resolvedAt), undefined);
+  await page.evaluate(() => {
+    globalThis.__mcpState.operations = [];
+    globalThis.__mcpEmit();
+  });
+  await activity.getByText("还没有记录", { exact: true }).waitFor();
+  await page.evaluate(() => {
+    globalThis.__mcpState.audit = [
+      {
+        id: "after-clear",
+        time: new Date().toISOString(),
+        clientId: "client-a",
+        clientName: "Claude Code",
+        tool: "comments_list",
+        title: "清空后的新记录",
+        result: "succeeded",
+        account: null,
+      },
+    ];
+    globalThis.__mcpEmit();
+  });
+  await activity.getByText("清空后的新记录", { exact: false }).waitFor();
+  assert.equal(await activity.getByRole("button", { name: "清空记录", exact: true }).isEnabled(), true);
+
   // Onboarding appears when nothing is connected
   await page.evaluate(() => {
     globalThis.__mcpState.clients = [];
@@ -132,7 +198,7 @@ try {
   await page.screenshot({ path: join(output, "mcp-onboarding.png"), fullPage: true });
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: AI assistant page, app-wide permission request, levels, configured/waiting/live/disconnected states, fallback prompt",
+    "PASS: AI assistant page, permission request, connection states, audit clear confirmation/cancel/failure/retry, unresolved operations and new records",
   );
 } finally {
   await browser?.close();

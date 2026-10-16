@@ -447,6 +447,10 @@ export function createMcpHost(
     }
   };
   const handlers = {
+    "mcp.clearAudit": () => {
+      service.clearAudit();
+      return undefined;
+    },
     "mcp.resolveOperation": (params: { operationId: string }) => {
       service.resolveOperation(params?.operationId);
       return undefined;

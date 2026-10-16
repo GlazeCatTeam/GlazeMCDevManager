@@ -159,12 +159,28 @@ try {
   await client.close();
   client = undefined;
 
+  // Clear through the actual renderer/IPC/store path before checking persistence after restart
+  const beforeClear = await page.evaluate(() => window.glaze.rpc("mcp.snapshot"));
+  assert.ok(beforeClear.value.audit.length > 0);
+  await page
+    .getByRole("region", { name: "AI 操作记录", exact: true })
+    .getByRole("button", { name: "清空记录", exact: true })
+    .click();
+  const clearAudit = page.getByRole("dialog", { name: "清空 AI 操作记录？", exact: true });
+  await clearAudit.getByRole("button", { name: "确认清空", exact: true }).click();
+  await clearAudit.waitFor({ state: "hidden" });
+  const afterClear = await page.evaluate(() => window.glaze.rpc("mcp.snapshot"));
+  assert.deepEqual(afterClear.value.audit, []);
+  assert.deepEqual(afterClear.value.operations, beforeClear.value.operations);
+  assert.deepEqual(afterClear.value.clients, beforeClear.value.clients);
+
   // The key keeps the grant across an app restart without re-approval
   await application.close();
   application = await electron.launch({ executablePath: require("electron"), args: [entry], cwd: root });
   const restarted = await application.firstWindow();
   restarted.setDefaultTimeout(15000);
   await restarted.waitForFunction(() => window.glaze);
+  assert.deepEqual((await restarted.evaluate(() => window.glaze.rpc("mcp.snapshot"))).value.audit, []);
   ({ client, transport } = await open(connected.value.endpoint, "重启后"));
   const again = await client.callTool({ name: "glaze_status", arguments: {} });
   assert.equal(again.structuredContent.result.approved, true);

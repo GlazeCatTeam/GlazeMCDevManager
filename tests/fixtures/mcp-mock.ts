@@ -116,7 +116,7 @@ export function installMcpMock(): void {
       });
   };
   const calls: { method: string; params: unknown }[] = [];
-  const failures = { connect: "", preserveConnection: false };
+  const failures = { connect: "", preserveConnection: false, clearAudit: "" };
   Object.assign(globalThis, {
     __mcpCalls: calls,
     __mcpState: state,
@@ -202,6 +202,12 @@ export function installMcpMock(): void {
           const client = state.clients.find((entry) => entry.id === request?.clientId);
           if (client && params?.decision === "always")
             client.permissions = [...client.permissions, ...(request?.permissions ?? [])];
+          emit();
+          return { ok: true, value: undefined };
+        }
+        if (method === "mcp.clearAudit") {
+          if (failures.clearAudit) return { ok: false, error: { kind: "internal", message: failures.clearAudit } };
+          state.audit = [];
           emit();
           return { ok: true, value: undefined };
         }

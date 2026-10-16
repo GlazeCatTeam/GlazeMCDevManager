@@ -1991,6 +1991,59 @@ test("business history remains writable beyond 5000 results and archives preserv
   assert.equal(writes, 3);
 });
 
+test("clearing audit persists across restart and preserves unresolved writes and replay protection", async () => {
+  const f = fixture(false, 1);
+  const savedArgs = { itemId: "123", patch: { item_name: "已保存" }, idempotencyKey: "clear-audit-saved" };
+  const saved = await f.call("works_save", savedArgs);
+  f.ports.saveWork = async (_draft, _patch, beforeWrite) => {
+    beforeWrite();
+    throw new McpError("network", "结果未知");
+  };
+  const unknownArgs = { itemId: "456", patch: { item_name: "待核实" }, idempotencyKey: "clear-audit-unknown" };
+  f.ports.editor = async (_account, itemId) => ({ ...structuredClone(f.remote), itemId });
+  const unknown = (await f.call("works_save", unknownArgs)) as McpOperation;
+  assert.equal(unknown.state, "unknown");
+  assert.ok(f.service.data.audit.length > 0);
+  const before = structuredClone(f.service.data);
+  let broadcasts = 0;
+  f.ports.changed = () => broadcasts++;
+
+  f.service.clearAudit();
+
+  assert.deepEqual(f.durable(), { ...before, audit: [] });
+  assert.deepEqual(f.service.snapshot().audit, []);
+  assert.equal(broadcasts, 1);
+  assert.equal(capabilities["mcp.clearAudit"].caller, "shell");
+  assert.equal(capabilities["mcp.clearAudit"].mcp, undefined);
+  const restarted = new McpService(parseMcpData(f.durable()), f.ports, 1);
+  restarted.status = "running";
+  assert.deepEqual(restarted.snapshot().audit, []);
+  assert.ok(restarted.snapshot().operations.some((operation) => operation.id === unknown.id && !operation.resolvedAt));
+  assert.deepEqual(await restarted.call(f.client.id, "works_save", savedArgs), saved);
+  assert.deepEqual(await restarted.call(f.client.id, "works_save", unknownArgs), unknown);
+  await assert.rejects(
+    restarted.call(f.client.id, "works_save", { ...unknownArgs, idempotencyKey: "clear-audit-new" }),
+    /待核实/,
+  );
+  assert.equal(f.counts.save, 1);
+});
+
+test("failed audit clearing retains records and does not broadcast success", async () => {
+  const f = fixture(false);
+  await f.call("analytics_overview");
+  const before = structuredClone(f.service.data.audit);
+  let broadcasts = 0;
+  f.ports.changed = () => broadcasts++;
+  f.ports.save = () => {
+    throw new Error("记录保存失败");
+  };
+
+  assert.throws(() => f.service.clearAudit(), /记录保存失败/);
+  assert.deepEqual(f.service.snapshot().audit, before);
+  assert.deepEqual(f.durable().audit, before);
+  assert.equal(broadcasts, 0);
+});
+
 test("history retention never hides unresolved writes and reconciliation never makes an old key executable", async () => {
   const f = fixture(false, 1);
   f.ports.editor = async (_account, itemId) => ({ ...structuredClone(f.remote), itemId });
