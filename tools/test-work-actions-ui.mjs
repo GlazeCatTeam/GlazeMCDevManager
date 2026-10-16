@@ -160,7 +160,7 @@ try {
   assert.equal(await dialog().getByLabel("上架日期", { exact: true }).inputValue(), "2098-12-31");
   await page.keyboard.press("ArrowRight");
   assert.equal(await dialog().getByLabel("上架日期", { exact: true }).inputValue(), "2099-01-01");
-  assert.equal(await page.locator(":focus").getAttribute("aria-label"), "2099-01-01");
+  await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "2099-01-01");
   await page.keyboard.press("Tab");
   assert.equal(await page.locator(":focus").getAttribute("aria-label"), "上架日期");
   await dialog().getByLabel("上架小时").fill("24");

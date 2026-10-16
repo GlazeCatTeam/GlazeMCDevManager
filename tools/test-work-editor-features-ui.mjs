@@ -115,6 +115,9 @@ try {
   await tagInput.fill("魔");
   await page.setViewportSize({ width: 1000, height: 850 });
   await tagSuggestions.waitFor({ state: "detached" });
+  await tagInput.scrollIntoViewIfNeeded();
+  await tagInput.focus();
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await tagInput.fill("测试标签");
   await tagSuggestions.waitFor();
   const narrowTagBounds = await tagSuggestions.boundingBox();
