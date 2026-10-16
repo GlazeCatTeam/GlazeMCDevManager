@@ -29,13 +29,13 @@ export function periodIncomeYuan(yuan: number | null | undefined): string {
   return yuan === null || yuan === undefined || !Number.isFinite(yuan) ? "—" : yuanFormatter.format(yuan);
 }
 
-/** Include both boundary 22nds; advance the current cycle on the 23rd and omit today's unfinished data */
+/** Use non-overlapping cycles from the 22nd through the next 21st, excluding today's unfinished data */
 export function incomeCycle(offset = 0, today = todayKey()) {
   const anchor = new Date(`${today}T00:00:00Z`);
-  const month = anchor.getUTCMonth() - (anchor.getUTCDate() < 23 ? 1 : 0) + offset;
+  const month = anchor.getUTCMonth() - (anchor.getUTCDate() < 22 ? 1 : 0) + offset;
   const startDate = new Date(Date.UTC(anchor.getUTCFullYear(), month, 22)).toISOString().slice(0, 10);
   const nextStart = new Date(Date.UTC(anchor.getUTCFullYear(), month + 1, 22)).toISOString().slice(0, 10);
-  const endDate = nextStart;
+  const endDate = shiftDay(nextStart, -1);
   const yesterday = shiftDay(today, -1);
   const queryEnd = endDate < yesterday ? endDate : yesterday;
   const dates =

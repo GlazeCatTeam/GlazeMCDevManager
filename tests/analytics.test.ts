@@ -20,6 +20,7 @@ import {
   formatValue,
   isAnalyzableWork,
   monthsInRange,
+  shiftDay,
   todayKey,
   topResources,
   trackingSeries,
@@ -511,39 +512,58 @@ test("calendar helpers handle Beijing midnight, leap years and year boundaries",
   assert.deepEqual(monthsInRange(3, "2026-01-01"), ["2025-11", "2025-12", "2026-01"]);
 });
 
-test("income cycles include both boundary 22nds, overlap one day, and exclude today's unfinished data", () => {
+test("income cycles run from the 22nd through the next 21st and exclude today's unfinished data", () => {
   const current = incomeCycle(0, "2026-10-16");
   assert.equal(current.startDate, "2026-09-22");
-  assert.equal(current.endDate, "2026-10-22");
+  assert.equal(current.endDate, "2026-10-21");
   assert.equal(current.queryEnd, "2026-10-15");
   assert.equal(current.dates.length, 24);
-  const closing = incomeCycle(0, "2026-10-22");
+  const closing = incomeCycle(0, "2026-10-21");
   assert.equal(closing.startDate, "2026-09-22");
-  assert.equal(closing.queryEnd, "2026-10-21");
-  const opening = incomeCycle(0, "2026-10-23");
+  assert.equal(closing.queryEnd, "2026-10-20");
+  const opening = incomeCycle(0, "2026-10-22");
   assert.equal(opening.startDate, "2026-10-22");
-  assert.equal(opening.queryEnd, "2026-10-22");
-  assert.deepEqual(opening.dates, ["2026-10-22"]);
-  const previous = incomeCycle(-1, "2026-10-23");
-  assert.equal(previous.endDate, "2026-10-22");
+  assert.equal(opening.endDate, "2026-11-21");
+  assert.equal(opening.queryEnd, null);
+  assert.deepEqual(opening.dates, []);
+  const nextDay = incomeCycle(0, "2026-10-23");
+  assert.equal(nextDay.queryEnd, "2026-10-22");
+  assert.deepEqual(nextDay.dates, ["2026-10-22"]);
+  const previous = incomeCycle(-1, "2026-10-22");
+  assert.equal(previous.endDate, "2026-10-21");
   assert.equal(previous.queryEnd, previous.endDate);
   assert.equal(previous.nextStart, opening.startDate);
   assert.deepEqual(
-    previous.dates.filter((date) => opening.dates.includes(date)),
-    ["2026-10-22"],
+    previous.dates.filter((date) => nextDay.dates.includes(date)),
+    [],
   );
   const september = incomeCycle(-1, "2026-10-16");
   assert.equal(september.startDate, "2026-08-22");
-  assert.equal(september.endDate, "2026-09-22");
-  assert.equal(september.dates.length, 32);
+  assert.equal(september.endDate, "2026-09-21");
+  assert.equal(september.dates.length, 31);
   const year = incomeCycle(0, "2026-01-02");
   assert.equal(year.startDate, "2025-12-22");
   assert.equal(year.queryEnd, "2026-01-01");
   const leap = incomeCycle(-1, "2024-03-23");
-  assert.equal(leap.dates.length, 30);
+  assert.equal(leap.dates.length, 29);
   assert.ok(leap.dates.includes("2024-02-29"));
-  assert.equal(incomeCycle(-1, "2025-03-23").dates.length, 29);
-  assert.equal(incomeCycle(0, todayKey(new Date("2026-10-22T16:00:00Z"))).startDate, "2026-10-22");
+  assert.equal(incomeCycle(-1, "2025-03-23").dates.length, 28);
+  assert.equal(incomeCycle(0, todayKey(new Date("2026-10-21T15:59:59Z"))).startDate, "2026-09-22");
+  assert.equal(incomeCycle(0, todayKey(new Date("2026-10-21T16:00:00Z"))).startDate, "2026-10-22");
+});
+
+test("adjacent completed cycles cover every day exactly once across leap years and year boundaries", () => {
+  const cycles = Array.from({ length: 36 }, (_, index) => incomeCycle(-index - 1, "2027-01-22")).reverse();
+  const dates = cycles.flatMap((cycle) => cycle.dates);
+  assert.equal(new Set(dates).size, dates.length);
+  for (let index = 1; index < dates.length; index++) {
+    assert.equal(dates[index], shiftDay(dates[index - 1], 1));
+  }
+  for (const cycle of cycles) {
+    assert.equal(cycle.dates[0], cycle.startDate);
+    assert.equal(cycle.dates.at(-1), cycle.endDate);
+    assert.equal(shiftDay(cycle.endDate, 1), cycle.nextStart);
+  }
 });
 
 test("period estimate formatting preserves cents and distinguishes unknown from zero", () => {
@@ -569,6 +589,82 @@ function costBill(month: string, cost = 340, status = "pay_success") {
     total_usage_price: 0,
   };
 }
+
+test("PE and PC adjacent cycle queries count boundary sales once and preserve PE month totals", async () => {
+  const cycles = [incomeCycle(-1, "2026-10-23"), incomeCycle(0, "2026-10-23")];
+  const resource = { id, name: "boundary work", category: "test", color: "red" };
+  for (const platform of ["pe", "pc"] as const) {
+    const dailyRanges: (string | null)[][] = [];
+    const monthlyRanges: (string | null)[][] = [];
+    globalThis.fetch = async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/data_analysis/day_detail/") {
+        assert.equal(url.searchParams.get("platform"), platform);
+        dailyRanges.push([url.searchParams.get("start_date"), url.searchParams.get("end_date")]);
+        return response({
+          data: [
+            { ...row, dateid: "20261021", diamond: 100, points: 10, cnt_buy: 1 },
+            { ...row, dateid: "20261022", diamond: 200, points: 20, cnt_buy: 2 },
+          ],
+        });
+      }
+      assert.equal(platform, "pe");
+      if (url.pathname === "/data_analysis/month_detail/") {
+        const start = url.searchParams.get("start_date");
+        assert.ok(start);
+        monthlyRanges.push([start, url.searchParams.get("end_date")]);
+        return response({ data: [{ iid: id, monthid: start.slice(0, 6), total_diamond: 5000 }] });
+      }
+      assert.equal(url.pathname, "/incomes");
+      return response({ count: 1, incomes: [costBill("2026-09")] });
+    };
+    const totals: number[] = [];
+    for (const [index, cycle] of cycles.entries()) {
+      assert.ok(cycle.queryEnd);
+      const result = await getAnalyticsPeriodIncome(session, {
+        platform,
+        resourceIds: [id],
+        startDate: cycle.startDate,
+        endDate: cycle.queryEnd,
+        settlementMonth: cycle.endDate.slice(0, 7),
+      });
+      assert.ok(result.ok);
+      const summary = summarizePeriodIncome([resource], result.value.records, cycle.dates);
+      assert.equal(summary.recordCount, 1);
+      assert.deepEqual(summary.totals, {
+        diamonds: (index + 1) * 100,
+        emeralds: (index + 1) * 10,
+        purchases: index + 1,
+      });
+      assert.notEqual(summary.totals.diamonds, null);
+      totals.push(summary.totals.diamonds as number);
+      if (platform === "pe") {
+        assert.ok(result.value.estimate);
+        assert.equal(result.value.estimate?.source, "pe-monthly");
+        assert.equal(result.value.estimate.month, index === 0 ? "2026-10" : "2026-11");
+        assert.equal(result.value.estimate.diamonds, 5000);
+        assert.equal(result.value.estimate.afterTaxYuan, 33);
+      } else assert.equal(result.value.estimate, null);
+    }
+    assert.equal(
+      totals.reduce((sum, value) => sum + value, 0),
+      300,
+    );
+    assert.deepEqual(dailyRanges, [
+      ["20260922", "20261021"],
+      ["20261022", "20261022"],
+    ]);
+    assert.deepEqual(
+      monthlyRanges,
+      platform === "pe"
+        ? [
+            ["20261001", "20261031"],
+            ["20261101", "20261130"],
+          ]
+        : [],
+    );
+  }
+});
 
 test("PE period estimates use month totals and only earlier paid cost references", async () => {
   const calls: string[] = [];
@@ -823,25 +919,38 @@ test("historical missing totals and malformed monthly responses never become pro
   }
 });
 
-test("a cycle starting on the 22nd can provisionally estimate next month's label", async () => {
+test("the first completed day of a new cycle provisionally estimates next month's label", async () => {
+  const cycle = incomeCycle(0, "2026-10-23");
+  assert.ok(cycle.queryEnd);
   globalThis.fetch = async (input) => {
     const path = new URL(String(input)).pathname;
     if (path === "/items/categories/pe/")
       return response({
         item: [{ item_id: id, item_name: "work", create_time: "2026-01-01", online_time: "2026-01-01" }],
       });
-    if (path.includes("day_detail")) return response({ data: [{ ...row, dateid: "20261023" }] });
+    if (path.includes("day_detail")) {
+      const url = new URL(String(input));
+      assert.equal(url.searchParams.get("start_date"), "20261022");
+      assert.equal(url.searchParams.get("end_date"), "20261022");
+      return response({ data: [{ ...row, dateid: "20261022" }] });
+    }
     if (path === "/incomes") return response({ count: 1, incomes: [costBill("2026-09")] });
     return response({ data: [] });
   };
   const result = await getAnalyticsPeriodIncome(
     session,
-    { startDate: "2026-10-22", endDate: "2026-10-23", settlementMonth: "2026-11", resourceIds: [id] },
-    new Date("2026-10-24T00:00:00+08:00"),
+    {
+      startDate: cycle.startDate,
+      endDate: cycle.queryEnd,
+      settlementMonth: cycle.endDate.slice(0, 7),
+      resourceIds: [id],
+    },
+    new Date("2026-10-23T00:00:00+08:00"),
   );
   assert.ok(result.ok && result.value.estimate);
   assert.equal(result.value.estimate.source, "pe-period-daily");
   assert.equal(result.value.estimate.month, "2026-11");
+  assert.equal(result.value.estimate.diamonds, 100);
 });
 
 test("selecting one module still uses the whole PE provisional account and stable allocations", async () => {

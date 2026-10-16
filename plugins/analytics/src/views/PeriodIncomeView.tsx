@@ -122,7 +122,7 @@ function PeriodIncomeScope({
     <>
       <Panel className={styles.filters} aria-label="周期收益筛选">
         <div className={styles.heading}>
-          <strong>{platform.toUpperCase()} · 每月 22 日至下月 22 日（两端计入）</strong>
+          <strong>{platform.toUpperCase()} · 每月 22 日至下月 21 日（含起止当天）</strong>
           <span className={styles.muted}>北京时间 · 不含当天未完结数据</span>
         </div>
         <div className={styles.controls}>
@@ -303,7 +303,8 @@ function PeriodIncomeResults({
             <PeriodAllocationTable key={selectedId} estimate={estimate} selectedId={selectedId} />
           )}
           <p className={styles.note} role="status">
-            起止两个 22 日都计入，相邻周期会重叠一天，不可直接跨周期累加。收益按平台日数据汇总，不代表最终结算金额。
+            每月 22 日至下月 21 日，含起止当天，相邻周期不重叠。
+            日数据按此范围汇总，人民币估算以注明的数据来源为准，不代表最终结算金额。
             {summary.missingDays > 0 &&
               ` 当前有 ${summary.missingDays} 个资源日未返回记录，合计可能不完整；缺失数据不按 0 计算。`}
           </p>
