@@ -66,7 +66,10 @@ export function createServices(ensureTray: () => void, showWindow: () => void) {
     bundledPlugins,
     bundledThemes,
     logs,
-    () => broadcast("plugins.changed", plugins.snapshot()),
+    () => {
+      mcp?.refreshPluginTools();
+      broadcast("plugins.changed", plugins.snapshot());
+    },
   );
   logs.write("info", "app", `应用启动，已发现 ${plugins.snapshot().plugins.length} 个插件与主题`);
   process.on("uncaughtExceptionMonitor", () => logs.write("error", "app", "主进程发生未捕获异常"));

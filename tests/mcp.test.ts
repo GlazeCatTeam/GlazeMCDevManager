@@ -9,7 +9,9 @@ import { LogService } from "../apps/desktop/src/main/logs/service";
 import { createMcpApplication, type NavigationWindow } from "../apps/desktop/src/main/mcp/application";
 import { createMcpBusiness } from "../apps/desktop/src/main/mcp/business";
 import { withoutTomlServer } from "../apps/desktop/src/main/mcp/installers";
+import { PluginToolCalls } from "../apps/desktop/src/main/mcp/plugin-calls";
 import { type BuiltinPlugin, PluginRegistry } from "../apps/desktop/src/main/plugins/registry";
+import { discoverPluginTools } from "../apps/desktop/src/main/plugins/tools";
 import { createApplicationActions } from "../apps/desktop/src/main/preferences/actions";
 import { AppearanceService } from "../apps/desktop/src/main/preferences/appearance";
 import { CacheService } from "../apps/desktop/src/main/preferences/cache";
@@ -29,6 +31,10 @@ import {
   mcpLevelOf,
   mcpLevels,
   mcpPermissions,
+  type PluginManifest,
+  type PluginToolCall,
+  pluginToolName,
+  validatePluginTools,
 } from "../packages/contracts/src";
 import { Client } from "../packages/mcp/node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js";
 import { StreamableHTTPClientTransport } from "../packages/mcp/node_modules/@modelcontextprotocol/sdk/dist/esm/client/streamableHttp.js";
@@ -125,6 +131,446 @@ function fixture(legacy = true) {
     (await call("works_draft_create", { itemId: "123", idempotencyKey: key })) as McpDraft;
   return { service, client, ports, remote, accounts, counts, call, draft, durable: () => durable };
 }
+
+/** Build synthetic plugin manifests independent of concurrently edited bundled plugins */
+function pluginManifest(): PluginManifest {
+  return {
+    id: "test.analytics",
+    name: "测试分析",
+    version: "1.0.0",
+    description: "隔离测试插件",
+    permissions: [
+      "netease:analytics.read",
+      "netease:messages.write",
+      "netease:income.read",
+      "storage",
+      "netease:account.manage",
+    ],
+    contributes: {
+      tools: [
+        {
+          id: "summary",
+          title: "测试汇总",
+          description: "返回筛选后的汇总",
+          permission: "netease:analytics.read",
+          risk: "read",
+          input: {
+            type: "object",
+            properties: {
+              count: { type: "integer", minimum: 1, maximum: 3 },
+              mode: { type: "string", enum: ["all", "top"], maxLength: 3 },
+              ratio: { type: "number", minimum: 0, maximum: 1, enum: [0, 0.5, 1] },
+              tags: { type: "array", items: { type: "string", maxLength: 3 }, maxItems: 2 },
+              active: { type: "boolean" },
+              draftId: { type: "string", maxLength: 20 },
+            },
+            required: ["count"],
+          },
+        },
+        {
+          id: "update",
+          title: "测试更新",
+          description: "执行一次更新",
+          permission: "netease:messages.write",
+          risk: "write",
+          input: { type: "object", properties: { text: { type: "string", maxLength: 10 } }, required: ["text"] },
+        },
+      ],
+    },
+  };
+}
+
+/** Wire the real dispatcher to a fake main window and configurable renderer replies */
+function pluginFixture(timeoutMs = 30_000) {
+  const f = fixture(false);
+  const manifest = pluginManifest();
+  const warnings: string[] = [];
+  const definitions = discoverPluginTools([manifest], (message) => warnings.push(message));
+  const calls: PluginToolCall[] = [];
+  const state = { enabled: true, window: true, reply: true, error: "", beforeSend: () => {} };
+  const dispatcher = new PluginToolCalls(
+    () =>
+      state.window
+        ? {
+            id: 7,
+            send: (call) => {
+              calls.push(call);
+              state.beforeSend();
+              if (state.reply)
+                dispatcher.result(
+                  7,
+                  state.error
+                    ? { callId: call.callId, ok: false, error: state.error }
+                    : {
+                        callId: call.callId,
+                        ok: true,
+                        value: {
+                          value: call.params,
+                          account: call.account,
+                          token: "secret",
+                          nested: { cookie: "secret", count: 1 },
+                        },
+                      },
+                );
+            },
+          }
+        : null,
+    (id, permission) => f.service.allowed(id, permission),
+    timeoutMs,
+  );
+  f.ports.assertEnabled = (method) => {
+    if (method.startsWith("plugin:") && !state.enabled) throw new McpError("forbidden", "对应插件已停用");
+  };
+  f.ports.invokePlugin = (id, tool, params, guard, beforeWrite) =>
+    dispatcher.invoke(id, tool, params, guard, beforeWrite);
+  f.service.setPluginTools(definitions);
+  return { ...f, manifest, definitions, warnings, calls, state, dispatcher };
+}
+
+test("plugin contributions expose strict schemas, annotations, descriptions and sanitized results over MCP", async () => {
+  const f = pluginFixture();
+  assert.deepEqual(f.warnings, []);
+  assert.equal(pluginToolName(f.manifest.id, "summary"), "plugin_analytics_summary");
+  assert.ok(f.service.tools(f.client.id).some((tool) => tool.name === "plugin_analytics_summary"));
+  const server = createMcpServer(f.service, f.client.id);
+  const client = new Client({ name: "Plugin test", version: "1" });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  await server.connect(b);
+  await client.connect(a);
+  try {
+    const list = (await client.listTools()).tools;
+    const read = list.find((tool) => tool.name === "plugin_analytics_summary");
+    assert.ok(read);
+    assert.match(read.description ?? "", /来自插件「测试分析」/);
+    assert.equal(read.annotations?.readOnlyHint, true);
+    assert.equal(list.find((tool) => tool.name === "plugin_analytics_update")?.annotations?.readOnlyHint, false);
+    assert.equal(read.inputSchema.additionalProperties, false);
+    const result = await client.callTool({
+      name: read.name,
+      arguments: { count: 2, ratio: 0.5, draftId: "plugin-owned" },
+    });
+    assert.equal(result.isError, undefined);
+    assert.equal(JSON.stringify(result).includes("secret"), false);
+    assert.equal(f.calls[0]?.account, "a");
+    assert.deepEqual(f.calls[0]?.params, { count: 2, ratio: 0.5, draftId: "plugin-owned" });
+    assert.equal(f.service.data.audit[0]?.title, "测试汇总");
+  } finally {
+    await client.close();
+    await server.close();
+    f.dispatcher.close();
+  }
+});
+
+test("plugin schemas reject unknown, missing, enum, range, length and account violations", async () => {
+  const f = pluginFixture();
+  for (const input of [
+    {},
+    { count: 0 },
+    { count: 4 },
+    { count: 1.5 },
+    { count: 1, extra: true },
+    { count: 1, mode: "bad" },
+    { count: 1, ratio: 0.3 },
+    { count: 1, ratio: 2 },
+    { count: 1, tags: ["long"] },
+    { count: 1, tags: ["a", "b", "c"] },
+    { count: 1, tags: [1] },
+    { count: 1, active: "yes" },
+  ])
+    await assert.rejects(f.call("plugin_analytics_summary", input), (error: McpError) => error.kind === "validation");
+  await assert.rejects(
+    f.call("plugin_analytics_update", { text: "write" }),
+    (error: McpError) => error.kind === "validation",
+  );
+  await assert.rejects(f.call("plugin_analytics_summary", { count: 1, account: "b" }), /账号未授权/);
+  assert.equal(f.calls.length, 0);
+  await f.call("plugin_analytics_summary", { count: 1, mode: "all", tags: ["a"], active: true });
+  assert.equal(f.calls.length, 1);
+});
+
+test("plugin permission requests preserve one-time grants and intersect manifest permissions at dispatch", async () => {
+  const f = pluginFixture();
+  f.service.grant(f.client.id, {
+    accounts: ["a"],
+    defaultAccount: "a",
+    permissions: ["netease:account.read", "netease:income.read"],
+  });
+  await assert.rejects(
+    f.call("plugin_analytics_summary", { count: 0 }),
+    (error: McpError) => error.kind === "validation",
+  );
+  assert.equal(f.service.requestCount(), 0);
+  const listed = f.service.catalog(f.client.id).find((entry) => entry.tool.name === "plugin_analytics_summary");
+  assert.equal(listed?.granted, false);
+  await assert.rejects(
+    f.call("plugin_analytics_summary", { count: 1 }),
+    (error: McpError) => error.kind === "permission_pending",
+  );
+  const request = f.service.snapshot().requests[0];
+  assert.ok(request);
+  assert.match(request.reason, /测试汇总/);
+  f.service.answer(request.id, "once");
+  await f.call("plugin_analytics_summary", { count: 1 });
+  assert.deepEqual(new Set(f.calls[0]?.permissions), new Set(["netease:analytics.read", "netease:income.read"]));
+  assert.equal(f.service.allowed(f.client.id, "netease:analytics.read"), false);
+  await assert.rejects(
+    f.call("plugin_analytics_summary", { count: 1 }),
+    (error: McpError) => error.kind === "permission_pending",
+  );
+});
+
+test("disabled and replaced plugin tools disappear and cannot finish stale calls", async () => {
+  const f = pluginFixture();
+  f.state.enabled = false;
+  assert.equal(
+    f.service.tools(f.client.id).some((tool) => tool.plugin),
+    false,
+  );
+  assert.equal(
+    f.service.catalog(f.client.id).some(({ tool }) => tool.plugin),
+    false,
+  );
+  await assert.rejects(f.call("plugin_analytics_summary", { count: 1 }), /停用/);
+  f.state.enabled = true;
+  f.state.beforeSend = () => {
+    f.state.enabled = false;
+  };
+  await assert.rejects(f.call("plugin_analytics_summary", { count: 1 }), /停用/);
+  f.state.enabled = true;
+  f.state.beforeSend = () => f.service.setPluginTools([]);
+  await assert.rejects(f.call("plugin_analytics_summary", { count: 1 }), /已变更/);
+  assert.equal(f.service.data.audit[0]?.title, "测试汇总");
+  await assert.rejects(f.call("plugin_analytics_summary", { count: 1 }), /不存在/);
+});
+
+test("plugin tool replacements notify connected HTTP clients and refresh their list", async () => {
+  const f = pluginFixture();
+  const http = new McpHttpServer(f.service);
+  const endpoint = await http.start(0);
+  f.ports.changed = () => http.changed();
+  const client = new Client({ name: "Plugin refresh", version: "1" });
+  try {
+    await client.connect(new StreamableHTTPClientTransport(new URL(endpoint)));
+    const entry = f.service.data.clients.find((item) => item.name === "Plugin refresh");
+    assert.ok(entry);
+    f.service.grant(entry.id, { accounts: ["a"], defaultAccount: "a", permissions: [...mcpPermissions] });
+    assert.ok((await client.listTools()).tools.some((tool) => tool.name === "plugin_analytics_summary"));
+    let notifications = 0;
+    client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
+      notifications++;
+    });
+    f.service.setPluginTools([]);
+    for (let n = 0; n < 30 && !notifications; n++) await delay(10);
+    assert.ok(notifications > 0);
+    assert.equal(
+      (await client.listTools()).tools.some((tool) => tool.name.startsWith("plugin_")),
+      false,
+    );
+    f.service.setPluginTools(f.definitions);
+    assert.ok((await client.listTools()).tools.some((tool) => tool.name === "plugin_analytics_summary"));
+  } finally {
+    await client.close();
+    await http.stop();
+  }
+});
+
+test("plugin dispatcher rejects unknown, malformed, foreign, duplicate and late result IDs", async () => {
+  const f = pluginFixture();
+  f.state.reply = false;
+  const pending = f.call("plugin_analytics_summary", { count: 1 });
+  await delay(0);
+  const callId = f.calls[0]?.callId;
+  assert.ok(callId);
+  try {
+    for (const input of [
+      null,
+      [],
+      {},
+      { callId, ok: "true", value: 1 },
+      { callId, ok: true },
+      { callId, ok: false, error: 1 },
+      { callId, ok: true, value: 1, extra: true },
+    ])
+      assert.throws(
+        () => f.dispatcher.result(7, input),
+        (error: McpError) => error.kind === "validation",
+      );
+    assert.throws(() => f.dispatcher.result(8, { callId, ok: true, value: 1 }), /窗口不匹配/);
+    assert.throws(() => f.dispatcher.result(7, { callId: "unknown", ok: true, value: 1 }), /不存在/);
+    f.dispatcher.result(7, { callId, ok: true, value: { safe: true, password: "secret" } });
+    assert.deepEqual(await pending, { safe: true });
+    assert.throws(() => f.dispatcher.result(7, { callId, ok: true, value: 2 }), /已完成/);
+  } finally {
+    f.dispatcher.close();
+  }
+});
+
+test("plugin errors, unavailable windows, timeouts and shutdown return explicit failures", async () => {
+  const f = pluginFixture(5);
+  f.state.error = "插件计算失败";
+  await assert.rejects(
+    f.call("plugin_analytics_summary", { count: 1 }),
+    (error: McpError) => error.kind === "plugin" && error.message === "插件计算失败",
+  );
+  f.state.window = false;
+  await assert.rejects(f.call("plugin_analytics_summary", { count: 1 }), /请先打开 Glaze 窗口/);
+  f.state.window = true;
+  f.state.reply = false;
+  await assert.rejects(f.call("plugin_analytics_summary", { count: 1 }), /插件工具没有响应，请确认 Glaze 窗口已打开/);
+  const late = f.calls.at(-1);
+  assert.throws(() => f.dispatcher.result(7, { callId: late?.callId, ok: true, value: 1 }), /已完成/);
+  const waiting = f.call("plugin_analytics_summary", { count: 1 });
+  const rejected = assert.rejects(waiting, /服务已停止/);
+  await delay(0);
+  f.dispatcher.close();
+  await rejected;
+});
+
+test("plugin writes persist before sending, deduplicate, retain titles and never retry unknown results", async () => {
+  const f = pluginFixture(5);
+  f.state.beforeSend = () => assert.equal(f.durable().operations[0]?.phase, "writing");
+  const input = { text: "hello", idempotencyKey: "write" };
+  const first = (await f.call("plugin_analytics_update", input)) as McpOperation;
+  assert.equal(first.state, "succeeded");
+  assert.equal(first.title, "测试更新");
+  assert.deepEqual(f.calls[0]?.params, { text: "hello" });
+  assert.equal(((await f.call("plugin_analytics_update", input)) as McpOperation).id, first.id);
+  assert.equal(f.calls.length, 1);
+  await assert.rejects(f.call("plugin_analytics_update", { ...input, text: "changed" }), /幂等键/);
+  f.state.reply = false;
+  const unknownInput = { ...input, idempotencyKey: "timeout" };
+  const unknown = (await f.call("plugin_analytics_update", unknownInput)) as McpOperation;
+  assert.equal(unknown.state, "unknown");
+  assert.match(unknown.message, /禁止自动重试/);
+  assert.equal(((await f.call("plugin_analytics_update", unknownInput)) as McpOperation).id, unknown.id);
+  await assert.rejects(f.call("plugin_analytics_update", { ...input, idempotencyKey: "new" }), /待核实/);
+  assert.equal(f.calls.length, 2);
+  f.service.setPluginTools([]);
+  assert.equal(f.service.snapshot().operations[0]?.title, "测试更新");
+});
+
+test("plugin guards stop revoked writes before dispatch and reject results after grant changes", async () => {
+  const f = pluginFixture();
+  const invoke = f.ports.invokePlugin;
+  assert.ok(invoke);
+  f.ports.invokePlugin = (id, tool, params, guard, beforeWrite) => {
+    f.service.grant(id, { accounts: ["a"], defaultAccount: "a", permissions: [] });
+    return invoke(id, tool, params, guard, beforeWrite);
+  };
+  await assert.rejects(f.call("plugin_analytics_update", { text: "test", idempotencyKey: "revoked" }), /权限|授权/);
+  assert.equal(f.calls.length, 0);
+  assert.equal(f.service.data.operations[0]?.state, "failed");
+  f.ports.invokePlugin = invoke;
+  f.service.grant(f.client.id, { accounts: ["a"], defaultAccount: "a", permissions: [...mcpPermissions] });
+  f.state.beforeSend = () => f.service.grant(f.client.id, { accounts: ["a"], defaultAccount: "a", permissions: [] });
+  await assert.rejects(f.call("plugin_analytics_update", { text: "test", idempotencyKey: "in-flight" }), /权限|授权/);
+  assert.equal(f.service.data.operations[0]?.state, "unknown");
+});
+
+test("plugin write failures distinguish explicit rejection from missing windows and service shutdown", async () => {
+  const f = pluginFixture();
+  f.state.error = "插件拒绝更新";
+  const failed = (await f.call("plugin_analytics_update", {
+    text: "test",
+    idempotencyKey: "rejected",
+  })) as McpOperation;
+  assert.equal(failed.state, "failed");
+  assert.equal(failed.message, "插件拒绝更新");
+  f.state.window = false;
+  const unavailable = (await f.call("plugin_analytics_update", {
+    text: "test",
+    idempotencyKey: "no-window",
+  })) as McpOperation;
+  assert.equal(unavailable.state, "failed");
+  assert.match(unavailable.message, /窗口/);
+  assert.equal(f.calls.length, 1);
+  f.state.window = true;
+  f.state.reply = false;
+  f.ports.changed = () => {
+    if (!f.service.data.enabled) f.dispatcher.close();
+  };
+  const waiting = f.call("plugin_analytics_update", { text: "test", idempotencyKey: "stop" });
+  const rejected = assert.rejects(waiting, /服务已关闭/);
+  await delay(0);
+  f.service.disable();
+  await rejected;
+  assert.equal(f.service.data.operations[0]?.state, "unknown");
+  assert.match(f.service.data.operations[0]?.message ?? "", /服务已停止.*禁止自动重试/);
+  assert.throws(() => f.dispatcher.result(7, { callId: f.calls.at(-1)?.callId, ok: true, value: 1 }), /已完成/);
+});
+
+test("plugin contributions without input accept only optional account and writes stay isolated by account", async () => {
+  const f = pluginFixture();
+  const manifest = pluginManifest();
+  for (const tool of manifest.contributes?.tools ?? []) delete tool.input;
+  f.service.setPluginTools(discoverPluginTools([manifest], () => assert.fail("valid manifest")));
+  await f.call("plugin_analytics_summary");
+  assert.deepEqual(f.calls[0]?.params, {});
+  await assert.rejects(f.call("plugin_analytics_summary", { extra: true }), /Unrecognized/);
+  f.service.grant(f.client.id, { accounts: ["a", "b"], defaultAccount: "a", permissions: [...mcpPermissions] });
+  const first = (await f.call("plugin_analytics_update", { idempotencyKey: "per-account" })) as McpOperation;
+  const second = (await f.call("plugin_analytics_update", {
+    account: "b",
+    idempotencyKey: "per-account",
+  })) as McpOperation;
+  assert.notEqual(first.id, second.id);
+  assert.equal(f.calls.at(-1)?.account, "b");
+  assert.equal(f.client.defaultAccount, "a");
+});
+
+test("invalid plugin contributions are skipped with warnings while valid siblings remain registered", () => {
+  const manifest = pluginManifest();
+  const tools = manifest.contributes?.tools;
+  assert.ok(tools?.[0]);
+  tools.push({ ...tools[0], id: "invalid", permission: "netease:works.read" });
+  tools.push({ ...tools[0], id: "reserved", input: { type: "object", properties: { account: { type: "string" } } } });
+  tools.push({
+    ...tools[0],
+    id: "range",
+    input: { type: "object", properties: { count: { type: "integer", minimum: 3, maximum: 1 } } },
+  });
+  const warnings: string[] = [];
+  const definitions = discoverPluginTools([manifest], (message) => warnings.push(message));
+  assert.deepEqual(
+    definitions.map((tool) => tool.name),
+    ["plugin_analytics_summary", "plugin_analytics_update"],
+  );
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0] ?? "", /未在插件|保留|范围/);
+  const duplicate = pluginManifest();
+  duplicate.id = "other.analytics";
+  assert.deepEqual(
+    discoverPluginTools([pluginManifest(), duplicate], () => {}),
+    [],
+  );
+});
+
+test("plugin manifest validation rejects invalid ids, duplicate ids, metadata, permissions and input fields", () => {
+  const manifest = pluginManifest();
+  assert.deepEqual(validatePluginTools(manifest), []);
+  const tool = manifest.contributes?.tools?.[0];
+  assert.ok(tool);
+  const invalid = [
+    { ...tool, id: "Bad-id" },
+    { ...tool, title: "" },
+    { ...tool, description: "" },
+    { ...tool, permission: "netease:works.read" },
+    { ...tool, permission: "netease:messages.write" },
+    { ...tool, permission: "works:draft" },
+    { ...tool, risk: "dangerous" },
+    { ...tool, input: { type: "array", properties: {} } },
+    { ...tool, input: { type: "object", properties: { bad: { type: "object" } } } },
+    { ...tool, input: { type: "object", properties: { bad: { type: "array", items: { type: "number" } } } } },
+    { ...tool, input: { type: "object", properties: {}, required: ["missing"] } },
+  ];
+  for (const bad of invalid)
+    assert.ok(validatePluginTools({ ...manifest, contributes: { tools: [bad] } } as PluginManifest).length > 0);
+  assert.ok(
+    validatePluginTools({ ...manifest, contributes: { tools: [tool, tool] } }).some((message) =>
+      message.includes("重复"),
+    ),
+  );
+});
 
 test("unpaired clients see no tools; grants remain fixed when the UI account switches", async () => {
   const f = fixture();

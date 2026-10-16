@@ -63,6 +63,29 @@ export class McpService {
   accessWaitMs = 60_000;
   readonly definitions = toolDefinitions();
 
+  /** Replace plugin contributions without disturbing built-in tools or their public names */
+  setPluginTools(definitions: ToolDefinition[]): void {
+    const builtins = this.definitions.filter((tool) => !tool.plugin);
+    const names = new Set(builtins.map((tool) => tool.name));
+    for (const tool of definitions) {
+      if (!tool.plugin || names.has(tool.name)) throw new McpError("validation", "插件工具名无效或重复");
+      names.add(tool.name);
+    }
+    this.definitions.splice(0, this.definitions.length, ...builtins, ...definitions);
+    this.ports.changed();
+  }
+
+  /** Hide disabled contributions even before a host catalog refresh arrives */
+  private toolAvailable(tool: ToolDefinition): boolean {
+    if (!tool.plugin) return true;
+    try {
+      this.ports.assertEnabled(`plugin:${tool.plugin.pluginId}`);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   constructor(
     readonly data: McpData,
     private readonly ports: McpPorts,
@@ -413,10 +436,12 @@ export class McpService {
   /** List every tool for approved clients so the AI knows what it can ask for */
   catalog(id: string): { tool: ToolDefinition; granted: boolean }[] {
     if (!this.data.clients.find((entry) => entry.id === id)?.approved) return [];
-    return this.definitions.map((tool) => ({
-      tool,
-      granted: tool.permission === null || this.allowed(id, tool.permission),
-    }));
+    return this.definitions
+      .filter((tool) => this.toolAvailable(tool))
+      .map((tool) => ({
+        tool,
+        granted: tool.permission === null || this.allowed(id, tool.permission),
+      }));
   }
 
   /** Keep a keyed client's grant when one of its sessions ends; other sessions stay connected */
@@ -545,7 +570,7 @@ export class McpService {
     const client = this.client(id, false);
     return client.approved
       ? this.definitions.filter(
-          (tool) => tool.permission === null || client.permissions.includes(tool.permission as never),
+          (tool) => this.toolAvailable(tool) && (tool.permission === null || this.allowed(id, tool.permission)),
         )
       : [];
   }
@@ -558,6 +583,7 @@ export class McpService {
     if (name === "glaze_request_access") return this.requestAccessTool(id, input);
     const tool = this.definitions.find((entry) => entry.name === name);
     if (!tool) throw new McpError("unknown_tool", "工具不存在");
+    if (tool.plugin) this.ports.assertEnabled(`plugin:${tool.plugin.pluginId}`);
     if (!this.client(id, false).approved) this.requestConnect(id);
     // Reject malformed calls before asking the user to approve anything
     const checked = tool.schema.safeParse(input ?? {});
@@ -583,18 +609,24 @@ export class McpService {
       const params = parsed.data as Record<string, unknown>;
       const client = this.authorize(id, tool.permission);
       const epoch = this.epochs.get(id) ?? 0;
-      const draft = typeof params.draftId === "string" ? this.draft(id, params.draftId) : undefined;
+      const draft = !tool.plugin && typeof params.draftId === "string" ? this.draft(id, params.draftId) : undefined;
       const accountRequired = !name.startsWith("app_") || name === "app_switch_account";
       account = accountRequired
         ? (draft?.account ?? (typeof params.account === "string" ? params.account : client.defaultAccount))
         : null;
       if (accountRequired) this.authorize(id, tool.permission, account ?? undefined);
+      if (tool.plugin && !account) throw new McpError("forbidden", "请设置已授权默认账号");
+      /** Recheck the original contribution and grant after every asynchronous phase */
       const guard = () => {
         this.authorize(id, tool.permission, account ?? undefined);
+        if (tool.plugin) {
+          this.ports.assertEnabled(`plugin:${tool.plugin.pluginId}`);
+          if (!this.definitions.includes(tool)) throw new McpError("forbidden", "插件工具已变更，请重新调用");
+        }
         if ((this.epochs.get(id) ?? 0) !== epoch) throw new McpError("forbidden", "请求期间授权发生变化");
       };
       let result: unknown;
-      if (tool.invoke) result = await this.business(client, tool.invoke, { ...params, account }, tool.readOnly, guard);
+      if (tool.invoke) result = await this.business(client, tool, { ...params, account }, guard);
       else if (!params.draftId && !name.startsWith("works_draft_") && !tool.method.includes("."))
         result = await this.direct(client, name, { ...params, account }, guard);
       else if (tool.method.includes(".")) {
@@ -626,19 +658,19 @@ export class McpService {
     } finally {
       this.calls.delete(id);
       if (tool.permission) this.once.get(id)?.delete(tool.permission as McpPermission);
-      this.audit(id, name, account, outcome);
+      this.audit(id, name, account, outcome, tool.title);
     }
   }
 
   /** Append bounded metadata only; never log parameters, credentials or response bodies */
-  private audit(id: string, tool: string, account: string | null, result: string): void {
+  private audit(id: string, tool: string, account: string | null, result: string, title?: string): void {
     this.data.audit.unshift({
       id: randomUUID(),
       time: new Date().toISOString(),
       clientId: id,
       clientName: this.data.clients.find((entry) => entry.id === id)?.name ?? "已撤销客户端",
       tool,
-      title: this.definitions.find((entry) => entry.name === tool)?.title ?? tool,
+      title: title ?? this.definitions.find((entry) => entry.name === tool)?.title ?? tool,
       account,
       result,
     });
@@ -754,18 +786,28 @@ export class McpService {
     }
   }
 
-  /** Execute a whitelisted host business method with durable deduplication and per-target locking */
+  /** Execute host or plugin tools with the same durable deduplication and per-target locking */
   private async business(
     client: StoredClient,
-    method: string,
+    tool: ToolDefinition,
     params: Record<string, unknown>,
-    readOnly: boolean,
     guard: () => void,
   ): Promise<unknown> {
-    this.ports.assertEnabled(method);
-    if (!this.ports.invoke) throw new McpError("unavailable", "业务适配器未注册");
+    const method = tool.invoke as string;
+    const owner = tool.plugin ? `plugin:${tool.plugin.pluginId}` : method;
+    this.ports.assertEnabled(owner);
+    if (tool.plugin ? !this.ports.invokePlugin : !this.ports.invoke)
+      throw new McpError("unavailable", "业务适配器未注册");
+    /** Route plugin calls with the client identity kept outside public parameters */
+    const invoke = (input: Record<string, unknown>, check: () => void, beforeWrite: () => void) => {
+      check();
+      if (tool.plugin && this.ports.invokePlugin)
+        return this.ports.invokePlugin(client.id, tool.plugin, input, check, beforeWrite);
+      if (this.ports.invoke) return this.ports.invoke(method, input, check, beforeWrite);
+      throw new McpError("unavailable", "业务适配器未注册");
+    };
     const account = (params.account as string | null) ?? "";
-    if (readOnly) return this.ports.invoke(method, params, guard, guard);
+    if (tool.readOnly) return invoke(params, guard, guard);
     const key = `business:${client.id}:${account}:${method}:${params.idempotencyKey}`;
     const fingerprint = createHash("sha256").update(canonical(params)).digest("hex");
     const prior = this.data.operations.find((op) => op.key === key);
@@ -773,7 +815,7 @@ export class McpService {
       if (prior.fingerprint !== fingerprint) throw new McpError("conflict", "幂等键已用于其他内容");
       return this.operationView(prior);
     }
-    const target = `${account}:${method.startsWith("works.") ? String(params.itemId) : method.split(".")[0]}`;
+    const target = `${account}:${tool.plugin ? `plugin:${tool.plugin.pluginId}` : method.startsWith("works.") ? String(params.itemId) : method.split(".")[0]}`;
     if (
       this.writes.has(target) ||
       this.data.operations.some(
@@ -796,6 +838,7 @@ export class McpService {
       revision: 1,
       action: "business",
       method,
+      title: tool.title,
       target,
       ...(typeof params.itemId === "string" ? { itemId: params.itemId } : {}),
       state: "running",
@@ -811,9 +854,10 @@ export class McpService {
     let sent = false;
     try {
       this.commit();
+      /** Recheck the owner and grant before each business execution phase */
       const check = () => {
         guard();
-        this.ports.assertEnabled(method);
+        this.ports.assertEnabled(owner);
       };
       const beforeWrite = () => {
         check();
@@ -849,7 +893,7 @@ export class McpService {
           delete input.imageAssetId;
         }
       }
-      op.result = await this.ports.invoke(method, input, check, beforeWrite);
+      op.result = await invoke(input, check, beforeWrite);
       if (op.result && typeof op.result === "object" && "outcome" in op.result && op.result.outcome === "uncertain") {
         op.state = "unknown";
         op.message = "平台结果待核实，禁止自动重试";
@@ -860,10 +904,15 @@ export class McpService {
       }
     } catch (error) {
       const kind = error && typeof error === "object" && "kind" in error ? String(error.kind) : "internal";
-      op.state = sent && ["network", "timeout", "parse", "internal"].includes(kind) ? "unknown" : "failed";
+      op.state =
+        sent && (tool.plugin ? kind !== "plugin" : ["network", "timeout", "parse", "internal"].includes(kind))
+          ? "unknown"
+          : "failed";
       op.message =
         op.state === "unknown"
-          ? "平台写入结果待核实，禁止自动重试"
+          ? tool.plugin && error instanceof McpError
+            ? `${error.message}；执行结果待核实，禁止自动重试`
+            : "平台写入结果待核实，禁止自动重试"
           : error instanceof Error
             ? error.message
             : "操作失败";

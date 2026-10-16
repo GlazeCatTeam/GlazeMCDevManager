@@ -23,7 +23,8 @@
         "page": "home",
         "icon": "nav.home",
         "group": "top",
-        "order": 10
+        "order": 10,
+        "section": "首页"
       }
     ],
     "widgets": [

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { appTools } from "./app-tools";
 import { businessTools } from "./business-tools";
 import { directTools } from "./direct-tools";
+import type { PluginToolTarget } from "./model";
 
 const id = z.string().min(1).max(128);
 const itemId = z.string().regex(/^\d{1,32}$/);
@@ -75,6 +76,7 @@ export interface ToolDefinition {
   schema: z.ZodObject;
   readOnly: boolean;
   invoke?: string;
+  plugin?: PluginToolTarget;
 }
 
 /** Derive public tools only from explicitly exposed, non-credential capabilities */

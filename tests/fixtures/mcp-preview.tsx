@@ -1,7 +1,8 @@
 import { createRoot } from "react-dom/client";
+import { AccessRequestDialog } from "../../apps/desktop/src/renderer/shell/AccessRequestDialog";
 import { NavigationProvider } from "../../packages/plugin-sdk/src";
 import { applyTheme } from "../../packages/theme/src";
-import { AccessRequestDialog, AssistantPage } from "../../plugins/assistant/src";
+import { AssistantPage } from "../../plugins/assistant/src";
 import oreUi from "../../themes/ore-ui/theme.json";
 import { installMcpMock } from "./mcp-mock";
 import "../../apps/desktop/src/renderer/global.css";

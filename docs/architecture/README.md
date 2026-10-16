@@ -67,6 +67,7 @@ flowchart TD
 | [20 关于页面](20-about.md) | 版本、固定项目链接、离线依赖许可与运行时声明 |
 | [21 活动推广](21-promotion.md) | 作品活动、折扣特卖、PE 轮播图申请、能力和验收 |
 | [22 MCP 实装](22-mcp-runtime.md) | AI 助手页、一键连接与连接密钥、三档权限、AI 主动申请、材料与写入保护 |
+| [23 插件注册表与开发](23-plugin-registry.md) | 清单贡献点、插件模块 definePlugin、外壳注册表、设置分区与首页组件、插件贡献的 MCP 工具 |
 
 项目目标、已敲定的决定和当前进度见 [docs/PROJECT.md](../PROJECT.md)。架构决策记录（ADR）见 [docs/adr](../adr/README.md)。设计参考图见 [docs/design/references](../design/references/)。
 

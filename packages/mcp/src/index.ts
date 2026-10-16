@@ -1,5 +1,6 @@
-export type { McpData, McpPorts, StoredAsset } from "./model";
+export type { McpData, McpPorts, PluginToolTarget, StoredAsset } from "./model";
 export { canonical, emptyMcpData, McpError, publicValue } from "./model";
+export { pluginTool } from "./plugin-tools";
 export { createMcpServer, MCP_PORT, MCP_URL, McpHttpServer } from "./server";
 export { McpService } from "./service";
-export { toolDefinitions } from "./tools";
+export { type ToolDefinition, toolDefinitions } from "./tools";

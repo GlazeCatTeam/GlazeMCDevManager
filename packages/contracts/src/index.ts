@@ -13,6 +13,7 @@ export * from "./rpc/income";
 export * from "./rpc/logs";
 export * from "./rpc/mcp";
 export * from "./rpc/messages";
+export * from "./rpc/plugin-manifest";
 export * from "./rpc/plugins";
 export * from "./rpc/promotion";
 export * from "./rpc/rank";

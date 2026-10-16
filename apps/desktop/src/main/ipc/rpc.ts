@@ -177,6 +177,13 @@ function createHandlers(
   };
   return {
     ...mcp.handlers,
+    /** Complete only a pending tool call from the main renderer frame */
+    "plugins.toolResult": (params, event) => {
+      if (event.senderFrame !== event.sender.mainFrame)
+        throw new CapabilityError("internal", "插件工具结果只允许主界面调用");
+      mcp.pluginToolResult(event.sender.id, params);
+      return undefined;
+    },
     "app.getAbout": () => getAboutInfo(),
     "app.getLicenses": () => getDependencyLicenses(),
     "app.openProjectLink": (params) => openProjectLink(params?.link),

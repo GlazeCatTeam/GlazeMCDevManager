@@ -4,7 +4,7 @@
 
 > 2026-10-16 体验重设计：入口改为侧边栏「AI 助手」，一键连接写入 AI 工具配置并发放连接密钥，权限改为三档，缺权限时由 AI 触发应用内弹窗申请，见 [ADR-0013](../adr/0013-ai-first-mcp-experience.md) 与 [22 MCP 实装](22-mcp-runtime.md)。
 >
-> 2026-10-16 实装更新：本机 Streamable HTTP 接入、客户端授权、作品 ID 直接编辑、材料上传与授权后直接保存/提审已接入代码，设置页已使用真实状态。实际入口、工具、存储、测试及尚未完成的真实平台验收见 [22 MCP 实装](22-mcp-runtime.md)。下文保留最初架构与分阶段设计记录；其中“服务待接入/尚未实现”描述的是当时状态，传输、默认账号及批准规则以 22 文为准。第三方插件贡献工具仍待后续实现。
+> 2026-10-16 实装更新：本机 Streamable HTTP 接入、客户端授权、作品 ID 直接编辑、材料上传与授权后直接保存/提审已接入代码，设置页已使用真实状态。实际入口、工具、存储、测试及尚未完成的真实平台验收见 [22 MCP 实装](22-mcp-runtime.md)。下文保留最初架构与分阶段设计记录；其中“服务待接入/尚未实现”描述的是当时状态，传输、默认账号及批准规则以 22 文为准。内置插件贡献工具已接入，第三方代码插件安装仍未开放。
 
 ## 核心原则：能力优先
 
@@ -107,16 +107,38 @@ type CallerIdentity =
 
 ## 插件贡献工具
 
-插件清单新增贡献点 `tools`：
+已实现：主进程从 `bundledPlugins` 读取 `glaze-plugin.json` 的 `contributes.tools`，通过契约 `validatePluginTools` 校验。示例清单片段：
 
 ```json
-"tools": [
-  { "id": "top10", "title": "近 7 日销量前十", "description": "返回当前账号近 7 日销量最高的 10 个作品", "risk": "read" }
-]
+{
+  "permissions": ["netease:analytics.read"],
+  "contributes": {
+    "tools": [{
+      "id": "top_sellers",
+      "title": "销量排行",
+      "description": "返回已授权账号销量最高的若干作品",
+      "permission": "netease:analytics.read",
+      "risk": "read",
+      "input": {
+        "type": "object",
+        "properties": { "limit": { "type": "integer", "minimum": 1, "maximum": 10 } },
+        "required": ["limit"]
+      }
+    }]
+  }
+}
 ```
 
-- 处理函数通过 `ctx.tools.register(id, handler)` 注册，参数和返回值用插件自带的 JSON Schema 声明。
-- 工具能用的权限不超过插件已获得的权限，同时受 MCP 客户端授权范围约束（取交集）。
+- 名称由 `pluginToolName` 生成，例如 `glaze.analytics` 的 `top_sellers` 对应 `plugin_analytics_top_sellers`。描述前加「来自插件「插件名称」：」，标题用于权限申请和审计，`risk` 决定只读标记。工具权限必须出现在插件 `permissions` 中；只读工具只能声明查看类权限。
+- 不合法的工具被跳过并记录警告，插件本身和合法工具继续加载；重复 ID、跨插件工具名冲突也不注册。启停后替换 MCP 插件工具列表并通知客户端刷新；停用工具不列出、不可调用，执行期间再次检查插件状态。
+- `input` 仅支持扁平对象，字段为字符串、数值、整数、布尔或字符串数组；编译为 `z.strictObject`，拒绝未知字段，执行枚举、数值范围、字符串及数组长度、必填检查。`account`、`idempotencyKey` 为宿主保留参数，插件不能自行声明。
+- 自动加入可选 `account`：不传时固定使用客户端默认账号，传入时必须属于客户端授权且会话有效，不跟随界面账号变化。写工具必须提供 `idempotencyKey`，复用现有业务写入的持久化去重、按账号和插件串行、未知结果禁止重试与审计机制。
+- 已允许连接的客户端可发现工具；缺少工具权限时沿用 `ensurePermission` 弹窗申请，支持「一直允许 / 仅这一次 / 拒绝」，参数错误不会触发申请。转发权限为插件清单权限与客户端当前允许权限的交集，包含临时授权且只保留 `mcpPermissions` 中的项。
+- 主进程生成 `callId`，复核授权后向主窗口发送 `plugins.toolCall`，写工具发送前先执行 `beforeWrite`。渲染端按约定执行插件模块的 `tools[toolId](params, ctx)`，通过 `plugins.toolResult` 返回。宿主参数单独传递，插件 `params` 不包含账号或幂等键。
+- 回包只接受主窗口顶层框架、原接收窗口和未完成的 `callId`，拒绝结构错误、未知、重复或超时回包。成功值经过 `publicValue` 脱敏，插件失败转为 `McpError("plugin", error)`；写调用按现有业务执行器返回失败操作记录。
+- 无主窗口立即报错；等待 30 秒无响应时报「插件工具没有响应，请确认 Glaze 窗口已打开」。应用关闭或服务停用会清理挂起调用；已发送写入的超时或中断记为结果未知，不能据此认定插件没有执行。返回前仍复核授权和插件状态。
+
+当前只发现构建时内置插件，未开放第三方代码插件安装。测试使用自造清单和窗口桩，不连接真实账号的 Glaze MCP 服务。
 
 ## 每个模块的 MCP 清单
 

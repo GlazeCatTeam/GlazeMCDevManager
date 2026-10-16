@@ -1,16 +1,16 @@
-import { Button, Notice, PageHeader, Panel, Tag, TextButton } from "@glaze/plugin-sdk";
+import { Button, Notice, PageHeader, Panel, Tag, TextButton, useNavigation } from "@glaze/plugin-sdk";
 import { useState } from "react";
 import styles from "./AssistantPage.module.css";
 import { examples } from "./examples";
 import { useAction, useMcp } from "./useMcp";
 import { ActivityPanel } from "./widgets/ActivityPanel";
-import { AdvancedPanel } from "./widgets/AdvancedPanel";
 import { ClientCard } from "./widgets/ClientCard";
 import { ConnectDialog } from "./widgets/ConnectDialog";
 import { PendingRequests } from "./widgets/PendingRequests";
 
 /** AI-first entry: connect a tool with one click, then let the AI ask for anything else */
 export function AssistantPage() {
+  const { navigate } = useNavigation();
   const { snapshot, accounts, error, reload } = useMcp();
   const action = useAction(reload);
   const [connecting, setConnecting] = useState(false);
@@ -93,7 +93,12 @@ export function AssistantPage() {
         </div>
       )}
 
-      {snapshot && <AdvancedPanel snapshot={snapshot} action={action} />}
+      <p className={styles.footnote}>
+        连接服务开关、本机端口等高级选项在
+        <TextButton onClick={() => navigate("glaze.settings/settings", { category: "glaze.assistant/ai-service" })}>
+          设置 → AI 连接服务
+        </TextButton>
+      </p>
 
       <p className={styles.footnote}>
         AI 只能使用你允许的账号和权限；获得权限后直接执行，不再逐次确认。网易登录密码和 Cookie 永远不会交给 AI。

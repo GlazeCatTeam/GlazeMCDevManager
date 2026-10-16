@@ -17,6 +17,7 @@
 | [0011](0011-remote-image-proxy.md) | 远程图片经主进程代理加载 | 已接受 |
 | [0012](0012-mcp-work-editing.md) | MCP 覆盖作品创建、更新与提交审核 | 范围已接受，接口待实现 |
 | [0013](0013-ai-first-mcp-experience.md) | AI 助手：一键连接、连接密钥与 AI 主动申请权限 | 已接受 |
+| [0014](0014-plugin-registry-driven-shell.md) | 外壳由插件注册表驱动 | 已接受 |
 
 新增 ADR 时复制下面的模板，编号顺延。
 

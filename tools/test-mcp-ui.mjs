@@ -31,7 +31,6 @@ try {
   page.on("pageerror", (error) => errors.push(error.message));
   // The fixture installs tests/fixtures/mcp-mock.ts when no bridge exists
   await page.goto(`${server.resolvedUrls.local[0]}tests/fixtures/mcp.html`);
-  const calls = () => page.evaluate(() => globalThis.__mcpCalls.map((call) => call.method));
 
   // A waiting permission request is shown app-wide and continues the AI call once allowed
   const request = page.getByRole("dialog", { name: "Claude Code 需要你的允许" });
@@ -81,17 +80,8 @@ try {
   assert.match(prompt, /key=preview-key/);
   await page.getByRole("button", { name: "完成", exact: true }).click();
 
-  // Advanced settings keep port validation away from the main flow
-  await page.getByText("高级设置", { exact: false }).click();
-  const port = page.getByRole("textbox", { name: "本机端口", exact: true });
-  for (const value of ["", "0", "65536", "1.5", "abc"]) {
-    await port.fill(value);
-    assert.equal(await page.getByRole("button", { name: "应用", exact: true }).isEnabled(), false);
-  }
-  await port.fill("17840");
-  await page.getByRole("button", { name: "应用", exact: true }).click();
-  await page.waitForFunction(() => globalThis.__mcpState.port === 17840);
-  assert.ok((await calls()).includes("mcp.setEnabled"));
+  // Port and service switches moved to Settings through the settingsSections contribution point
+  await page.getByRole("button", { name: "设置 → AI 连接服务", exact: true }).waitFor();
 
   // Onboarding appears when nothing is connected
   await page.evaluate(() => {

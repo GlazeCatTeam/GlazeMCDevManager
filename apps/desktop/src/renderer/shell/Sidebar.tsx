@@ -1,5 +1,5 @@
 import { type AccountSummary, remoteImageUrl, type SessionStatus } from "@glaze/contracts";
-import { callHost, onHostEvent } from "@glaze/plugin-sdk";
+import { callHost, onHostEvent, usePrefetchHostQuery } from "@glaze/plugin-sdk";
 import { Avatar, avatarColorsFor, Icon } from "@glaze/ui";
 import { useEffect, useState } from "react";
 import { preloadRoute } from "../routes/pages";
@@ -8,13 +8,22 @@ import styles from "./Sidebar.module.css";
 
 const accountRoute = "glaze.account/account";
 
-const navigationSections = [
-  { label: "首页", routes: ["glaze.home/home", "glaze.messages/messages"] },
-  { label: "作品与玩家", routes: ["glaze.works/works", "glaze.community/feedback", "glaze.community/comments"] },
-  { label: "数据与收益", routes: ["glaze.analytics/analytics", "glaze.income/income"] },
-  { label: "活动推广", routes: ["glaze.promotion/promotion"] },
-];
-const sectionRoutes = new Set(navigationSections.flatMap((section) => section.routes));
+const OTHER_SECTION = "其他功能";
+
+/** Group top entries by their manifest section; groups follow their first entry's order, ungrouped last */
+function groupSections(entries: NavEntry[]): { label: string; entries: NavEntry[] }[] {
+  const groups = new Map<string, NavEntry[]>();
+  for (const entry of entries) {
+    const label = entry.section ?? OTHER_SECTION;
+    groups.set(label, [...(groups.get(label) ?? []), entry]);
+  }
+  const other = groups.get(OTHER_SECTION);
+  groups.delete(OTHER_SECTION);
+  return [
+    ...[...groups].map(([label, items]) => ({ label, entries: items })),
+    ...(other ? [{ label: OTHER_SECTION, entries: other }] : []),
+  ];
+}
 
 const statusLabels: Record<SessionStatus, string> = {
   active: "会话有效",
@@ -54,12 +63,8 @@ export function Sidebar({ entries, activeRoute, account, onNavigate }: SidebarPr
     };
   }, []);
   const accountActive = activeRoute === accountRoute;
-  const topEntries = entries.filter((entry) => entry.group === "top");
-  const sections = navigationSections.map((section) => ({
-    label: section.label,
-    entries: section.routes.flatMap((route) => topEntries.filter((entry) => entry.route === route)),
-  }));
-  sections.push({ label: "其他功能", entries: topEntries.filter((entry) => !sectionRoutes.has(entry.route)) });
+  const prefetch = usePrefetchHostQuery();
+  const sections = groupSections(entries.filter((entry) => entry.group === "top"));
 
   /** Render a route button with its current-page state */
   const renderItem = (entry: NavEntry) => {
@@ -71,8 +76,8 @@ export function Sidebar({ entries, activeRoute, account, onNavigate }: SidebarPr
         className={active ? `${styles.item} ${styles.active}` : styles.item}
         aria-current={active ? "page" : undefined}
         onClick={() => onNavigate(entry.route)}
-        onPointerEnter={() => preloadRoute(entry.route)}
-        onFocus={() => preloadRoute(entry.route)}
+        onPointerEnter={() => preloadRoute(entry.route, prefetch)}
+        onFocus={() => preloadRoute(entry.route, prefetch)}
       >
         {entry.icon && <Icon name={entry.icon} size={20} />}
         {entry.title}

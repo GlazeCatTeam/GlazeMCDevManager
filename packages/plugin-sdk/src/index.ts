@@ -61,8 +61,12 @@ export type {
   MessageType,
   PlayerComment,
   PlayerFeedback,
+  PluginHomeWidgetContribution,
   PluginInstallPreview,
+  PluginManifest,
+  PluginSettingsSectionContribution,
   PluginSnapshot,
+  PluginToolCall,
   ProjectLicense,
   ProjectLink,
   PromotionActivity,
@@ -78,6 +82,7 @@ export type {
   RankPage,
   RankPageParams,
   RpcError,
+  RpcMethod,
   RpcMethods,
   RpcResult,
   SessionSettings,
@@ -110,6 +115,7 @@ export type {
   WorkValue,
 } from "@glaze/contracts";
 export {
+  capabilities,
   commentTypes,
   defaultAppearance,
   defaultGeneral,
@@ -146,6 +152,14 @@ export * from "@glaze/ui";
 export { ImageCropDialog } from "./components/ImageCropDialog";
 export { RichEditor } from "./components/RichEditor";
 export { sanitizeWorkHtml, workHtmlLength } from "./components/rich-html";
+export { type HostAppearance, HostAppearanceProvider, useHostAppearance } from "./context/appearance";
+export {
+  type PluginCatalog,
+  PluginCatalogProvider,
+  type PluginContribution,
+  useContributions,
+  usePluginCatalog,
+} from "./context/catalog";
 export { type Navigation, NavigationProvider, type RouteParams, useNavigation } from "./context/navigation";
 export { PluginProvider, usePluginRegistry } from "./context/plugins";
 export {
@@ -158,6 +172,13 @@ export {
 } from "./context/session";
 export { formatDate, formatDateTime, formatShortDateTime } from "./format";
 export { type HostQuery, type HostQueryOptions, useHostQuery, usePrefetchHostQuery } from "./hooks/useHostQuery";
+export {
+  definePlugin,
+  type PluginModule,
+  type PluginPrefetch,
+  type PluginToolContext,
+  type PluginToolHandler,
+} from "./plugin";
 export {
   clearHostQueries,
   DEFAULT_QUERY_TTL,

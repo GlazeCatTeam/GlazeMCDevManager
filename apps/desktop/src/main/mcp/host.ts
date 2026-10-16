@@ -15,7 +15,7 @@ import type {
 import { type AnalyticsDailyParams, isAnalyticsRange, isAnalyticsResourceIds, isMcpPort } from "@glaze/contracts";
 import { emptyMcpData, type McpData, McpError, McpHttpServer, type McpPorts, McpService } from "@glaze/mcp";
 import {
-  createWork,
+  createWork as createPlatformWork,
   estimateIncome,
   getAnalyticsDaily,
   getAnalyticsOverview,
@@ -52,12 +52,14 @@ import { uploadSelectedWorkFile } from "../ipc/work-files";
 import type { LogService } from "../logs/service";
 import { bundledPlugins } from "../plugins/bundled";
 import type { PluginRegistry } from "../plugins/registry";
+import { discoverPluginTools } from "../plugins/tools";
 import { type ApplicationServices, type Broadcast, createApplicationActions } from "../preferences/actions";
 import type { SessionManager } from "../session/session-manager";
 import { appWindows } from "../windows/main-window";
 import { createMcpApplication } from "./application";
 import { createMcpBusiness } from "./business";
 import { checkTool, connectPrompt, installTool, listInstallers, uninstallTool } from "./installers";
+import { PluginToolCalls } from "./plugin-calls";
 import { loadMcpData, saveMcpData } from "./store";
 
 /** Keep ambiguous platform responses distinguishable from an explicit business rejection */
@@ -88,6 +90,15 @@ export function createMcpHost(
   if (!safeStorage.isEncryptionAvailable()) persistenceError = "Windows 系统加密不可用，MCP 服务已停用";
   let http: McpHttpServer | undefined;
   let lastTools = "";
+  const pluginDefinitions = discoverPluginTools(bundledPlugins, (message) => logs.write("warn", "plugins", message));
+  const pluginCalls = new PluginToolCalls(
+    () => {
+      const win = appWindows()[0];
+      if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return null;
+      return { id: win.webContents.id, send: (call) => sendEvent(win, "plugins.toolCall", call) };
+    },
+    (id, permission) => service.allowed(id, permission),
+  );
   const reads: Record<string, (params: Record<string, unknown>) => Promise<unknown>> = {
     "app.getAbout": async () => getAboutInfo(),
     "app.getLicenses": async () => getDependencyLicenses(),
@@ -189,17 +200,21 @@ export function createMcpHost(
     plugins.assertMethodEnabled(promotion ? "promotion.upload" : "works.save");
   };
   const ports: McpPorts = {
+    invokePlugin: (id, tool, params, guard, beforeWrite) => pluginCalls.invoke(id, tool, params, guard, beforeWrite),
     invoke: createMcpBusiness(sessions, application),
     save: (state) => {
       if (persistenceError) return;
       saveMcpData(file, state);
     },
+    // Construction can publish changes before the service binding is initialized
     changed: () => {
+      if (!data.enabled) pluginCalls.close();
       changed();
       if (http) {
-        const tools = JSON.stringify(
+        const tools = JSON.stringify([
           service.data.clients.map((client) => [client.id, client.approved, client.permissions]),
-        );
+          service.definitions.map((tool) => tool.name),
+        ]);
         if (tools !== lastTools) {
           lastTools = tools;
           http.changed();
@@ -229,6 +244,11 @@ export function createMcpHost(
     },
     assertEnabled: (method) => {
       if (persistenceError) throw new McpError("unavailable", persistenceError);
+      if (method.startsWith("plugin:")) {
+        if (!plugins.snapshot().plugins.some((plugin) => plugin.id === method.slice(7) && plugin.enabled))
+          throw new McpError("forbidden", "对应插件已停用");
+        return;
+      }
       const owner =
         method.startsWith("rank.") || method.startsWith("developer.")
           ? "home"
@@ -275,7 +295,7 @@ export function createMcpHost(
       ),
     createWork: (draft, fields, guard) =>
       sessions.request(draft.account, async (session) =>
-        writeResult(await createWork(session, { account: draft.account, fields }, guard)),
+        writeResult(await createPlatformWork(session, { account: draft.account, fields }, guard)),
       ),
     review: (account, itemId, expected, guard) =>
       sessions.request(account, async (session) =>
@@ -325,6 +345,17 @@ export function createMcpHost(
   ports.createWork = (...args) => notifyChanged("works", writes.createWork(...args));
   ports.review = (...args) => notifyChanged("works", writes.review(...args));
   const service = new McpService(data, ports);
+  /** Publish only enabled contributions and notify connected clients when switches change */
+  const refreshPluginTools = () => {
+    const enabled = new Set(
+      plugins
+        .snapshot()
+        .plugins.filter((plugin) => plugin.enabled)
+        .map((plugin) => plugin.id),
+    );
+    service.setPluginTools(pluginDefinitions.filter((tool) => tool.plugin && enabled.has(tool.plugin.pluginId)));
+  };
+  refreshPluginTools();
   const cleanup = setInterval(() => {
     void service.cleanupMaterials().catch(() => undefined);
   }, 15 * 60_000);
@@ -490,9 +521,17 @@ export function createMcpHost(
   return {
     service,
     handlers,
+    refreshPluginTools,
+    /** Accept results only from a current main window after the RPC frame check */
+    pluginToolResult: (sender: number, input: unknown) => {
+      if (!appWindows().some((win) => !win.isDestroyed() && win.webContents.id === sender))
+        throw new McpError("forbidden", "插件工具结果只允许主窗口返回");
+      pluginCalls.result(sender, input);
+    },
     start: () => (data.enabled ? setEnabled(true) : Promise.resolve(service.snapshot())),
     stop: () => {
       clearInterval(cleanup);
+      pluginCalls.close();
       return transport.stop();
     },
   };

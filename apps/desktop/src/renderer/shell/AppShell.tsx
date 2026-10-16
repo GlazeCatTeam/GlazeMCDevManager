@@ -1,4 +1,3 @@
-import { AccessRequestDialog } from "@glaze/plugin-assistant";
 import {
   Button,
   callHost,
@@ -7,13 +6,17 @@ import {
   NavigationProvider,
   Notice,
   onHostEvent,
+  PluginCatalogProvider,
   type RouteParams,
   type Session,
   SessionProvider,
   usePluginRegistry,
 } from "@glaze/plugin-sdk";
 import { useEffect, useMemo, useState } from "react";
+import { catalog, loadPluginModule } from "../plugins/catalog";
+import { PluginRuntime } from "../plugins/PluginRuntime";
 import { RouteView } from "../routes/pages";
+import { AccessRequestDialog } from "./AccessRequestDialog";
 import styles from "./AppShell.module.css";
 import { loadNavEntries, loadPages } from "./nav";
 import { Sidebar } from "./Sidebar";
@@ -37,25 +40,6 @@ export function AppShell() {
   const pages = useMemo(loadPages, []);
   const [location, setLocation] = useState<Location | null>(null);
   const [session, setSession] = useState<Session>({ current: null, accounts: [] });
-  const worksEnabled = pluginStates?.find((item) => item.id === "glaze.works")?.enabled ?? !registry;
-
-  // Background preparation belongs to the enabled plugin lifecycle, not module import side effects
-  useEffect(() => {
-    if (!worksEnabled) return;
-    let active = true;
-    let dispose: (() => void) | undefined;
-    void import("@glaze/plugin-works")
-      .then((plugin) => {
-        if (active) dispose = plugin.startWorksWarmup();
-      })
-      .catch(() => {
-        void callHost("app.reportRendererError", { kind: "error" }).catch(() => {});
-      });
-    return () => {
-      active = false;
-      dispose?.();
-    };
-  }, [worksEnabled]);
 
   // First page and accounts come from the main process; account changes are pushed afterwards
   useEffect(() => {
@@ -66,8 +50,15 @@ export function AppShell() {
         return;
       }
       const accounts = list.ok ? list.value : [];
-      setSession({ accounts, current: accounts.find((account) => account.current) ?? null });
-      setLocation(route.ok ? route.value : { route: loginRoute, params: {} });
+      const target = route.ok ? route.value : { route: loginRoute, params: {} };
+      // Fetch the first page's plugin code before showing it so startup does not flash a placeholder
+      void loadPluginModule(target.route.slice(0, target.route.lastIndexOf("/")))
+        .catch(() => undefined)
+        .then(() => {
+          if (!alive) return;
+          setSession({ accounts, current: accounts.find((account) => account.current) ?? null });
+          setLocation(target);
+        });
     });
     return () => {
       alive = false;
@@ -120,33 +111,36 @@ export function AppShell() {
   const title = page?.title ?? "";
 
   return (
-    <NavigationProvider value={navigation}>
-      <SessionProvider value={session}>
-        <div className={styles.shell}>
-          <TitleBar />
-          {page?.chrome === "none" ? (
-            <main key={location.route} className={styles.bare}>
-              <RouteView route={location.route} title={title} />
-            </main>
-          ) : (
-            <div className={styles.body}>
-              <Sidebar
-                entries={entries.filter(
-                  (entry) =>
-                    !pluginStates || pluginStates.find((plugin) => plugin.id === entry.route.split("/")[0])?.enabled,
-                )}
-                activeRoute={location.route}
-                account={current}
-                onNavigate={(route, params) => navigation.navigate(route, params)}
-              />
-              <main key={location.route} className={styles.main}>
+    <PluginCatalogProvider value={catalog}>
+      <NavigationProvider value={navigation}>
+        <SessionProvider value={session}>
+          <div className={styles.shell}>
+            <TitleBar />
+            {page?.chrome === "none" ? (
+              <main key={location.route} className={styles.bare}>
                 <RouteView route={location.route} title={title} />
               </main>
-            </div>
-          )}
-          <AccessRequestDialog />
-        </div>
-      </SessionProvider>
-    </NavigationProvider>
+            ) : (
+              <div className={styles.body}>
+                <Sidebar
+                  entries={entries.filter(
+                    (entry) =>
+                      !pluginStates || pluginStates.find((plugin) => plugin.id === entry.route.split("/")[0])?.enabled,
+                  )}
+                  activeRoute={location.route}
+                  account={current}
+                  onNavigate={(route, params) => navigation.navigate(route, params)}
+                />
+                <main key={location.route} className={styles.main}>
+                  <RouteView route={location.route} title={title} />
+                </main>
+              </div>
+            )}
+            <AccessRequestDialog />
+            <PluginRuntime />
+          </div>
+        </SessionProvider>
+      </NavigationProvider>
+    </PluginCatalogProvider>
   );
 }

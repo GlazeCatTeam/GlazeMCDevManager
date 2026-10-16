@@ -35,6 +35,7 @@ import type {
   McpSnapshot,
 } from "./mcp";
 import type { MessageContent, MessageDeleteParams, MessageListParams, MessagePage, MessageParams } from "./messages";
+import type { PluginToolCall, PluginToolResult } from "./plugin-manifest";
 import type { PluginInstallPreview, PluginSnapshot } from "./plugins";
 import type {
   BannerApplication,
@@ -114,6 +115,7 @@ export interface RpcMethods {
   "app.reportRendererError": { params: { kind: "error" | "unhandled-rejection" }; result: undefined };
   "plugins.list": { params: undefined; result: PluginSnapshot };
   "plugins.setEnabled": { params: { id: string; enabled: boolean }; result: PluginSnapshot };
+  "plugins.toolResult": { params: PluginToolResult; result: undefined };
   "plugins.pickInstall": { params: undefined; result: PluginInstallPreview | null };
   "plugins.install": { params: { token: string }; result: PluginSnapshot };
   "logs.list": { params: LogQuery; result: LogPage };
@@ -195,6 +197,7 @@ export interface EventPayloads {
   "app.navigate": { route: string; params: Record<string, string> };
   /** Platform data of these modules may have changed, from the app or an AI tool */
   "data.changed": { modules: string[] };
+  "plugins.toolCall": PluginToolCall;
   "mcp.changed": { pendingCount: number; requestCount: number; connectedCount: number };
   "sessionSettings.changed": SessionSettings;
   "plugins.changed": PluginSnapshot;

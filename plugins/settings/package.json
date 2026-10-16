@@ -6,7 +6,7 @@
   "description": "内置插件：settings",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

@@ -1,14 +1,6 @@
-.advanced {
-  padding: 14px 20px;
-  background: var(--g-surface-panel);
-  border: var(--g-border-width) solid var(--g-panel-borderColor);
-  border-radius: var(--g-radius-panel);
-}
-
-.advanced summary {
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 14px;
+.section {
+  display: flex;
+  flex-direction: column;
 }
 
 .body {

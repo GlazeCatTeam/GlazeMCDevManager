@@ -5,7 +5,7 @@
   "publisher": "glaze",
   "description": "主题、布局、插件管理、更新与关于",
   "engines": { "glaze": "^0.1.0" },
-  "entries": { "ui": "src/index.ts" },
+  "entries": { "ui": "src/index.tsx" },
   "activationEvents": ["onPage:settings"],
   "contributes": {
     "pages": [{ "id": "settings", "title": "设置" }],

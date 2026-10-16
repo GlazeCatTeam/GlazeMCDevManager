@@ -4,13 +4,61 @@
   "version": "0.0.0",
   "publisher": "glaze",
   "description": "日追踪、月汇总、单模组分析",
-  "engines": { "glaze": "^0.1.0" },
-  "entries": { "ui": "src/index.ts" },
+  "engines": {
+    "glaze": "^0.1.0"
+  },
+  "entries": {
+    "ui": "src/index.ts"
+  },
   "activationEvents": ["onPage:analytics"],
   "contributes": {
-    "pages": [{ "id": "analytics", "title": "数据分析" }],
-    "navItems": [{ "page": "analytics", "icon": "nav.analytics", "group": "top", "order": 30 }],
-    "widgets": []
+    "pages": [
+      {
+        "id": "analytics",
+        "title": "数据分析"
+      }
+    ],
+    "navItems": [
+      {
+        "page": "analytics",
+        "icon": "nav.analytics",
+        "group": "top",
+        "order": 30,
+        "section": "数据与收益"
+      }
+    ],
+    "widgets": [],
+    "tools": [
+      {
+        "id": "top_sellers",
+        "title": "热销作品排行",
+        "risk": "read",
+        "permission": "netease:analytics.read",
+        "description": "按最近若干天（截至昨天）的钻石收益、新增购买或销售总量，列出手机版作品的排行，返回作品 ID、名称和三项合计。需要同时能查看作品列表。",
+        "input": {
+          "type": "object",
+          "properties": {
+            "days": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "description": "统计最近几天，默认 7"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20,
+              "description": "返回前几名，默认 10"
+            },
+            "sortBy": {
+              "type": "string",
+              "enum": ["diamonds", "purchases", "downloads"],
+              "description": "排序依据，默认 diamonds（钻石收益）"
+            }
+          }
+        }
+      }
+    ]
   },
   "permissions": ["netease:analytics.read", "netease:works.read", "netease:income.read", "storage"]
 }

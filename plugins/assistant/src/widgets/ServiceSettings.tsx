@@ -10,7 +10,7 @@ import {
 } from "@glaze/plugin-sdk";
 import { useState } from "react";
 import { unwrap, type useAction } from "../useMcp";
-import styles from "./AdvancedPanel.module.css";
+import styles from "./ServiceSettings.module.css";
 
 const statusText: Record<McpSnapshot["status"], string> = {
   off: "已关闭",
@@ -19,8 +19,8 @@ const statusText: Record<McpSnapshot["status"], string> = {
   error: "出错了",
 };
 
-/** Service switch, port and raw address, folded away from everyday use */
-export function AdvancedPanel({ snapshot, action }: { snapshot: McpSnapshot; action: ReturnType<typeof useAction> }) {
+/** Service switch, port and raw address; shown in Settings, away from the everyday assistant page */
+export function ServiceSettings({ snapshot, action }: { snapshot: McpSnapshot; action: ReturnType<typeof useAction> }) {
   const [portInput, setPortInput] = useState<string | null>(null);
   const portText = portInput ?? String(snapshot.port ?? MCP_DEFAULT_PORT);
   const port = Number(portText);
@@ -35,10 +35,8 @@ export function AdvancedPanel({ snapshot, action }: { snapshot: McpSnapshot; act
     });
 
   return (
-    <details className={styles.advanced}>
-      <summary>
-        高级设置 <span className={styles.muted}>· 连接服务{statusText[snapshot.status]}</span>
-      </summary>
+    <div className={styles.section}>
+      <p className={styles.muted}>当前状态：连接服务{statusText[snapshot.status]}</p>
       <div className={styles.body}>
         <div className={styles.row}>
           <div>
@@ -103,6 +101,6 @@ export function AdvancedPanel({ snapshot, action }: { snapshot: McpSnapshot; act
           服务只监听本机（127.0.0.1），其他电脑无法连接。每个一键连接的工具都有独立密钥，移除后立即失效。
         </p>
       </div>
-    </details>
+    </div>
   );
 }

@@ -2,6 +2,7 @@ import { avatarColorsFor, Notice, remoteImageUrl, TextButton, useNavigation, use
 import { useMemo, useState } from "react";
 import styles from "./HomePage.module.css";
 import { useHomeQuery } from "./useHomeQuery";
+import { ExtensionRow } from "./widgets/ExtensionRow";
 import { Greeting } from "./widgets/Greeting";
 import { OverviewStrip } from "./widgets/OverviewStrip";
 import { ProfitEstimateCard } from "./widgets/ProfitEstimateCard";
@@ -89,6 +90,7 @@ export function HomePage() {
         </div>
         <RankingCard key={current.id} className={styles.column} />
       </div>
+      <ExtensionRow />
     </div>
   );
 }

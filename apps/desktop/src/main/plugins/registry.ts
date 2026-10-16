@@ -14,6 +14,7 @@ import {
   capabilities,
   type InstalledPlugin,
   type PluginInstallPreview,
+  type PluginManifest,
   type PluginSnapshot,
   type RpcMethod,
 } from "@glaze/contracts";
@@ -29,13 +30,7 @@ import {
   validateThemePackage,
 } from "./theme-package";
 
-export interface BuiltinPlugin {
-  id: string;
-  name: string;
-  version: string;
-  description: string;
-  contributes?: { pages?: { id: string; title: string; chrome?: string }[] };
-}
+export type BuiltinPlugin = PluginManifest;
 type Candidate = ReturnType<typeof parseThemeArchive>;
 
 /** Persistent registry for bundled modules and installed no-code theme packages */

@@ -1,0 +1,21 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  box-sizing: border-box;
+}
+
+.text,
+.waiting {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--g-text-muted);
+}
+
+.waiting {
+  color: var(--g-status-warning);
+  font-weight: 700;
+}

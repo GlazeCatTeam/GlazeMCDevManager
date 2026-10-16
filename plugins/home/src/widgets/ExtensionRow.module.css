@@ -1,0 +1,15 @@
+/* Each cell keeps a fixed height so contributed widgets never shift the panels above */
+.row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.cell {
+  height: 168px;
+  min-width: 0;
+}
+
+.cell > * {
+  height: 100%;
+}

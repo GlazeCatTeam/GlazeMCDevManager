@@ -67,7 +67,20 @@ export interface McpPorts {
     guard: () => void,
     beforeWrite: () => void,
   ): Promise<unknown>;
+  invokePlugin?(
+    clientId: string,
+    tool: PluginToolTarget,
+    params: Record<string, unknown>,
+    guard: () => void,
+    beforeWrite: () => void,
+  ): Promise<unknown>;
   assetRoot: string;
+}
+
+export interface PluginToolTarget {
+  pluginId: string;
+  toolId: string;
+  permissions: string[];
 }
 
 /** Only a fresh local store defaults to disabled */

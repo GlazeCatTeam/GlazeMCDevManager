@@ -73,6 +73,8 @@ my-plugin/
 
 新增贡献点属于插件 API 变更，需要写 ADR 并提升 `engines.glaze` 的次版本。
 
+> 2026-10-16 已实现：外壳由注册表驱动，新增贡献点 `navItems.section`、`settingsSections`、`homeWidgets`，`tools` 已可用，插件 UI 入口默认导出 `definePlugin(...)`。当前实际约定以 [23 插件注册表与开发](23-plugin-registry.md) 为准；`widgets`、`commands`、`settings` 仍只是声明，宿主尚未消费。
+
 ## 生命周期
 
 ```mermaid

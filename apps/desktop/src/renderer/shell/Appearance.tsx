@@ -2,7 +2,9 @@ import {
   type AppearanceSettings,
   callHost,
   defaultAppearance,
+  HostAppearanceProvider,
   onHostEvent,
+  useHostAppearance,
   usePluginRegistry,
 } from "@glaze/plugin-sdk";
 import { applyTheme, resolveTheme } from "@glaze/theme";
@@ -10,26 +12,14 @@ import fluentDark from "@glaze/theme-fluent-dark/theme.json";
 import oreUi from "@glaze/theme-ore-ui/theme.json";
 import {
   type CSSProperties,
-  createContext,
   type ReactNode,
   useCallback,
-  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-
-interface AppearanceContextValue {
-  appearance: AppearanceSettings;
-  setAppearance: (value: AppearanceSettings) => Promise<void>;
-  saving: boolean;
-  status: string;
-  themePreviewStyles: Record<string, CSSProperties>;
-}
-
-const AppearanceContext = createContext<AppearanceContextValue | null>(null);
 
 /** Theme variant to apply; Fluent only ships a dark variant, "system" follows the OS */
 function resolveVariant(appearance: AppearanceSettings, systemDark: boolean): "dark" | "light" {
@@ -130,12 +120,12 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     () => ({ appearance, setAppearance: save, saving, status, themePreviewStyles }),
     [appearance, save, saving, status, themePreviewStyles],
   );
-  return <AppearanceContext.Provider value={value}>{ready ? children : null}</AppearanceContext.Provider>;
+  return <HostAppearanceProvider value={value}>{ready ? children : null}</HostAppearanceProvider>;
 }
 
 /** Access host-owned appearance state without coupling plugins to the theme engine */
 export function useAppearance() {
-  const value = useContext(AppearanceContext);
+  const value = useHostAppearance();
   if (!value) {
     throw new Error("AppearanceProvider is required");
   }

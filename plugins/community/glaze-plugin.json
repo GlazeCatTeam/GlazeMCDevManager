@@ -27,13 +27,15 @@
         "page": "feedback",
         "icon": "nav.feedback",
         "group": "top",
-        "order": 50
+        "order": 50,
+        "section": "作品与玩家"
       },
       {
         "page": "comments",
         "icon": "nav.community",
         "group": "top",
-        "order": 55
+        "order": 55,
+        "section": "作品与玩家"
       }
     ],
     "widgets": []

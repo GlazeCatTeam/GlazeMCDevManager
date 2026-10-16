@@ -1,5 +1,5 @@
-import { Button, callHost, Dialog, PageHeader, Panel, useNavigation } from "@glaze/plugin-sdk";
-import { type CSSProperties, useCallback, useEffect, useState } from "react";
+import { Button, callHost, Dialog, PageHeader, Panel, useContributions, useNavigation } from "@glaze/plugin-sdk";
+import { type CSSProperties, Suspense, useCallback, useEffect, useState } from "react";
 import {
   type AppearanceSettings,
   categories,
@@ -27,7 +27,7 @@ export interface SettingsPageProps {
   themePreviewStyles?: Record<string, CSSProperties> | undefined;
 }
 
-/** Settings: category list on the left, one fixed-height content panel on the right */
+/** Settings: responsive categories and a content panel that fits the available height */
 export function SettingsPage({
   appearance,
   onAppearanceChange,
@@ -36,24 +36,36 @@ export function SettingsPage({
   themePreviewStyles,
 }: SettingsPageProps) {
   const { navigate, params } = useNavigation();
-  const [category, setCategory] = useState<SettingsCategory>("appearance");
-  // AI connections moved to their own page; keep old links working
+  // Other plugins add sections through the settingsSections contribution point, listed after 插件
+  const contributed = useContributions("settingsSections");
+  const extra = contributed.map((item) => ({
+    id: `${item.pluginId}/${item.contribution.id}`,
+    label: item.contribution.title,
+    description: item.contribution.description,
+  }));
+  const split = categories.findIndex((item) => item.id === "plugins") + 1;
+  const allCategories = [...categories.slice(0, split), ...extra, ...categories.slice(split)];
+  const [category, setCategory] = useState<SettingsCategory | string>("appearance");
+  const requested = typeof params.category === "string" ? params.category : "";
+  // AI connections moved to their own page; keep old links working and honour deep links to sections
   useEffect(() => {
-    if (params.category === "ai") navigate("glaze.assistant/assistant");
-  }, [params.category, navigate]);
+    if (requested === "ai") navigate("glaze.assistant/assistant");
+    else if (requested) setCategory(requested);
+  }, [requested, navigate]);
+  const section = contributed.find((item) => `${item.pluginId}/${item.contribution.id}` === category);
   const [localAppearance, setLocalAppearance] = useState(initialAppearance);
   const general = useGeneralSettings(category === "general");
   const [autoUpdate, setAutoUpdate] = useState(true);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [notice, setNotice] = useState("");
   const [restoring, setRestoring] = useState(false);
-  const selected = categories.find((item) => item.id === category) ?? categories[0];
+  const selected = allCategories.find((item) => item.id === category) ?? allCategories[0] ?? categories[0];
   const closeDialog = useCallback(() => {
     if (!restoring) setPending(null);
   }, [restoring]);
 
   /** Switch category and drop the previous category's status note */
-  const selectCategory = (value: SettingsCategory) => {
+  const selectCategory = (value: SettingsCategory | string) => {
     setCategory(value);
     setNotice("");
   };
@@ -106,7 +118,7 @@ export function SettingsPage({
 
       <div className={styles.columns}>
         <nav className={styles.categories} aria-label="设置分类">
-          {categories.map((item) => (
+          {allCategories.map((item) => (
             <button
               key={item.id}
               type="button"
@@ -154,6 +166,11 @@ export function SettingsPage({
               />
             )}
             {category === "plugins" && <PluginsSection />}
+            {section && (
+              <Suspense fallback={null}>
+                <section.Component />
+              </Suspense>
+            )}
             {category === "logs" && <LogsSection />}
             {category === "about" && (
               <AboutSection
@@ -178,7 +195,9 @@ export function SettingsPage({
                       ? "运行日志自动记录并脱敏，可导出当前级别的最近 500 条。"
                       : category === "about"
                         ? "项目链接通过默认浏览器打开；依赖许可支持离线查看。"
-                        : "界面预览 · 系统功能与业务服务尚待接入")}
+                        : section
+                          ? "此分区由插件提供，修改即时生效。"
+                          : "界面预览 · 系统功能与业务服务尚待接入")}
           </div>
         </Panel>
       </div>
