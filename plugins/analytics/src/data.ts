@@ -71,6 +71,31 @@ export function aggregate(records: AnalyticsValues[], metric: Metric): number | 
   return metric === "rating" ? total / values.length : total;
 }
 
+/** Rank resources by returned interval totals, excluding unknown values and preserving ties */
+export function topResources(
+  resources: Resource[],
+  records: AnalyticsRecord[],
+  dates: string[],
+  metric: Metric,
+): Resource[] {
+  const allowedDates = new Set(dates);
+  const byResource = new Map<string, AnalyticsRecord[]>();
+  for (const record of records) {
+    if (!allowedDates.has(record.date)) continue;
+    const entries = byResource.get(record.resourceId);
+    if (entries) entries.push(record);
+    else byResource.set(record.resourceId, [record]);
+  }
+  return resources
+    .map((resource) => ({ resource, total: aggregate(byResource.get(resource.id) ?? [], metric) }))
+    .filter(
+      (entry): entry is { resource: Resource; total: number } => entry.total !== null && Number.isFinite(entry.total),
+    )
+    .sort((left, right) => right.total - left.total)
+    .slice(0, 10)
+    .map((entry) => entry.resource);
+}
+
 const valueFormatter = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
 const ratingFormatter = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 });
 

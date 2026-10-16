@@ -8,6 +8,7 @@ import {
   type Metric,
   metrics,
   type Resource,
+  topResources,
   trackingSeries,
 } from "../data";
 import { QueryState, useRefresh } from "../QueryState";
@@ -21,34 +22,51 @@ import styles from "./Views.module.css";
 
 const metricOptions = metrics.map((item) => ({ value: item.id, label: item.label }));
 
-/** Daily comparison of several resources; filters apply only when "查询数据" is pressed */
+/** Compare manual selections or the current metric's top ten resources over the chosen interval */
 export function TrackingView({ resources, refreshVersion }: { resources: Resource[]; refreshVersion: number }) {
   const initialIds = resources.slice(0, 3).map((resource) => resource.id);
-  const [draftIds, setDraftIds] = useState(initialIds);
+  const [draftIds, setDraftIds] = useState<string[] | null>(initialIds);
   const [draftDays, setDraftDays] = useState<DayRange>(14);
-  const [query, setQuery] = useState({ resourceIds: initialIds, days: 14 as DayRange });
+  const [query, setQuery] = useState({ resourceIds: initialIds, days: 14 as DayRange, top10: false });
   const [metric, setMetric] = useState<Metric>("purchases");
   const [chartKind, setChartKind] = useState<"line" | "bar">("line");
   const [queryVersion, setQueryVersion] = useState(0);
   const dates = daysInRange(query.days);
-  const selectedResources = resources.filter((resource) => query.resourceIds.includes(resource.id));
+  const requestedResources = query.top10
+    ? resources
+    : resources.filter((resource) => query.resourceIds.includes(resource.id));
   const result = useAnalyticsQuery("analytics.daily", {
-    resourceIds: selectedResources.map((resource) => resource.id),
+    resourceIds: requestedResources.map((resource) => resource.id),
     startDate: dates[0] as string,
     endDate: dates.at(-1) as string,
   });
   useRefresh(result.reload, refreshVersion);
-  const records = result.data ?? [];
+  const selectedResources = query.top10
+    ? topResources(requestedResources, result.data ?? [], dates, metric)
+    : requestedResources;
+  const selectedIds = selectedResources.map((resource) => resource.id);
+  const pendingIds = draftIds ?? selectedIds;
+  const records = (result.data ?? []).filter((record) => selectedIds.includes(record.resourceId));
   const series = trackingSeries(selectedResources, records, dates, metric);
   const selectedMetric = metrics.find((item) => item.id === metric);
   const unit = selectedMetric?.unit ?? "";
-  const hasChanges = query.days !== draftDays || query.resourceIds.join() !== draftIds.join();
+  const selectionChanged =
+    selectedIds.length !== pendingIds.length || pendingIds.some((id) => !selectedIds.includes(id));
+  const hasChanges = query.days !== draftDays || selectionChanged;
 
   /** Apply the pending filters */
   const runQuery = () => {
-    setQuery({ resourceIds: draftIds, days: draftDays });
+    setQuery({ resourceIds: pendingIds, days: draftDays, top10: draftIds === null });
     setQueryVersion((value) => value + 1);
-    if (!hasChanges) result.reload();
+    if (!hasChanges && query.top10 === (draftIds === null)) result.reload();
+  };
+
+  /** Query all eligible resources and immediately display the current metric's leaders */
+  const showTop10 = () => {
+    setDraftIds(null);
+    setQuery({ resourceIds: resources.map((resource) => resource.id), days: draftDays, top10: true });
+    setQueryVersion((value) => value + 1);
+    if (query.days === draftDays && requestedResources.length === resources.length) result.reload();
   };
 
   /** Interval summary row of one resource */
@@ -75,7 +93,22 @@ export function TrackingView({ resources, refreshVersion }: { resources: Resourc
   return (
     <>
       <Panel className={styles.trackingFilters} aria-label="数据追踪筛选">
-        <ResourceSelector resources={resources} selectedIds={draftIds} onChange={setDraftIds} />
+        <ResourceSelector
+          resources={resources}
+          selectedIds={pendingIds}
+          onChange={setDraftIds}
+          actions={
+            <Button
+              size="sm"
+              variant={query.top10 && draftIds === null ? "primary" : "secondary"}
+              onClick={showTop10}
+              disabled={resources.length === 0 || result.loading}
+              title={`按所选时间内的${selectedMetric?.label}合计，从全部资源中展示前 10 名`}
+            >
+              Top 10
+            </Button>
+          }
+        />
         <div className={styles.queryRow}>
           <div className={styles.dateControls}>
             <span className={styles.filterLabel}>时间</span>
@@ -95,7 +128,9 @@ export function TrackingView({ resources, refreshVersion }: { resources: Resourc
               size="sm"
               variant="primary"
               onClick={runQuery}
-              disabled={!resources.some((resource) => draftIds.includes(resource.id)) || result.loading}
+              disabled={
+                (draftIds !== null && !resources.some((resource) => pendingIds.includes(resource.id))) || result.loading
+              }
             >
               查询数据
             </Button>
@@ -105,6 +140,13 @@ export function TrackingView({ resources, refreshVersion }: { resources: Resourc
       <QueryState query={result} />
       {result.data !== null && !result.error && (
         <>
+          {query.top10 && (
+            <p role="status">
+              Top 10 · 按{selectedMetric?.label}区间合计降序展示 {selectedResources.length}{" "}
+              个资源，切换指标自动更新排名。
+              {selectedResources.length === 0 ? "当前范围没有可排名的数据。" : "缺失指标不参与排名。"}
+            </p>
+          )}
           {selectedResources.length > 0 && records.length === 0 && (
             <p role="status">
               平台返回了空列表：{rangeText(dates)}，共 {selectedResources.length} 个资源。请尝试其他资源或扩大日期范围。
@@ -115,14 +157,18 @@ export function TrackingView({ resources, refreshVersion }: { resources: Resourc
               <SegmentedControl label="追踪指标" options={metricOptions} value={metric} onChange={setMetric} />
               <SegmentedControl label="图表类型" options={chartKindOptions} value={chartKind} onChange={setChartKind} />
             </div>
-            <TrendChart
-              key={`${refreshVersion}-${queryVersion}`}
-              labels={dates}
-              series={series}
-              metric={metric}
-              unit={unit}
-              kind={chartKind}
-            />
+            {query.top10 && series.length === 0 ? (
+              <p>当前范围没有可排名的数据</p>
+            ) : (
+              <TrendChart
+                key={`${refreshVersion}-${queryVersion}`}
+                labels={dates}
+                series={series}
+                metric={metric}
+                unit={unit}
+                kind={chartKind}
+              />
+            )}
           </Panel>
           <Panel
             className={styles.tablePanel}
@@ -137,7 +183,7 @@ export function TrackingView({ resources, refreshVersion }: { resources: Resourc
               caption={`${selectedMetric?.label}区间汇总`}
               columns={["资源", metric === "rating" ? "日评分均值" : "已返回数据合计", "有数据日均", "最高", "最低"]}
               rows={series.map((item) => summaryRow(item.id, item.label, item.color, item.values))}
-              emptyText="尚未选择资源"
+              emptyText={query.top10 ? "当前范围没有可排名的数据" : "尚未选择资源"}
             />
             <TableNote>
               共 {series.length} 个资源 · {query.days} 天 · 收到 {records.length} 条日记录 · 单位：{unit} ·

@@ -21,6 +21,7 @@ import {
   isAnalyzableWork,
   monthsInRange,
   todayKey,
+  topResources,
   trackingSeries,
 } from "../plugins/analytics/src/data";
 import { incomeCycle, periodIncomeYuan, summarizePeriodIncome } from "../plugins/analytics/src/period-income";
@@ -765,6 +766,31 @@ test("charts keep missing days as gaps and totals distinguish unknown from zero"
   );
   assert.equal(formatValue(null), "—");
   assert.equal(formatValue(0), "0");
+});
+
+test("top ten ranks interval totals per metric and excludes unknown or out-of-scope data", () => {
+  const parsed = readAnalyticsRecords({ data: [row] });
+  assert.ok(parsed.ok);
+  const first = parsed.value[0]!;
+  const resources = Array.from({ length: 14 }, (_, index) => ({ id: String(index), name: String(index), category: "pe", color: "red" }));
+  const records = resources.flatMap((resource, index) => [
+    { ...first, resourceId: resource.id, purchases: index, downloads: 14 - index },
+    { ...first, resourceId: resource.id, date: "2026-10-02", purchases: index, downloads: 14 - index },
+  ]);
+  records.push({ ...first, resourceId: "0", date: "2026-09-01", purchases: 99999 });
+  records.push({ ...first, resourceId: "outside", purchases: 99999 });
+  const dates = ["2026-10-01", "2026-10-02"];
+  assert.deepEqual(topResources(resources, records, dates, "purchases").map((resource) => resource.id), ["13", "12", "11", "10", "9", "8", "7", "6", "5", "4"]);
+  assert.deepEqual(topResources(resources, records, dates, "downloads").map((resource) => resource.id), ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]);
+  assert.deepEqual(topResources(resources, [], dates, "purchases"), []);
+  const sparse = [
+    { ...first, resourceId: "0", purchases: 0 },
+    { ...first, resourceId: "1", purchases: null },
+    { ...first, resourceId: "2", purchases: 5 },
+    { ...first, resourceId: "2", date: "2026-10-02", purchases: null },
+    { ...first, resourceId: "3", purchases: 0 },
+  ];
+  assert.deepEqual(topResources(resources, sparse, dates, "purchases").map((resource) => resource.id), ["0", "3"]);
 });
 
 test("analysis uses publication history rather than the current review status", async () => {

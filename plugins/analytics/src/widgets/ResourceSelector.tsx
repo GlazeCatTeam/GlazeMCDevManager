@@ -1,5 +1,5 @@
 import { Button, SearchField, TextButton } from "@glaze/plugin-sdk";
-import { useId, useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 import type { Resource } from "../data";
 import styles from "./ResourceSelector.module.css";
 import { Swatch } from "./Swatch";
@@ -8,10 +8,11 @@ interface ResourceSelectorProps {
   resources: Resource[];
   selectedIds: string[];
   onChange: (ids: string[]) => void;
+  actions?: ReactNode;
 }
 
 /** Keep chosen resources visible while browsing a searchable, vertically scrolling list */
-export function ResourceSelector({ resources, selectedIds, onChange }: ResourceSelectorProps) {
+export function ResourceSelector({ resources, selectedIds, onChange, actions }: ResourceSelectorProps) {
   const listId = useId();
   const [expanded, setExpanded] = useState(false);
   const [search, setSearch] = useState("");
@@ -39,6 +40,7 @@ export function ResourceSelector({ resources, selectedIds, onChange }: ResourceS
               清空
             </TextButton>
           )}
+          {actions}
           <Button
             size="sm"
             aria-expanded={expanded}
