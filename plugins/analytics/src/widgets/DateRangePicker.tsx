@@ -70,12 +70,11 @@ export function DateRangePicker({
     focusDay.current = false;
   }, [cursor]);
 
-  /** Restore the applied dates whenever the calendar is opened */
+  /** Start an empty draft whenever the calendar is opened */
   const show = () => {
-    const nextStart = dates[0] ?? latest;
     const nextEnd = dates.at(-1) ?? latest;
-    setStart(nextStart);
-    setEnd(nextEnd);
+    setStart("");
+    setEnd("");
     setMonth(nextEnd.slice(0, 7));
     setCursor(nextEnd);
     setOpen(true);

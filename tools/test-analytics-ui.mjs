@@ -286,6 +286,10 @@ try {
   const calendar = module.getByRole("dialog", { name: "自定义日期范围", exact: true });
   const customCalls = await page.evaluate(() => __analyticsTest.requests.length);
   await custom.click();
+  assert.equal(await calendar.getByLabel("开始日期", { exact: true }).inputValue(), "");
+  assert.equal(await calendar.getByLabel("结束日期", { exact: true }).inputValue(), "");
+  assert.equal(await calendar.getByRole("button", { pressed: true }).count(), 0);
+  assert.equal(await calendar.getByRole("button", { name: "应用", exact: true }).isEnabled(), false);
   await calendar.getByRole("button", { name: "2026-10-02", exact: true }).click();
   assert.equal(await calendar.getByRole("button", { name: "应用", exact: true }).isEnabled(), false);
   await calendar.getByRole("button", { name: "2026-10-05", exact: true }).click();
@@ -294,7 +298,8 @@ try {
   assert.equal(await calendar.count(), 0);
   assert.equal(await page.evaluate(() => __analyticsTest.requests.length), customCalls);
   await custom.click();
-  assert.equal(await calendar.getByLabel("开始日期", { exact: true }).inputValue(), "2026-10-09");
+  assert.equal(await calendar.getByLabel("开始日期", { exact: true }).inputValue(), "");
+  assert.equal(await calendar.getByLabel("结束日期", { exact: true }).inputValue(), "");
   assert.equal(await calendar.getByRole("button", { name: "2026-10-16", exact: true }).isEnabled(), false);
   await calendar.getByRole("button", { name: "2026-10-02", exact: true }).click();
   await calendar.getByRole("button", { name: "2026-10-05", exact: true }).click();
@@ -313,6 +318,10 @@ try {
   await module.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
   assert.equal(await custom.getAttribute("aria-pressed"), "true");
   await custom.click();
+  assert.equal(await calendar.getByLabel("开始日期", { exact: true }).inputValue(), "");
+  assert.equal(await calendar.getByLabel("结束日期", { exact: true }).inputValue(), "");
+  assert.equal(await calendar.getByRole("button", { pressed: true }).count(), 0);
+  await calendar.getByLabel("结束日期", { exact: true }).fill("2026-10-05");
   await calendar.getByLabel("开始日期", { exact: true }).fill("2026-10-10");
   await calendar.getByText("开始日期不能晚于结束日期", { exact: true }).waitFor();
   await calendar.getByLabel("开始日期", { exact: true }).fill("2024-01-01");
