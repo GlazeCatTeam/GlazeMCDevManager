@@ -26,6 +26,16 @@ import type {
 import type { LogPage, LogQuery } from "./logs";
 import type { MessageContent, MessageDeleteParams, MessageListParams, MessagePage, MessageParams } from "./messages";
 import type { PluginInstallPreview, PluginSnapshot } from "./plugins";
+import type {
+  BannerApplication,
+  BannerSaveParams,
+  PromotionActivity,
+  PromotionDates,
+  PromotionJoinParams,
+  PromotionModuleData,
+  PromotionModuleParams,
+  PromotionPageParams,
+} from "./promotion";
 import type { RankBoard, RankEntry, RankListParams, RankPage, RankPageParams } from "./rank";
 import type { SessionSettings } from "./session-settings";
 import type { WorkCropParams, WorkImageDraft, WorkImageParams, WorkReference, WorkSearchParams } from "./work-assets";
@@ -53,6 +63,18 @@ export interface WindowState {
 }
 
 export interface RpcMethods {
+  "promotion.activities": { params: PromotionPageParams; result: { records: PromotionActivity[]; total: number } };
+  "promotion.discount": { params: AccountParams | undefined; result: { activity: PromotionActivity | null } };
+  "promotion.module": { params: PromotionModuleParams; result: PromotionModuleData };
+  "promotion.dates": { params: AccountParams | undefined; result: PromotionDates };
+  "promotion.applications": { params: PromotionPageParams; result: { records: BannerApplication[]; total: number } };
+  "promotion.join": { params: PromotionJoinParams; result: undefined };
+  "promotion.cancelDiscount": { params: { account: string; activityId: string; itemId: string }; result: undefined };
+  "promotion.saveBanner": { params: BannerSaveParams; result: undefined };
+  "promotion.upload": { params: { account: string; kind: "image" | "video" | "banner" }; result: WorkUpload | null };
+  "promotion.prepareImage": { params: { account: string }; result: WorkImageDraft | null };
+  "promotion.uploadImage": { params: WorkCropParams; result: WorkUpload };
+  "promotion.discardImage": { params: { account: string; token: string }; result: undefined };
   "sessionSettings.get": { params: undefined; result: SessionSettings };
   "sessionSettings.set": { params: SessionSettings; result: SessionSettings };
   "app.reportRendererError": { params: { kind: "error" | "unhandled-rejection" }; result: undefined };

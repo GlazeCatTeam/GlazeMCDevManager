@@ -26,6 +26,7 @@ export const restorableRoutes = [
   "glaze.home/home",
   "glaze.works/works",
   "glaze.analytics/analytics",
+  "glaze.promotion/promotion",
   "glaze.community/feedback",
   "glaze.community/comments",
   "glaze.messages/messages",

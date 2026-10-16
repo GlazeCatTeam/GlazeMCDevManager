@@ -72,6 +72,7 @@ import type { SessionManager } from "../session/session-manager";
 import { closeLoginWindow, loginWithOfficialWindow } from "../windows/login-window";
 import { appWindows } from "../windows/main-window";
 import { CapabilityError, fromNeteaseError } from "./errors";
+import { createPromotionHandlers } from "./promotion";
 import { exportLogs, openLogs, pickPlugin } from "./settings-files";
 import { pickAndUploadWorkFile, uploadDroppedWorkResource } from "./work-files";
 import { discardWorkImage, prepareWorkImage, uploadCroppedWorkImage } from "./work-image";
@@ -168,6 +169,7 @@ function createHandlers(
       return saved;
     },
     ...createWorkOperationHandlers(sessions),
+    ...createPromotionHandlers(sessions),
     "app.reportRendererError": (params) => {
       if (!params || (params.kind !== "error" && params.kind !== "unhandled-rejection"))
         throw new CapabilityError("validation", "界面错误类型无效");
@@ -527,6 +529,7 @@ export function registerRpc(
           method.startsWith("appearance.") ||
           method.startsWith("layout.") ||
           method.startsWith("works.") ||
+          method.startsWith("promotion.") ||
           method.startsWith("messages.") ||
           method.startsWith("feedback.") ||
           method.startsWith("comments.")) &&
@@ -558,6 +561,9 @@ export function registerRpc(
           "works.changePrice",
           "comments.reply",
           "feedback.reply",
+          "promotion.join",
+          "promotion.cancelDiscount",
+          "promotion.saveBanner",
         ].includes(method)
       )
         logs.write(

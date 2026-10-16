@@ -210,6 +210,12 @@ AI 的字段修改引用材料 ID；主进程内部解析平台签名回执，�
 
 ## 待定事项
 
+### 活动推广能力（2026-10-16）
+
+轮播体验重设计新增 `promotion.prepareImage`（`netease:promotion.write`, read）、`promotion.uploadImage`（同权限, write）、`promotion.discardImage`（同权限, write），均为 shellOnly，不开放 MCP。原生选择与本地快照预览不上传；确认裁剪后按 940 × 450 上传，令牌由宿主绑定账号和窗口，复用既有图片校验。
+
+新增 `promotion.activities`、`promotion.discount`、`promotion.module`、`promotion.dates`、`promotion.applications` 五个只读能力（`netease:promotion.read`），带 MCP 名称与参数说明元数据；分页 page 从 0 开始，每页 10 条，account 可选。新增 `promotion.join`、`promotion.cancelDiscount`、`promotion.saveBanner`、`promotion.upload` 四个写能力（`netease:promotion.write`），均为 shellOnly，不直接暴露给 AI。原生上传入口不接受任意本地路径。页面确认、当前账号校验、插件停用拦截和单次请求共用宿主实现。实现与本地验证见 [21 活动推广](21-promotion.md)，真实平台写入未做端到端验收；元数据不等于 MCP 传输与授权服务已经实装。
+
 ### 已接入应用的详情扩展能力（2026-10-16）
 
 `works.searchReferences`（`netease:works.read`, read）按 PE 前置、PC 前置或关联作品的专用资源池搜索, 最多返回 20 条, 长整数 ID 始终为字符串。`works.options` 补充账号前置权限及联机大厅分类。扩展字段复用 `works.save`/`works.create` 的白名单、基线与主进程校验。
@@ -224,3 +230,5 @@ AI 的字段修改引用材料 ID；主进程内部解析平台签名回执，�
 |---|---|---|
 | 应用没运行时调用 `--mcp` | 自动后台启动（托盘） / 返回"请先打开应用" | M1 实现 MCP 骨架时 |
 | 打包后 `--mcp` 桥的形式 | 应用本体带参数启动 / 单独的小可执行文件 | M1 实现 MCP 骨架时 |
+
+活动报名输入同步（2026-10-16）：沿用 `promotion.join` 与 `promotion.upload`，不新增独立界面业务通道。作品活动报名的 `intro` 接收非空富文本，`images` 最多 3 个签名回执，`videos` 最多 1 个；契约校验同时作用于宿主与平台适配入口。折扣特卖的可选说明保持原规则，能力权限与开放范围不变。

@@ -1,0 +1,16 @@
+{
+  "id": "glaze.promotion",
+  "name": "活动推广",
+  "version": "0.0.0",
+  "publisher": "glaze",
+  "description": "作品活动报名、折扣特卖与 PE 轮播图申请",
+  "engines": { "glaze": "^0.1.0" },
+  "entries": { "ui": "src/index.ts" },
+  "activationEvents": ["onPage:promotion"],
+  "contributes": {
+    "pages": [{ "id": "promotion", "title": "活动推广" }],
+    "navItems": [{ "page": "promotion", "icon": "nav.promotion", "group": "top", "order": 45 }],
+    "widgets": []
+  },
+  "permissions": ["netease:promotion.read", "netease:promotion.write", "netease:works.read"]
+}

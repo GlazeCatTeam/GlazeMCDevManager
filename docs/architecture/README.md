@@ -64,6 +64,7 @@ flowchart TD
 | [11 工程规范](11-engineering.md) | 工具链、测试策略、CI、发布、代码与提交规范 |
 | [12 路线图](12-roadmap.md) | 里程碑与验收标准 |
 | [13 能力层与 MCP 接入](13-mcp.md) | 能力优先原则、能力到 MCP 工具的映射、传输、配对授权、每个模块的工具清单 |
+| [21 活动推广](21-promotion.md) | 作品活动、折扣特卖、PE 轮播图申请、能力和验收 |
 
 项目目标、已敲定的决定和当前进度见 [docs/PROJECT.md](../PROJECT.md)。架构决策记录（ADR）见 [docs/adr](../adr/README.md)。设计参考图见 [docs/design/references](../design/references/)。
 

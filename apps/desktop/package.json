@@ -20,6 +20,7 @@
     "@glaze/plugin-home": "workspace:*",
     "@glaze/plugin-income": "workspace:*",
     "@glaze/plugin-messages": "workspace:*",
+    "@glaze/plugin-promotion": "workspace:*",
     "@glaze/plugin-sdk": "workspace:*",
     "@glaze/plugin-settings": "workspace:*",
     "@glaze/plugin-works": "workspace:*",

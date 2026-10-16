@@ -17,6 +17,16 @@ export {
   listMessages,
   markAllMessagesRead,
 } from "./endpoints/messages";
+export {
+  cancelPromotionDiscount,
+  getPromotionActivities,
+  getPromotionApplications,
+  getPromotionDates,
+  getPromotionDiscount,
+  getPromotionModule,
+  joinPromotion,
+  savePromotionBanner,
+} from "./endpoints/promotion";
 export { getRankList, getRankPage } from "./endpoints/rank";
 export { getUserInfo, type UserInfo } from "./endpoints/user";
 export { createWork } from "./endpoints/work-create";

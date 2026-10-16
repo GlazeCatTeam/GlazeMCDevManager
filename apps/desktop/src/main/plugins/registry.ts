@@ -164,6 +164,12 @@ export class PluginRegistry {
 
   /** Allow shared read capabilities while blocking writes belonging to disabled UI modules */
   assertMethodEnabled(method: string): void {
+    if (
+      method.startsWith("promotion.") &&
+      capabilities[method as RpcMethod]?.risk !== "read" &&
+      !this.snapshot().plugins.find((plugin) => plugin.id === "glaze.promotion")?.enabled
+    )
+      throw new Error("活动推广插件已停用，请先启用再操作");
     const owner =
       method.startsWith("works.") && capabilities[method as RpcMethod]?.permission === "netease:works.write"
         ? "glaze.works"

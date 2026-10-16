@@ -13,6 +13,9 @@ const AnalyticsPage = lazy(() =>
 const CommentsPage = lazy(() => import("@glaze/plugin-community").then((module) => ({ default: module.CommentsPage })));
 const FeedbackPage = lazy(() => import("@glaze/plugin-community").then((module) => ({ default: module.FeedbackPage })));
 const IncomePage = lazy(() => import("@glaze/plugin-income").then((module) => ({ default: module.IncomePage })));
+const PromotionPage = lazy(() =>
+  import("@glaze/plugin-promotion").then((module) => ({ default: module.PromotionPage })),
+);
 const MessagesPage = lazy(() => import("@glaze/plugin-messages").then((module) => ({ default: module.MessagesPage })));
 const WorksPage = lazy(() => import("@glaze/plugin-works").then((module) => ({ default: module.WorksPage })));
 
@@ -22,6 +25,7 @@ const pages: Record<string, ComponentType> = {
   "glaze.works/works": WorksPage,
   "glaze.analytics/analytics": AnalyticsPage,
   "glaze.income/income": IncomePage,
+  "glaze.promotion/promotion": PromotionPage,
   "glaze.community/feedback": FeedbackPage,
   "glaze.community/comments": CommentsPage,
   "glaze.messages/messages": MessagesPage,

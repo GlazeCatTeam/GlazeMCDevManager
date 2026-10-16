@@ -1,0 +1,58 @@
+.content {
+  color: var(--g-text-primary);
+  font-size: 13px;
+  line-height: 1.85;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.content p,
+.content div,
+.content blockquote {
+  margin: 0 0 12px;
+}
+
+.content h1,
+.content h2,
+.content h3,
+.content h4 {
+  font-size: 15px;
+  line-height: 1.6;
+  margin: 16px 0 8px;
+}
+
+.content ul,
+.content ol {
+  margin: 8px 0 12px;
+  padding-left: 24px;
+  white-space: normal;
+}
+
+.content ul {
+  list-style: disc;
+}
+.content ol {
+  list-style: decimal;
+}
+.content li {
+  margin: 4px 0;
+}
+.content blockquote {
+  border-left: 3px solid var(--g-border-subtle);
+  padding-left: 12px;
+  color: var(--g-text-muted);
+}
+
+.content img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 12px 0;
+}
+
+.content > :first-child {
+  margin-top: 0;
+}
+.content > :last-child {
+  margin-bottom: 0;
+}

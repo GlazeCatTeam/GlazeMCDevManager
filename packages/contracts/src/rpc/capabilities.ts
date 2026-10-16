@@ -23,6 +23,58 @@ export interface Capability {
 const shellOnly = (permission: string | null, risk: Risk): Capability => ({ caller: "shell", permission, risk });
 
 export const capabilities: Record<RpcMethod, Capability> = {
+  "promotion.activities": {
+    caller: "any",
+    permission: "netease:promotion.read",
+    risk: "read",
+    mcp: {
+      title: "作品活动",
+      description: "分页读取 PE 作品活动、报名截止日期和赛道。page 从 0 开始，每页 10 条。account 可选，默认当前账号。",
+    },
+  },
+  "promotion.discount": {
+    caller: "any",
+    permission: "netease:promotion.read",
+    risk: "read",
+    mcp: {
+      title: "折扣特卖",
+      description: "读取当前折扣活动及赛道折扣范围、分区规则；无活动时 activity 为 null。account 可选。",
+    },
+  },
+  "promotion.module": {
+    caller: "any",
+    permission: "netease:promotion.read",
+    risk: "read",
+    mcp: {
+      title: "活动作品",
+      description: "读取指定 kind（review 或 discount）、activityId、moduleId 下的候选和已报名作品。account 可选。",
+    },
+  },
+  "promotion.dates": {
+    caller: "any",
+    permission: "netease:promotion.read",
+    risk: "read",
+    mcp: {
+      title: "轮播图可申请日期",
+      description: "返回 PE 轮播图日期（Unix 秒）、资格和不可申请原因。account 可选。",
+    },
+  },
+  "promotion.applications": {
+    caller: "any",
+    permission: "netease:promotion.read",
+    risk: "read",
+    mcp: {
+      title: "轮播图申请记录",
+      description: "分页读取 PE 轮播图申请及审核状态。page 从 0 开始，每页 10 条。account 可选。",
+    },
+  },
+  "promotion.join": shellOnly("netease:promotion.write", "write"),
+  "promotion.cancelDiscount": shellOnly("netease:promotion.write", "write"),
+  "promotion.saveBanner": shellOnly("netease:promotion.write", "write"),
+  "promotion.upload": shellOnly("netease:promotion.write", "write"),
+  "promotion.prepareImage": shellOnly("netease:promotion.write", "read"),
+  "promotion.uploadImage": shellOnly("netease:promotion.write", "write"),
+  "promotion.discardImage": shellOnly("netease:promotion.write", "write"),
   "sessionSettings.get": shellOnly("netease:account.read", "read"),
   "sessionSettings.set": shellOnly("netease:account.manage", "write"),
   "app.reportRendererError": shellOnly(null, "write"),
