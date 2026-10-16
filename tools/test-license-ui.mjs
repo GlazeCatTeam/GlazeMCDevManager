@@ -42,7 +42,8 @@ try {
   );
   await page.addInitScript(
     ({ text, notice, licenses }) => {
-      globalThis.__failProject = false;
+      // Fail the first read: the dialog shares the about page's cached result, so it only sees a failure that happened
+      globalThis.__failProject = true;
       globalThis.glaze = {
         on: () => () => {},
         rpc: async (method) => {
@@ -77,10 +78,6 @@ try {
     { text, notice, licenses },
   );
   await page.goto(`${server.resolvedUrls.local[0]}tests/fixtures/license.html`);
-  await page.getByText("原创代码与文档采用 Apache-2.0；第三方依赖与资源遵循各自声明。", { exact: true }).waitFor();
-  await page.evaluate(() => {
-    globalThis.__failProject = true;
-  });
   await page.getByRole("button", { name: "查看许可", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "开源许可与第三方声明", exact: true });
   await dialog.getByText("读取项目许可失败：测试读取失败", { exact: true }).waitFor();
@@ -88,6 +85,10 @@ try {
     globalThis.__failProject = false;
   });
   await dialog.getByRole("button", { name: "重试项目许可", exact: true }).click();
+  await page
+    .getByText("原创代码与文档采用 Apache-2.0；第三方依赖与资源遵循各自声明。", { exact: true })
+    .first()
+    .waitFor();
   const project = dialog.getByRole("region", { name: "项目许可证", exact: true });
   await project.getByText("Apache-2.0 完整原文", { exact: true }).click();
   assert.equal(await project.locator("details[open] pre").textContent(), text);

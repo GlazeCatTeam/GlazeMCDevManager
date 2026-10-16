@@ -62,7 +62,7 @@ try {
   const connect = page.getByRole("dialog", { name: "连接 AI 工具" });
   await connect.getByText("已安装", { exact: true }).first().waitFor();
   assert.equal(await connect.getByRole("button", { name: /Claude Code/ }).getAttribute("aria-pressed"), "true");
-  assert.equal(await connect.getByRole("button", { name: /帮我打理/ }).getAttribute("aria-pressed"), "true");
+  assert.equal(await connect.getByRole("button", { name: /^帮我打理/ }).getAttribute("aria-pressed"), "true");
   await connect.getByRole("button", { name: "一键连接", exact: true }).click();
   await page.getByRole("dialog", { name: "已连接 Claude Code" }).waitFor();
   await page.getByRole("button", { name: "完成", exact: true }).click();

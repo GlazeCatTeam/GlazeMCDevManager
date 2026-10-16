@@ -9,8 +9,12 @@ export function useHomeQuery<M extends HomeMethod>(
 ): HostQuery<RpcMethods[M]["result"]> & { prefetch: (next: RpcMethods[M]["params"]) => void } {
   const { current } = useSession();
   const account = current?.id;
-  // Pin requests to the account they were issued for so a switch mid-flight cannot mix data
-  const query = useHostQuery(method, { ...params, account } as RpcMethods[M]["params"], { ttl: HOME_TTL });
+  // Pin requests to the account they were issued for so a switch mid-flight cannot mix data.
+  // A different board must never appear under the newly selected tab, so rankings show placeholders instead
+  const query = useHostQuery(method, { ...params, account } as RpcMethods[M]["params"], {
+    ttl: HOME_TTL,
+    keepPrevious: !method.startsWith("rank."),
+  });
   const { data } = query;
   useEffect(() => {
     if (!data) return;

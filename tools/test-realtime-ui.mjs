@@ -132,12 +132,17 @@ try {
       .getByRole("button", { name: "查看订单", exact: true })
       .last()
       .evaluate((button) => button.click());
-    await page.waitForTimeout(800);
-    const emptyOrders = await page.getByText("订单明细", { exact: true }).boundingBox();
-    assert.ok(
-      emptyOrders.y >= main.y && emptyOrders.y < Math.min(main.y + main.height, 802),
-      "shorter or empty order lists are positioned after layout updates",
-    );
+    // Poll instead of a fixed wait: under a loaded machine the scroll into view can land later
+    const ordersInView = async () => {
+      const box = await page.getByText("订单明细", { exact: true }).boundingBox();
+      return !!box && box.y >= main.y && box.y < Math.min(main.y + main.height, 802);
+    };
+    let positioned = false;
+    for (const started = Date.now(); !positioned && Date.now() - started < 5000; ) {
+      positioned = await ordersInView();
+      if (!positioned) await page.waitForTimeout(100);
+    }
+    assert.ok(positioned, "shorter or empty order lists are positioned after layout updates");
     assert.equal(await page.evaluate(() => window.scrollY), 0);
     await page.getByRole("button", { name: "查看失败资源", exact: true }).evaluate((button) => button.click());
     await page.waitForTimeout(800);
