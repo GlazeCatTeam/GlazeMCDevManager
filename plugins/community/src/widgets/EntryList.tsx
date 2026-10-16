@@ -1,5 +1,5 @@
-import { EmptyState, Tag } from "@glaze/plugin-sdk";
-import type { PlayerComment, PlayerFeedback } from "../mock";
+import { EmptyState, type PlayerFeedback, Tag } from "@glaze/plugin-sdk";
+import type { CommentEntry } from "../types";
 import { CommentRating } from "./CommentRating";
 import styles from "./EntryList.module.css";
 import { ReplyStatus } from "./EntryMeta";
@@ -7,7 +7,7 @@ import { FeedbackBadge } from "./FeedbackBadge";
 
 export interface EntryListProps {
   title: string;
-  entries: (PlayerFeedback | PlayerComment)[];
+  entries: (PlayerFeedback | CommentEntry)[];
   selectedId: string | undefined;
   onSelect: (id: string) => void;
   showReplyStatus?: boolean;

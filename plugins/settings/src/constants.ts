@@ -1,7 +1,5 @@
 import { type AppearanceSettings, defaultAppearance, defaultGeneral, type GeneralSettings } from "@glaze/plugin-sdk";
 
-export type { AppearanceSettings, GeneralSettings } from "@glaze/plugin-sdk";
-
 export const categories = [
   { id: "appearance", label: "外观", description: "主题、颜色模式和界面大小" },
   { id: "general", label: "通用", description: "启动行为、账号与本地数据" },

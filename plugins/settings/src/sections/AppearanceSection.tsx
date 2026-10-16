@@ -1,6 +1,11 @@
-import { type AvailableTheme, Button, SegmentedControl, usePluginRegistry } from "@glaze/plugin-sdk";
+import {
+  type AppearanceSettings,
+  type AvailableTheme,
+  Button,
+  SegmentedControl,
+  usePluginRegistry,
+} from "@glaze/plugin-sdk";
 import type { CSSProperties } from "react";
-import type { AppearanceSettings } from "../mock";
 import { SettingGroup, SettingRow } from "../widgets/SettingRow";
 import styles from "./AppearanceSection.module.css";
 import sections from "./Sections.module.css";

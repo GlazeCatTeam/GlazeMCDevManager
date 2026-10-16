@@ -1,5 +1,4 @@
-import { Button, SegmentedControl, Switch } from "@glaze/plugin-sdk";
-import type { GeneralSettings } from "../mock";
+import { Button, type GeneralSettings, SegmentedControl, Switch } from "@glaze/plugin-sdk";
 import { SettingGroup, SettingRow } from "../widgets/SettingRow";
 import sections from "./Sections.module.css";
 

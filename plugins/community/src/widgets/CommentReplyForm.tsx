@@ -1,9 +1,9 @@
 import { Button, MAX_COMMENT_REPLY_LENGTH } from "@glaze/plugin-sdk";
-import type { PlayerComment } from "../mock";
+import type { CommentEntry } from "../types";
 import styles from "./ReplyEditor.module.css";
 
 interface CommentReplyFormProps {
-  entry: PlayerComment;
+  entry: CommentEntry;
   draft: string;
   status: string;
   sending: string | null;

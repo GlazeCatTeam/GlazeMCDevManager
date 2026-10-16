@@ -1,7 +1,7 @@
 import { definePlugin, useHostAppearance } from "@glaze/plugin-sdk";
 import { SettingsPage } from "./SettingsPage";
 
-export type { AppearanceSettings } from "./mock";
+export type { AppearanceSettings } from "@glaze/plugin-sdk";
 export { SettingsPage };
 
 /** Settings page bound to the shell's appearance controller */

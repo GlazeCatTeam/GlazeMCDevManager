@@ -14,7 +14,7 @@ GlazeMCDevManager（显示名 Glaze MC Dev Manager）是面向网易我的世界
 | 主题 | 三层设计令牌 + 主题包；首套主题为 Ore UI（方块语言 + 简约） |
 | 凭据安全 | Cookie、密码只存在主进程，加密落盘；插件和渲染进程永远拿不到 |
 | 网易接口 | 端点目录 + 请求管线，统一错误模型，失败不会被当作零值 |
-| AI 接入 | 每个功能先定义为能力；外部 AI 工具通过 MCP 在配对授权后调用，应用不内置 AI |
+| AI 接入 | 每个功能先定义为能力；外部 AI 工具通过本机 Streamable HTTP 的 MCP 服务调用，按连接密钥和三档权限授权（[22 MCP 实装](22-mcp-runtime.md)），应用不内置 AI |
 
 ```mermaid
 flowchart TD
@@ -47,6 +47,8 @@ flowchart TD
     PERM --> STORAGE
 ```
 
+> 2026-10-16 现状：图中「第三方自定义界面（沙箱 iframe）」「插件宿主进程（utilityProcess）」尚未实现；布局引擎已按 PROJECT 决定 #69 移出范围。目前只加载构建时内置的插件，外壳按插件清单注册页面与贡献（[23 插件注册表与开发](23-plugin-registry.md)）；第三方只开放无代码主题包的本地安装（[19 插件管理与运行日志](19-plugins-and-logs.md)）。
+
 ## 文档目录
 
 | 文档 | 内容 |
@@ -64,6 +66,13 @@ flowchart TD
 | [11 工程规范](11-engineering.md) | 工具链、测试策略、CI、发布、代码与提交规范 |
 | [12 路线图](12-roadmap.md) | 里程碑与验收标准 |
 | [13 能力层与 MCP 接入](13-mcp.md) | 能力优先原则、能力到 MCP 工具的映射、传输、配对授权、每个模块的工具清单 |
+| [14 模组详情与编辑](14-work-editor.md) | 作品详情、分区编辑、新建与提审 |
+| [15 数据分析真实数据接入](15-analytics-data.md) | 五个分析标签的数据来源、缓存与验证 |
+| [16 外观设置实装](16-appearance-settings.md) | 主题、颜色模式、缩放的持久化与预览 |
+| [17 收益管理](17-income-management.md) | PE / PC 月度收益查询与单笔详情（只读） |
+| [18 通用设置实装](18-general-settings.md) | 开机自启、启动页、关闭窗口行为、清除缓存 |
+| [18 消息中心数据接入](18-messages-data.md) | 系统消息的数据链路与操作 |
+| [19 插件管理与运行日志](19-plugins-and-logs.md) | 插件启停、无代码主题包安装、脱敏日志 |
 | [20 关于页面](20-about.md) | 版本、固定项目链接、离线依赖许可与运行时声明 |
 | [21 活动推广](21-promotion.md) | 作品活动、折扣特卖、PE 轮播图申请、能力和验收 |
 | [22 MCP 实装](22-mcp-runtime.md) | AI 助手页、一键连接与连接密钥、三档权限、AI 主动申请、材料与写入保护 |
@@ -71,7 +80,7 @@ flowchart TD
 
 项目目标、已敲定的决定和当前进度见 [docs/PROJECT.md](../PROJECT.md)。架构决策记录（ADR）见 [docs/adr](../adr/README.md)。设计参考图见 [docs/design/references](../design/references/)。
 
-玩家反馈接入细节与验证记录见 [玩家反馈数据接入](player-feedback-data.md)。
+玩家反馈、玩家评论的接入细节与验证记录见 [玩家反馈数据接入](player-feedback-data.md)、[玩家评论数据接入](player-comments-data.md)。
 
 ## 维护约定
 

@@ -1,5 +1,5 @@
 import type { CommentListParams, PlayerComment } from "@glaze/plugin-sdk";
-import type { PlayerComment as CommentEntry } from "./mock";
+import type { CommentEntry } from "./types";
 
 export const commentDateRanges = ["今天", "近 7 天", "近 30 天", "近 90 天", "全部"] as const;
 export type CommentDateRange = (typeof commentDateRanges)[number];

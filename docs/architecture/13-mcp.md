@@ -144,26 +144,30 @@ type CallerIdentity =
 
 模块开发时在这里补充它暴露的工具，作为验收的一部分。
 
+> 2026-10-16 后注：下表部分行写于对应模块接入 MCP 之前（作品、收益、反馈与评论、消息四行里的「待实现」「暂未暴露」已不准确）。业务工具现已按 [22 MCP 实装](22-mcp-runtime.md)「业务能力范围」开放，工具名为方法名的点换成下划线（如 `comments_reply`、`messages_list`、`works_save`），以 22 文和 `packages/mcp/src` 为准。
+
 | 模块 | 计划暴露的工具 | 风险 |
 |---|---|---|
 | 账号 | `account_list`、`account_current`；等级卡片与首页共用 `developer_level` / `developer.level`，支持按 `account` 读取等级、经验、升阶任务及两类贡献。会话偏好和界面账号切换通过下方独立应用工具开放；原 RPC 保持 shellOnly。登录、Cookie 导入、退出、删除和凭据永不开放 | read；切换与偏好为 write |
 | 应用 | `app_settings_get`、`app_appearance_set`、`app_general_set`、`app_layout_ranking_set`、`app_layout_reset`、`app_session_settings_set`、`app_cache_clear`、`app_plugins_list`、`app_plugins_set_enabled`、`app_logs_list`、`app_open_page`、`app_switch_account`。六项独立 `app:` 权限，复用主进程服务和广播，写操作沿用幂等、授权复核、审计与限流；不开放插件安装和任意 RPC | read / write |
 | AI 助手 | `glaze_status`（连接状态、档位、账号、能做的事与还需申请的权限）、`glaze_request_access`（按档位或权限申请并说明原因，最多等待 60 秒）；授权前即可调用。宿主侧 `mcp.installers` / `mcp.connect` / `mcp.answer` 等为 shellOnly，不开放 MCP | read；申请本身不执行业务 |
 | 首页 | `developer_level`（等级、阶、经验、贡献）、`analytics_overview`（本月 / 上月、昨日 / 14 日均的钻石与下载）、`income_estimate`（收益速算，month 可选）、`rank_list`（4 个榜单，热搜不分类，其余支持 4 个分类的前 N 条）、`rank_page`（start/limit 逐批读取，返回 items/total/nextStart，nextStart 为 null 结束；includeIcons=false 不等待缺失封面）、`rank_icons`（最多 50 个数字作品 ID 批量读取公开封面，不携带 Cookie，缺失项省略）；界面与 MCP 共用能力和权限 | read |
-| 作品 | 已声明 `works_list`、`works_get`、`works_review_feedback`；本轮设计增加编辑文档、选项查询、创建/修改草稿、材料上传、保存与提交审核，详见下节。所有 MCP 接入仍待实现；独立上架、删除等不在本轮范围 | read / write |
+| 作品 | 已声明 `works_list`、`works_get`、`works_review_feedback`；本轮设计增加编辑文档、选项查询、创建/修改草稿、材料上传、保存与提交审核，详见下节。所有 MCP 接入仍待实现；独立上架、删除等不在本轮范围（后注：已实装，作品查询、`works_save` / `works_create` / `works_submit_review` 与八项状态操作都已开放，见 22） | read / write |
 | 数据分析 | `analytics.daily` 已通过 MCP 暴露, 支持 PE/PC 日度查询; 返回新增购买、销售总量、钻石、绿宝石、日活、退款率 (0–1 比例)、人均游玩时长 (分钟) 和组件涨粉, 缺失字段为 null; 查询 PE 组件涨粉需传 `includePeers: true` 开启平台附加统计 | read |
-| 收益 | `income_summary`、`income_monthly`（`income_estimate` 见首页）；`income_settle` | read；dangerous |
-| 反馈与评论 | 已接入 `feedback.list`、`feedback.reply`、`feedback.log`、`comments.list`、`comments.reply`，仅供应用主界面调用；MCP 的 `community_list`、`community_reply` 暂未暴露，详见 [玩家反馈数据接入](player-feedback-data.md) 与 [玩家评论数据接入](player-comments-data.md) | read / write |
-| 消息 | `messages_list`、`messages_mark_read` | read / write |
+| 收益 | `income_summary`、`income_monthly`（`income_estimate` 见首页）；`income_settle`（后注：实际开放的是结算列表 / 详情 / 估算等只读查询，申请结算不开放，见 22） | read；dangerous |
+| 反馈与评论 | 已接入 `feedback.list`、`feedback.reply`、`feedback.log`、`comments.list`、`comments.reply`，仅供应用主界面调用；MCP 的 `community_list`、`community_reply` 暂未暴露（后注：已改为直接开放 `comments_list`、`comments_reply`、`feedback_list`、`feedback_reply`、`feedback_log`，见 22），详见 [玩家反馈数据接入](player-feedback-data.md) 与 [玩家评论数据接入](player-comments-data.md) | read / write |
+| 消息 | `messages_list`、`messages_mark_read`（后注：实际开放列表、未读数、读取并标记已读、全部已读、删除，见 22） | read / write |
 | 关于 | `app.getAbout` 返回版本和 Apache-2.0 项目许可原文、NOTICE；`app.getLicenses` 返回第三方依赖及内置资源独立声明。均已接入主界面与 MCP 只读工具，无账号权限要求。`app.openProjectLink` / `app.openRuntimeNotices` 触发系统浏览器或文件打开，仅主界面可用，不向 MCP 开放 | read；本机打开动作 write |
 
 ### 作品列表八项能力（2026-10-16）
 
-应用已定义并接入 `works.cancelReview`、`works.publish`、`works.appointOnline`、`works.cancelAppointOnline`、`works.submitSelfTest`、`works.cancelTest`、`works.delete`、`works.changePrice`。权限均为 `netease:works.write`; 删除风险为 `dangerous`, 其他为 `write`。目前均为 `shellOnly`, 没有 MCP exposure; 上表关于独立上架和删除未开放 MCP 的范围保持不变。取消定时上架只允许 `appoint_online`, 发送显式 null 清除预约。
+应用已定义并接入 `works.cancelReview`、`works.publish`、`works.appointOnline`、`works.cancelAppointOnline`、`works.submitSelfTest`、`works.cancelTest`、`works.delete`、`works.changePrice`。权限均为 `netease:works.write`; 删除风险为 `dangerous`, 其他为 `write`。目前均为 `shellOnly`, 没有 MCP exposure; 上表关于独立上架和删除未开放 MCP 的范围保持不变。（后注：RPC 仍为 `shellOnly`，但 MCP 已通过业务工具 `works_cancelReview` 等八项开放，复用同一套主进程校验，默认属于「完全托管」档位，见 [22 MCP 实装](22-mcp-runtime.md)。）取消定时上架只允许 `appoint_online`, 发送显式 null 清除预约。
 
 能力接收固定账号、作品 ID 和预期状态; 自测额外携带免机审选择, 定时上架携带北京时间, 调价携带原币种/价格与新价格。主进程对参数、调用窗口、账号、作品实时状态和价格规则进行校验, 同一账号/作品的列表写操作互斥。所有八项操作都经过应用内确认, 不自动重试写入; 无法判断写结果时返回 `outcome: uncertain`, 界面要求核对后再操作。未来 MCP 接入必须复用这些校验并接入批准机制, 不能直接开放现有 IPC。
 
-## 作品创建、更新与提交审核（2026-10-16 设计，尚未实现）
+## 作品创建、更新与提交审核（2026-10-16 设计，已按简化方案实装）
+
+> 后注：本节是实装前的设计。实际实现按用户要求去掉了 AI 草稿、差异预览和逐次应用内确认：AI 用 `works_editor` / `works_options` 读取，用 `works_save`（传 itemId 和 patch）、`works_create`、`works_upload`、`works_submit_review` 在已授予的权限内直接执行，见 [22 MCP 实装](22-mcp-runtime.md)「直接修改作品」。下文的草稿工具表和审批流程只作历史记录。
 
 用户要求 MCP 支持作品更新、提交审核，以及作品创建/编辑页的内容填写和修改。只读连接可以作为开发检查点，但不能作为本轮功能完成标准。范围决策见 [ADR-0012](../adr/0012-mcp-work-editing.md)。
 
@@ -238,7 +242,7 @@ AI 的字段修改引用材料 ID；主进程内部解析平台签名回执，�
 
 轮播体验重设计新增 `promotion.prepareImage`（`netease:promotion.write`, read）、`promotion.uploadImage`（同权限, write）、`promotion.discardImage`（同权限, write），均为 shellOnly，不开放 MCP。原生选择与本地快照预览不上传；确认裁剪后按 940 × 450 上传，令牌由宿主绑定账号和窗口，复用既有图片校验。
 
-新增 `promotion.activities`、`promotion.discount`、`promotion.module`、`promotion.dates`、`promotion.applications` 五个只读能力（`netease:promotion.read`），带 MCP 名称与参数说明元数据；分页 page 从 0 开始，每页 10 条，account 可选。新增 `promotion.join`、`promotion.cancelDiscount`、`promotion.saveBanner`、`promotion.upload` 四个写能力（`netease:promotion.write`），均为 shellOnly，不直接暴露给 AI。原生上传入口不接受任意本地路径。页面确认、当前账号校验、插件停用拦截和单次请求共用宿主实现。实现与本地验证见 [21 活动推广](21-promotion.md)，真实平台写入未做端到端验收；元数据不等于 MCP 传输与授权服务已经实装。
+新增 `promotion.activities`、`promotion.discount`、`promotion.module`、`promotion.dates`、`promotion.applications` 五个只读能力（`netease:promotion.read`），带 MCP 名称与参数说明元数据；分页 page 从 0 开始，每页 10 条，account 可选。新增 `promotion.join`、`promotion.cancelDiscount`、`promotion.saveBanner`、`promotion.upload` 四个写能力（`netease:promotion.write`），均为 shellOnly，不直接暴露给 AI（后注：MCP 现已通过业务工具 `promotion_join`、`promotion_cancelDiscount`、`promotion_saveBanner` 和材料工具 `promotion_upload` 开放，默认属于「完全托管」档位，见 22）。原生上传入口不接受任意本地路径。页面确认、当前账号校验、插件停用拦截和单次请求共用宿主实现。实现与本地验证见 [21 活动推广](21-promotion.md)，真实平台写入未做端到端验收；元数据不等于 MCP 传输与授权服务已经实装。
 
 ### 已接入应用的详情扩展能力（2026-10-16）
 
@@ -252,7 +256,7 @@ AI 的字段修改引用材料 ID；主进程内部解析平台签名回执，�
 
 | 事项 | 选项 | 计划决定时间 |
 |---|---|---|
-| 应用没运行时调用 `--mcp` | 自动后台启动（托盘） / 返回"请先打开应用" | M1 实现 MCP 骨架时 |
-| 打包后 `--mcp` 桥的形式 | 应用本体带参数启动 / 单独的小可执行文件 | M1 实现 MCP 骨架时 |
+| ~~应用没运行时调用 `--mcp`~~ | 已失效：改用 Streamable HTTP 后没有 `--mcp` 入口，MCP 服务随应用运行，应用没运行时连不上（[PROJECT 决定 #70](../PROJECT.md)） | — |
+| ~~打包后 `--mcp` 桥的形式~~ | 已失效：stdio 桥已移除（决定 #70） | — |
 
 活动报名输入同步（2026-10-16）：沿用 `promotion.join` 与 `promotion.upload`，不新增独立界面业务通道。作品活动报名的 `intro` 接收非空富文本，`images` 最多 3 个签名回执，`videos` 最多 1 个；契约校验同时作用于宿主与平台适配入口。折扣特卖的可选说明保持原规则，能力权限与开放范围不变。

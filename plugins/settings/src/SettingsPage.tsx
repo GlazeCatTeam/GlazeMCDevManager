@@ -1,14 +1,22 @@
-import { Button, callHost, Dialog, PageHeader, Panel, useContributions, useNavigation } from "@glaze/plugin-sdk";
-import { type CSSProperties, Suspense, useCallback, useEffect, useState } from "react";
 import {
   type AppearanceSettings,
+  Button,
+  callHost,
+  Dialog,
+  PageHeader,
+  Panel,
+  useContributions,
+  useNavigation,
+} from "@glaze/plugin-sdk";
+import { type CSSProperties, Suspense, useCallback, useEffect, useState } from "react";
+import {
   categories,
   confirmationCopy,
   initialAppearance,
   initialGeneral,
   type PendingAction,
   type SettingsCategory,
-} from "./mock";
+} from "./constants";
 import styles from "./SettingsPage.module.css";
 import { AboutSection } from "./sections/AboutSection";
 import { AppearanceSection } from "./sections/AppearanceSection";

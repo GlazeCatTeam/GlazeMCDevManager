@@ -1,4 +1,4 @@
-import type { CommunityEntry } from "../mock";
+import type { CommunityEntry } from "../types";
 import styles from "./EntryMeta.module.css";
 
 /** "已回复" in green or "未回复" in amber */

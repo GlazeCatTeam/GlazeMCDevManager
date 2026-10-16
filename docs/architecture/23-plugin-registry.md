@@ -13,6 +13,8 @@ plugins/<名称>/
 
 外壳在构建时扫描 `plugins/*/glaze-plugin.json`，按清单的 `entries.ui`（默认 `src/index.ts`）配对插件模块，模块只在需要时加载。新增内置插件不需要改外壳任何代码。
 
+`apps/desktop/package.json` 仍把每个内置插件列为 `workspace:*` 依赖。外壳按路径扫描，不靠这些依赖解析模块；保留它们是为了让 Turborepo 按依赖顺序执行任务，并让构建时的许可收集（`apps/desktop/build/license-notices.ts`，沿 desktop 的依赖树遍历）覆盖插件将来引入的第三方运行时依赖。新增内置插件时同步加上这一行。
+
 ## 清单
 
 类型定义在 `@glaze/contracts` 的 `plugin-manifest.ts`（`PluginManifest`）。示例（数据分析插件，节选）：

@@ -7,8 +7,8 @@ import {
   remoteImageUrl,
   TextButton,
 } from "@glaze/plugin-sdk";
+import { loginMethodLabels } from "../constants";
 import { monthDay } from "../format";
-import { loginMethodLabels } from "../mock";
 import styles from "./SavedAccountsCard.module.css";
 
 export interface SavedAccountsCardProps {
