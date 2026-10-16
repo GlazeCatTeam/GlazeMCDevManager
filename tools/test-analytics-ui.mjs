@@ -302,7 +302,8 @@ try {
   await page.evaluate(() => __analyticsTest.theme("dark"));
   const comparison = tracking.getByRole("region", { name: "资源数据趋势", exact: true });
   const readout = comparison.getByRole("group", { name: "图表系列，点击切换显示" });
-  assert.equal(await comparison.getByRole("tooltip").count(), 0, "readout never covers the chart");
+  const tooltip = comparison.getByRole("tooltip");
+  assert.equal(await tooltip.count(), 0, "floating values stay closed until a date is inspected");
   assert.equal(await readout.getByRole("button").count(), 10);
   assert.equal(await readout.evaluate((element) => element.scrollHeight <= element.clientHeight), true);
   const colors = await comparison
@@ -329,16 +330,41 @@ try {
   await page.mouse.move(plotBox.x + 66, plotBox.y + 80);
   const firstDate = await datePicker.locator("option").first().getAttribute("value");
   assert.equal(await datePicker.inputValue(), firstDate, "hover previews the nearest date");
+  await tooltip.waitFor();
+  assert.match(await tooltip.innerText(), new RegExp(firstDate));
+  assert.equal(await tooltip.locator('[class*="tooltipRow"]').count(), 10);
+  assert.equal(await readout.locator("strong").count(), 0, "compact legend contains no permanent value cards");
+  await comparison.screenshot({ path: `${output}/tracking-floating-values.png` });
+  const floatingBox = await tooltip.boundingBox();
+  await page.mouse.move(floatingBox.x + floatingBox.width / 2, plotBox.y + 80);
+  assert.notEqual(await datePicker.inputValue(), firstDate, "floating values do not block pointer inspection");
   await page.mouse.click(plotBox.x + 66, plotBox.y + 80);
   await comparison.getByRole("button", { name: "显示全部", exact: true }).hover();
   assert.equal(await datePicker.inputValue(), firstDate, "click pins the date after the pointer leaves");
+  assert.equal(await tooltip.isVisible(), true, "pinned values remain visible outside the plot");
   await chart.focus();
   await page.keyboard.press("Escape");
   assert.equal(await datePicker.inputValue(), lastDate);
+  assert.equal(await tooltip.count(), 0, "Escape dismisses the pinned tooltip");
+  await page.mouse.move(plotBox.x + plotBox.width - 22, plotBox.y + 80);
+  const tooltipBox = await tooltip.boundingBox();
+  assert.ok(tooltipBox.x >= plotBox.x && tooltipBox.x + tooltipBox.width <= plotBox.x + plotBox.width);
+  await comparison.getByRole("button", { name: "显示全部", exact: true }).hover();
+  assert.equal(await tooltip.count(), 0, "unpinned values disappear when the pointer leaves");
   await comparison.screenshot({ path: `${output}/tracking-comparison.png` });
   await page.setViewportSize({ width: 760, height: 1000 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   assert.equal(await readout.evaluate((element) => element.scrollHeight <= element.clientHeight), true);
+  await chart.focus();
+  await page.keyboard.press("Home");
+  const narrowPlot = await chart.boundingBox();
+  const narrowTooltip = await tooltip.boundingBox();
+  assert.ok(
+    narrowTooltip.x >= narrowPlot.x && narrowTooltip.x + narrowTooltip.width <= narrowPlot.x + narrowPlot.width,
+  );
+  assert.ok(
+    narrowTooltip.y >= narrowPlot.y && narrowTooltip.y + narrowTooltip.height <= narrowPlot.y + narrowPlot.height,
+  );
   await comparison.screenshot({ path: `${output}/tracking-comparison-narrow.png` });
   await page.reload();
   await tracking.getByText(/按钻石收益区间合计降序展示 10/).waitFor();
@@ -386,7 +412,9 @@ try {
       assert.equal(await tracking.getByRole("columnheader", { name: "有数据日均", exact: true }).count(), 1);
     }
     if (name === "退款率") {
-      assert.match(await tracking.getByRole("group", { name: "图表系列，点击切换显示" }).innerText(), /0\.3%/);
+      await tracking.getByRole("slider").focus();
+      await page.keyboard.press("Home");
+      assert.match(await tracking.getByRole("tooltip").innerText(), /0\.3%/);
       await tracking
         .getByRole("region", { name: "资源数据趋势", exact: true })
         .screenshot({ path: `${output}/tracking-refund-rate.png` });

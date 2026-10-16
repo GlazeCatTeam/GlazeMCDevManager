@@ -55,7 +55,7 @@ function linePath(values: (number | null)[], xStep: number, ceiling: number, plo
     .join(" ");
 }
 
-/** Inspect dates in a persistent readout without covering the plotted series */
+/** Inspect date values in a floating readout with compact series toggles */
 export function TrendChart({ labels, series: allSeries, metric, unit, kind = "line" }: TrendChartProps) {
   const titleId = useId();
   const readoutId = useId();
@@ -98,8 +98,9 @@ export function TrendChart({ labels, series: allSeries, metric, unit, kind = "li
     0,
     labels.indexOf(hover ?? labels[pinnedIndex >= 0 ? pinnedIndex : labels.length - 1] ?? ""),
   );
-  // Rank the readout by the inspected date, keeping ties stable and missing values last
-  const rankedSeries = [...allSeries].sort((left, right) => {
+  const showTooltip = hover !== null || pinnedIndex >= 0;
+  // Rank visible values by the inspected date, keeping ties stable and missing values last
+  const rankedSeries = [...series].sort((left, right) => {
     const leftValue = left.values[activeIndex];
     const rightValue = right.values[activeIndex];
     if (leftValue == null) return rightValue == null ? 0 : 1;
@@ -111,6 +112,14 @@ export function TrendChart({ labels, series: allSeries, metric, unit, kind = "li
   const barGroupWidth = plotWidth / Math.max(labels.length, 1);
   const xOf = (index: number) => (kind === "bar" ? LEFT + barGroupWidth * (index + 0.5) : LEFT + index * xStep);
   const yOf = (value: number) => TOP + plotHeight * (1 - value / ceiling);
+  const tooltipWidth = Math.min(380, size.width - 16);
+  const tooltipLeft = Math.max(
+    8,
+    Math.min(
+      size.width - tooltipWidth - 8,
+      xOf(activeIndex) + tooltipWidth + 24 <= size.width ? xOf(activeIndex) + 16 : xOf(activeIndex) - tooltipWidth - 16,
+    ),
+  );
 
   /** Convert the pointer through the SVG transform, including responsive letterboxing */
   const inspectPointer = (event: PointerEvent<SVGSVGElement>, pin = false) => {
@@ -167,6 +176,31 @@ export function TrendChart({ labels, series: allSeries, metric, unit, kind = "li
 
   return (
     <div className={styles.chart}>
+      <fieldset className={styles.legend} aria-label="图表系列，点击切换显示">
+        {allSeries.map((item) => {
+          const shown = series.some((entry) => entry.id === item.id);
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={`${styles.legendItem} ${shown ? "" : styles.hiddenSeries}`}
+              aria-pressed={shown}
+              title={`${shown ? "隐藏" : "显示"}${item.label}`}
+              disabled={shown && series.length === 1}
+              onPointerEnter={() => setHighlighted(item.id)}
+              onPointerLeave={() => setHighlighted(null)}
+              onFocus={() => setHighlighted(item.id)}
+              onBlur={() => setHighlighted(null)}
+              onClick={() =>
+                setHidden(shown ? [...(visible.length ? hidden : []), item.id] : hidden.filter((id) => id !== item.id))
+              }
+            >
+              <Swatch color={item.color} dashed={item.dashed} />
+              <span className={styles.legendName}>{item.label}</span>
+            </button>
+          );
+        })}
+      </fieldset>
       <div
         ref={plot}
         className={styles.plot}
@@ -176,7 +210,7 @@ export function TrendChart({ labels, series: allSeries, metric, unit, kind = "li
         aria-valuemax={Math.max(labels.length - 1, 0)}
         aria-valuenow={Math.max(activeIndex, 0)}
         aria-valuetext={labels[Math.max(activeIndex, 0)]}
-        aria-describedby={readoutId}
+        aria-describedby={showTooltip ? readoutId : undefined}
         tabIndex={0}
         onKeyDown={inspectKey}
         onPointerLeave={() => setHover(null)}
@@ -211,7 +245,7 @@ export function TrendChart({ labels, series: allSeries, metric, unit, kind = "li
               </text>
             ) : null,
           )}
-          {activeIndex >= 0 && (
+          {showTooltip && (
             <line
               x1={xOf(activeIndex)}
               x2={xOf(activeIndex)}
@@ -270,6 +304,27 @@ export function TrendChart({ labels, series: allSeries, metric, unit, kind = "li
             </g>
           ))}
         </svg>
+        {showTooltip && (
+          <div
+            id={readoutId}
+            role="tooltip"
+            className={styles.tooltip}
+            data-pinned={hover === null && pinnedIndex >= 0}
+            style={{ left: tooltipLeft }}
+          >
+            <strong className={styles.tooltipDate}>{labels[activeIndex]}</strong>
+            {rankedSeries.map((item) => {
+              const value = item.values[activeIndex];
+              return (
+                <div key={item.id} className={styles.tooltipRow}>
+                  <Swatch color={item.color} dashed={item.dashed} />
+                  <span className={styles.tooltipName}>{item.label}</span>
+                  <span className={styles.tooltipValue}>：{value == null ? "未提供" : formatValue(value, metric)}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
       <div className={styles.caption}>
         <div className={styles.dateControls}>
@@ -305,34 +360,7 @@ export function TrendChart({ labels, series: allSeries, metric, unit, kind = "li
           </Button>
         </div>
       </div>
-      <p className={styles.hint}>按当前数值从高到低排列 · 点击图表固定日期 · 悬停资源高亮曲线，点击切换显示</p>
-      <fieldset id={readoutId} className={styles.legend} aria-label="图表系列，点击切换显示">
-        {rankedSeries.map((item) => {
-          const value = activeIndex >= 0 ? item.values[activeIndex] : undefined;
-          const shown = series.some((entry) => entry.id === item.id);
-          return (
-            <button
-              key={item.id}
-              type="button"
-              className={`${styles.legendItem} ${shown ? "" : styles.hiddenSeries}`}
-              aria-pressed={shown}
-              title={`${shown ? "隐藏" : "显示"}${item.label}`}
-              disabled={shown && series.length === 1}
-              onPointerEnter={() => setHighlighted(item.id)}
-              onPointerLeave={() => setHighlighted(null)}
-              onFocus={() => setHighlighted(item.id)}
-              onBlur={() => setHighlighted(null)}
-              onClick={() =>
-                setHidden(shown ? [...(visible.length ? hidden : []), item.id] : hidden.filter((id) => id !== item.id))
-              }
-            >
-              <Swatch color={item.color} dashed={item.dashed} />
-              <span className={styles.legendName}>{item.label}</span>
-              <strong className={styles.legendValue}>{value == null ? "未提供" : formatValue(value, metric)}</strong>
-            </button>
-          );
-        })}
-      </fieldset>
+      <p className={styles.hint}>悬停图表查看数值 · 点击固定日期，Esc 取消 · 悬停图例高亮曲线，点击切换显示</p>
     </div>
   );
 }
