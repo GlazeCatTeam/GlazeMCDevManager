@@ -6,7 +6,7 @@ import {
   type Metric,
   type MonthRange,
   monthsInRange,
-  shiftDay,
+  summaryMonthRange,
   todayKey,
   topResources,
   trackingSeries,
@@ -15,6 +15,7 @@ import { QuerySkeleton, QueryState, useRefresh } from "../QueryState";
 import { useAnalysisPreference } from "../useAnalysisPreference";
 import { useAnalysisSnapshot, useAnalyticsQuery } from "../useAnalyticsQuery";
 import { InlineSelect } from "../widgets/InlineSelect";
+import { MonthRangePicker } from "../widgets/MonthRangePicker";
 import { ResourceCard, ResourceGrid } from "../widgets/ResourceCard";
 import { StatStrip } from "../widgets/StatStrip";
 import { TrendChart } from "../widgets/TrendChart";
@@ -29,12 +30,14 @@ const summaryMetrics: { id: Metric; label: string; unit: string }[] = [
 const metricOptions = summaryMetrics.map((item) => ({ value: item.id, label: item.label }));
 const PAGE_SIZE = 12;
 
-/** Native calendar-month totals and trends, defaulting to the current Beijing month */
+/** Show available monthly totals and identify gaps without treating them as zero */
 export function SummaryView({ refreshVersion }: { refreshVersion: number }) {
   const today = todayKey();
   const currentMonth = today.slice(0, 7);
-  const endDate = shiftDay(today, -1);
   const [months, setMonths] = useAnalysisPreference<MonthRange>("summary.months", 1, [1, 3, 6, 12]);
+  const [rangeMode, setRangeMode] = useAnalysisPreference("summary.rangeMode", "preset", ["preset", "custom"]);
+  const [customStart, setCustomStart] = useAnalysisPreference("summary.startMonth", currentMonth);
+  const [customEnd, setCustomEnd] = useAnalysisPreference("summary.endMonth", currentMonth);
   const [metric, setMetric] = useAnalysisPreference<Metric>(
     "summary.metric",
     "diamonds",
@@ -47,15 +50,26 @@ export function SummaryView({ refreshVersion }: { refreshVersion: number }) {
     "total",
     "resources",
   ]);
-  const requestedMonths = monthsInRange(months);
-  const startDate = `${requestedMonths[0]}-01`;
-  const hasCompletedDays = startDate <= endDate;
+  const presetMonths = monthsInRange(months);
+  const {
+    monthKeys: requestedMonths,
+    startDate,
+    endDate,
+    error: rangeError,
+  } = summaryMonthRange(
+    rangeMode === "custom" ? customStart : (presetMonths[0] as string),
+    rangeMode === "custom" ? customEnd : currentMonth,
+    today,
+  );
+  const hasCompletedDays = !rangeError && startDate <= endDate;
   const query = useAnalyticsQuery("analytics.monthly", { startDate, endDate }, hasCompletedDays);
   const result = useAnalysisSnapshot(query, { monthKeys: requestedMonths, endDate }, hasCompletedDays);
   const { monthKeys } = result.scope;
-  const activeMonth = monthKeys.includes(selectedMonth) ? selectedMonth : currentMonth;
+  const activeMonth = monthKeys.includes(selectedMonth) ? selectedMonth : (monthKeys.at(-1) ?? currentMonth);
   useRefresh(result.reload, refreshVersion);
   const records = result.data ?? [];
+  const availableMonths = new Set(records.map((row) => row.date));
+  const unavailableMonths = monthKeys.filter((month) => !availableMonths.has(month));
   const resources = useMemo(
     () =>
       [...new Map((result.data ?? []).map((row) => [row.resourceId, row.name])).entries()].map(([id, name], index) => ({
@@ -67,9 +81,15 @@ export function SummaryView({ refreshVersion }: { refreshVersion: number }) {
     [result.data],
   );
   const selectedMetric = summaryMetrics.find((item) => item.id === metric);
-  const monthOptions = monthKeys
-    .toReversed()
-    .map((month) => ({ value: month, label: month === currentMonth ? `${month}（未完结）` : month }));
+  const monthOptions = monthKeys.toReversed().map((month) => ({
+    value: month,
+    label:
+      result.data !== null && !availableMonths.has(month)
+        ? `${month}（暂未提供）`
+        : month === currentMonth
+          ? `${month}（未完结）`
+          : month,
+  }));
   const leaders = topResources(resources, records, monthKeys, metric);
   const matching = resources.filter((resource) =>
     resource.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
@@ -79,25 +99,57 @@ export function SummaryView({ refreshVersion }: { refreshVersion: number }) {
 
   return (
     <>
-      <Panel className={styles.compactFilters} aria-label="月度汇总筛选">
+      <Panel className={`${styles.compactFilters} ${styles.summaryFilters}`} aria-label="月度汇总筛选">
         <div className={styles.filterRow}>
           <span className={styles.filterLabel}>时间</span>
-          <SegmentedControl label="汇总月份范围" options={monthRangeOptions} value={months} onChange={setMonths} />
-          <span className={styles.dateRange}>
-            {months === 1 ? currentMonth : rangeText(requestedMonths)} · 截至 {endDate}
-          </span>
+          <SegmentedControl
+            label="汇总月份范围"
+            options={monthRangeOptions}
+            value={rangeMode === "custom" ? "custom" : months}
+            onChange={(value) => {
+              setRangeMode("preset");
+              if (value !== "custom") setMonths(value);
+            }}
+          />
+          <MonthRangePicker
+            start={customStart}
+            end={customEnd}
+            active={rangeMode === "custom"}
+            onChange={(start, end) => {
+              setCustomStart(start);
+              setCustomEnd(end);
+              setRangeMode("custom");
+            }}
+          />
+          {!rangeError && (
+            <span className={styles.dateRange}>
+              {rangeText(requestedMonths)} · 截至 {endDate}
+            </span>
+          )}
         </div>
+        {rangeError && (
+          <p className={styles.rangeHint} role="status">
+            {rangeError}，请重新选择月份
+          </p>
+        )}
       </Panel>
       <QueryState query={result} scopeLabel={`${rangeText(monthKeys)} · 截至 ${result.scope.endDate}`} />
-      {!hasCompletedDays && <p className={styles.muted}>当月暂无已完成日期的数据，请于明日查看或切换时间范围</p>}
+      {!rangeError && !hasCompletedDays && (
+        <p className={styles.muted}>当月暂无已完成日期的数据，请于明日查看或切换时间范围</p>
+      )}
       <QuerySkeleton loading={result.loading && result.data === null} />
+      {result.data !== null && unavailableMonths.length > 0 && (
+        <p className={styles.muted} role="status">
+          {unavailableMonths.join("、")}：平台暂未提供月汇总数据。合计仅包含已有数据，缺失月份不计为零。
+        </p>
+      )}
       {result.data !== null && (
         <>
           <StatStrip
             items={summaryMetrics.map((item) => ({
               label: item.label,
               value: formatValue(aggregate(records, item.id)),
-              note: `${rangeText(monthKeys)} 已返回数据 · ${item.unit}`,
+              note: `${rangeText(monthKeys)} 已有数据合计 · ${item.unit}`,
             }))}
           />
           <Panel
@@ -140,7 +192,7 @@ export function SummaryView({ refreshVersion }: { refreshVersion: number }) {
                 }
               />
             ) : (
-              <p>当前日期范围暂无月度数据</p>
+              <p>当前日期范围的月汇总数据暂未提供</p>
             )}
           </Panel>
           <Panel
@@ -150,40 +202,53 @@ export function SummaryView({ refreshVersion }: { refreshVersion: number }) {
               <InlineSelect label="月份" value={activeMonth} options={monthOptions} onChange={setSelectedMonth} />
             }
           >
-            <div className={styles.filterRow}>
-              <SearchField
-                label="搜索月度资源"
-                placeholder="搜索资源名称…"
-                value={search}
-                onChange={(value) => {
-                  setSearch(value);
-                  setPage(0);
-                }}
-              />
-              <span className={styles.muted}>共 {matching.length} 个 · 搜索不影响合计</span>
-            </div>
-            <ResourceGrid>
-              {matching.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE).map((resource) => (
-                <ResourceCard
-                  key={resource.id}
-                  resource={resource}
-                  caption={`${resource.category} · ${activeMonth}`}
-                  metrics={summaryMetrics.map((item) => ({
-                    label: item.label,
-                    value: formatValue(
-                      aggregate(
-                        records.filter((record) => record.resourceId === resource.id && record.date === activeMonth),
-                        item.id,
-                      ),
-                    ),
-                  }))}
+            {!availableMonths.has(activeMonth) ? (
+              <p className={styles.muted}>{activeMonth}：平台暂未提供月汇总数据</p>
+            ) : (
+              <>
+                <div className={styles.filterRow}>
+                  <SearchField
+                    label="搜索月度资源"
+                    placeholder="搜索资源名称…"
+                    value={search}
+                    onChange={(value) => {
+                      setSearch(value);
+                      setPage(0);
+                    }}
+                  />
+                  <span className={styles.muted}>共 {matching.length} 个 · 搜索不影响合计</span>
+                </div>
+                <ResourceGrid>
+                  {matching.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE).map((resource) => (
+                    <ResourceCard
+                      key={resource.id}
+                      resource={resource}
+                      caption={`${resource.category} · ${activeMonth}`}
+                      metrics={summaryMetrics.map((item) => ({
+                        label: item.label,
+                        value: formatValue(
+                          aggregate(
+                            records.filter(
+                              (record) => record.resourceId === resource.id && record.date === activeMonth,
+                            ),
+                            item.id,
+                          ),
+                        ),
+                      }))}
+                    />
+                  ))}
+                  {matching.length === 0 && (
+                    <p className={styles.muted}>{search ? "没有匹配的资源，试试其他关键词" : "当前范围暂无资源数据"}</p>
+                  )}
+                </ResourceGrid>
+                <Pagination
+                  page={currentPage}
+                  pageCount={pageCount}
+                  onChange={setPage}
+                  note={`每页 ${PAGE_SIZE} 个资源`}
                 />
-              ))}
-              {matching.length === 0 && (
-                <p className={styles.muted}>{search ? "没有匹配的资源，试试其他关键词" : "当前范围暂无资源数据"}</p>
-              )}
-            </ResourceGrid>
-            <Pagination page={currentPage} pageCount={pageCount} onChange={setPage} note={`每页 ${PAGE_SIZE} 个资源`} />
+              </>
+            )}
             <span className={styles.muted}>“—”表示平台未提供。月汇总未提供购买次数合计。</span>
           </Panel>
         </>

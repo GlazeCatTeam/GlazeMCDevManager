@@ -32,7 +32,7 @@ import {
   deleteMessages,
   estimateIncome,
   getAnalyticsDaily,
-  getAnalyticsMonthly,
+  getAnalyticsMonthlySummary,
   getAnalyticsOverview,
   getAnalyticsPeriodIncome,
   getAnalyticsRealtime,
@@ -447,7 +447,9 @@ function createHandlers(
     },
     "analytics.monthly": (params) => {
       if (!isAnalyticsRange(params)) throw new CapabilityError("internal", "分析日期范围无效");
-      return sessions.request(optionalString(params, "account"), (session) => getAnalyticsMonthly(session, params));
+      return sessions.request(optionalString(params, "account"), (session) =>
+        getAnalyticsMonthlySummary(session, params),
+      );
     },
     "analytics.realtime": (params) => {
       if (!isAnalyticsRealtimeParams(params)) throw new CapabilityError("internal", "实时收益日期或资源参数无效");

@@ -78,6 +78,34 @@ export function monthsInRange(months: MonthRange, today = todayKey()): string[] 
   );
 }
 
+/** Validate an inclusive month interval before issuing at most twelve monthly queries */
+export function monthRangeError(start: string, end: string, today = todayKey()): string | null {
+  if (!start || !end) return "请选择开始月份和结束月份";
+  for (const month of [start, end]) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || month < "0001-01") return "请输入有效月份";
+  }
+  if (start > end) return "开始月份不能晚于结束月份";
+  if (end > today.slice(0, 7)) return "不能选择未来月份";
+  const count =
+    (Number(end.slice(0, 4)) - Number(start.slice(0, 4))) * 12 + Number(end.slice(5)) - Number(start.slice(5)) + 1;
+  return count > 12 ? "一次最多选择 12 个月（含起止月份）" : null;
+}
+
+/** Resolve complete historical months and cap the current month at yesterday in Beijing */
+export function summaryMonthRange(start: string, end: string, today = todayKey()) {
+  const error = monthRangeError(start, end, today);
+  if (error) return { monthKeys: [] as string[], startDate: "", endDate: "", error };
+  const monthKeys: string[] = [];
+  const cursor = new Date(`${start}-01T00:00:00Z`);
+  while (cursor.toISOString().slice(0, 7) <= end) {
+    monthKeys.push(cursor.toISOString().slice(0, 7));
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+  const lastDay = new Date(cursor.getTime() - 86_400_000).toISOString().slice(0, 10);
+  const yesterday = shiftDay(today, -1);
+  return { monthKeys, startDate: `${start}-01`, endDate: lastDay > yesterday ? yesterday : lastDay, error: null };
+}
+
 /** Match upstream analysis eligibility: published at least once, excluding prerequisites */
 export function isAnalyzableWork(work: Pick<WorkSummary, "isPrerequisite" | "onlineTime">): boolean {
   return !work.isPrerequisite && !!work.onlineTime && work.onlineTime !== "UNKNOWN";

@@ -4,6 +4,7 @@ export { passportFromCookie, sessionCookieFromInput } from "./auth/cookie";
 export {
   getAnalyticsDaily,
   getAnalyticsMonthly,
+  getAnalyticsMonthlySummary,
   getAnalyticsRealtime,
 } from "./endpoints/analytics";
 export { listComments, replyComment } from "./endpoints/comments";

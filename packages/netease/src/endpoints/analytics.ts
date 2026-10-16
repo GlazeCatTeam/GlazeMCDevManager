@@ -230,7 +230,7 @@ export async function getAnalyticsDaily(
   return ok(records);
 }
 
-/** Native monthly totals for ordinary PE resources */
+/** Read native monthly totals, preserving the missing-month signal for period estimates */
 export async function getAnalyticsMonthly(
   session: NeteaseSession,
   params: AnalyticsRangeParams,
@@ -272,6 +272,43 @@ export async function getAnalyticsMonthly(
         ),
       )
     : parsed;
+}
+
+/** Query calendar months separately so unavailable totals cannot hide other months */
+export async function getAnalyticsMonthlySummary(
+  session: NeteaseSession,
+  params: AnalyticsRangeParams,
+): Promise<Result<AnalyticsRecord[]>> {
+  if (!isAnalyticsRange(params)) return fail({ kind: "business", code: "invalid_params", message: "分析日期范围无效" });
+  const months: AnalyticsRangeParams[] = [];
+  const cursor = new Date(`${params.startDate.slice(0, 7)}-01T00:00:00Z`);
+  while (cursor.toISOString().slice(0, 10) <= params.endDate) {
+    const first = cursor.toISOString().slice(0, 10);
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+    const last = new Date(cursor.getTime() - 86_400_000).toISOString().slice(0, 10);
+    months.push({
+      startDate: first < params.startDate ? params.startDate : first,
+      endDate: last > params.endDate ? params.endDate : last,
+    });
+  }
+  const results = await runAnalyticsPool(
+    months.map((month) => async (): Promise<Result<AnalyticsRecord[]>> => {
+      const result = await getAnalyticsMonthly(session, month);
+      return !result.ok && result.error.kind === "business" && result.error.code === "no_monthly_data"
+        ? ok([])
+        : result;
+    }),
+    3,
+    true,
+  );
+  const expired = results.find((result) => !result.ok && result.error.kind === "session_expired");
+  if (expired && !expired.ok) return expired;
+  const records: AnalyticsRecord[] = [];
+  for (const result of results) {
+    if (!result.ok) return result;
+    records.push(...result.value);
+  }
+  return ok(records);
 }
 
 /** Platform order totals remain authoritative even when the order list is incomplete */

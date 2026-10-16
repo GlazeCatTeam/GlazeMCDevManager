@@ -5,6 +5,7 @@ import { isAnalyticsDate, isAnalyticsRange, isAnalyticsResourceIds } from "../pa
 import {
   getAnalyticsDaily,
   getAnalyticsMonthly,
+  getAnalyticsMonthlySummary,
   getAnalyticsRealtime,
   readAnalyticsRecords,
   readRealtimeIncome,
@@ -21,8 +22,10 @@ import {
   daysInRange,
   formatValue,
   isAnalyzableWork,
+  monthRangeError,
   monthsInRange,
   shiftDay,
+  summaryMonthRange,
   todayKey,
   topResources,
   trackingSeries,
@@ -59,6 +62,32 @@ function response(data: unknown, status = "ok"): Response {
   return new Response(JSON.stringify({ status, data }));
 }
 
+test("custom month ranges validate endpoints and preserve complete historical month boundaries", () => {
+  const now = "2026-10-17";
+  assert.deepEqual(summaryMonthRange("2024-02", "2024-02", now), {
+    monthKeys: ["2024-02"],
+    startDate: "2024-02-01",
+    endDate: "2024-02-29",
+    error: null,
+  });
+  assert.deepEqual(summaryMonthRange("2025-12", "2026-02", now), {
+    monthKeys: ["2025-12", "2026-01", "2026-02"],
+    startDate: "2025-12-01",
+    endDate: "2026-02-28",
+    error: null,
+  });
+  assert.equal(summaryMonthRange("2026-08", "2026-10", now).endDate, "2026-10-16");
+  assert.equal(summaryMonthRange("2026-10", "2026-10", "2026-10-01").endDate, "2026-09-30");
+  assert.equal(summaryMonthRange("2025-11", "2026-10", now).monthKeys.length, 12);
+  assert.equal(monthRangeError("2025-10", "2026-10", now), "一次最多选择 12 个月（含起止月份）");
+  assert.equal(monthRangeError("2026-10", "2026-09", now), "开始月份不能晚于结束月份");
+  assert.equal(monthRangeError("2026-10", "2026-11", now), "不能选择未来月份");
+  for (const start of ["", "2026-13", "2026-1", "0000-01", "invalid"]) {
+    assert.ok(monthRangeError(start, "2026-10", now));
+    assert.deepEqual(summaryMonthRange(start, "2026-10", now).monthKeys, []);
+  }
+});
+
 test("date and work validators reject overflow, reversed ranges and malformed identifiers", () => {
   assert.equal(isAnalyticsDate("2026-02-29"), false);
   assert.equal(isAnalyticsDate("2024-02-29"), true);
@@ -89,6 +118,93 @@ test("monthly transport accepts direct and wrapped rows after removing the respo
     globalThis.fetch = async () => response(payload);
     assert.deepEqual(await getAnalyticsMonthly(session, range), { ok: true, value: [] });
   }
+});
+
+test("monthly summary queries each month and retains data around unavailable months", async () => {
+  const calls: [string | null, string | null][] = [];
+  globalThis.fetch = async (input) => {
+    const query = new URL(String(input)).searchParams;
+    const start = query.get("start_date");
+    calls.push([start, query.get("end_date")]);
+    if (start === "20260901") return response({});
+    return response([{ iid: id, monthid: start?.slice(0, 6), total_diamond: 0, total_points: 0, download_num: 0 }]);
+  };
+  const result = await getAnalyticsMonthlySummary(session, { startDate: "2026-08-01", endDate: "2026-10-16" });
+  assert.deepEqual(calls, [
+    ["20260801", "20260831"],
+    ["20260901", "20260930"],
+    ["20261001", "20261016"],
+  ]);
+  assert.ok(result.ok);
+  assert.deepEqual(
+    result.value.map((record) => [record.date, record.diamonds]),
+    [
+      ["2026-08", 0],
+      ["2026-10", 0],
+    ],
+  );
+});
+
+test("monthly summary handles all missing months while preserving the period adapter's missing signal", async () => {
+  for (const payload of [{}, [], { data: [] }]) {
+    globalThis.fetch = async () => response(payload);
+    assert.deepEqual(await getAnalyticsMonthlySummary(session, range), { ok: true, value: [] });
+  }
+  globalThis.fetch = async () => response({});
+  const period = await getAnalyticsMonthly(session, range);
+  assert.ok(!period.ok && period.error.kind === "business" && period.error.code === "no_monthly_data");
+});
+
+test("monthly summary respects leap years, year boundaries and partial starting months", async () => {
+  const calls: [string | null, string | null][] = [];
+  globalThis.fetch = async (input) => {
+    const query = new URL(String(input)).searchParams;
+    calls.push([query.get("start_date"), query.get("end_date")]);
+    return response([]);
+  };
+  assert.ok((await getAnalyticsMonthlySummary(session, { startDate: "2023-12-15", endDate: "2024-03-05" })).ok);
+  assert.deepEqual(calls, [
+    ["20231215", "20231231"],
+    ["20240101", "20240131"],
+    ["20240201", "20240229"],
+    ["20240301", "20240305"],
+  ]);
+});
+
+test("monthly summary bounds concurrency and never hides real errors as unavailable data", async () => {
+  let pending = 0;
+  let peak = 0;
+  globalThis.fetch = async () => {
+    peak = Math.max(peak, ++pending);
+    await nextTick();
+    pending--;
+    return response({});
+  };
+  assert.ok((await getAnalyticsMonthlySummary(session, { startDate: "2026-01-01", endDate: "2026-10-16" })).ok);
+  assert.equal(peak, 3);
+  for (const [payload, status, kind] of [
+    [{ unknown: [] }, "ok", "parse"],
+    [null, "no_login", "session_expired"],
+    [null, "fail", "business"],
+  ] as const) {
+    globalThis.fetch = async () => response(payload, status);
+    const result = await getAnalyticsMonthlySummary(session, range);
+    assert.ok(!result.ok);
+    assert.equal(result.error.kind, kind);
+  }
+  globalThis.fetch = async () => {
+    throw new Error("offline");
+  };
+  const network = await getAnalyticsMonthlySummary(session, range);
+  assert.ok(!network.ok && network.error.kind === "network");
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return response({});
+  };
+  const invalid = await getAnalyticsMonthlySummary(session, { startDate: "2026-10-20", endDate: "2026-10-01" });
+  assert.ok(!invalid.ok);
+  assert.equal(calls, 0);
 });
 
 test("unknown monthly containers remain errors with value-free structural diagnostics", async () => {
