@@ -141,6 +141,61 @@ try {
   assert.equal(await module.getByRole("dialog").count(), 0);
   await module.getByRole("button", { name: "近 7 天", exact: true }).click();
   await module.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
+  // Custom dates remain a draft until confirmed and use the existing daily query
+  const custom = module.getByRole("button", { name: "自定义", exact: true });
+  const calendar = module.getByRole("dialog", { name: "自定义日期范围", exact: true });
+  const customCalls = await page.evaluate(() => __analyticsTest.requests.length);
+  await custom.click();
+  await calendar.getByRole("button", { name: "2026-10-02", exact: true }).click();
+  assert.equal(await calendar.getByRole("button", { name: "应用", exact: true }).isEnabled(), false);
+  await calendar.getByRole("button", { name: "2026-10-05", exact: true }).click();
+  assert.equal(await page.evaluate(() => __analyticsTest.requests.length), customCalls);
+  await calendar.getByRole("button", { name: "取消", exact: true }).click();
+  assert.equal(await calendar.count(), 0);
+  assert.equal(await page.evaluate(() => __analyticsTest.requests.length), customCalls);
+  await custom.click();
+  assert.equal(await calendar.getByLabel("开始日期", { exact: true }).inputValue(), "2026-10-09");
+  assert.equal(await calendar.getByRole("button", { name: "2026-10-16", exact: true }).isEnabled(), false);
+  await calendar.getByRole("button", { name: "2026-10-02", exact: true }).click();
+  await calendar.getByRole("button", { name: "2026-10-05", exact: true }).click();
+  await calendar.getByRole("button", { name: "应用", exact: true }).click();
+  await module.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
+  const customParams = await page.evaluate(() => __analyticsTest.requests.at(-1).params);
+  assert.equal(customParams.startDate, "2026-10-02");
+  assert.equal(customParams.endDate, "2026-10-05");
+  assert.equal(await module.getByRole("combobox", { name: "查看数值", exact: true }).locator("option").count(), 4);
+  assert.equal(await custom.getAttribute("aria-pressed"), "true");
+  assert.equal(
+    await module.getByRole("button", { name: "近 7 天", exact: true }).getAttribute("aria-pressed"),
+    "false",
+  );
+  await page.reload();
+  await module.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
+  assert.equal(await custom.getAttribute("aria-pressed"), "true");
+  await custom.click();
+  await calendar.getByLabel("开始日期", { exact: true }).fill("2026-10-10");
+  await calendar.getByText("开始日期不能晚于结束日期", { exact: true }).waitFor();
+  await calendar.getByLabel("开始日期", { exact: true }).fill("2024-01-01");
+  await calendar.getByText("一次最多选择 366 天（含起止日期）", { exact: true }).waitFor();
+  await calendar.getByLabel("结束日期", { exact: true }).fill("2026-10-16");
+  await calendar.getByText("只能选择昨天及以前的完整日数据", { exact: true }).waitFor();
+  await page.keyboard.press("Escape");
+  assert.equal(await calendar.count(), 0);
+  assert.equal(await custom.evaluate((element) => element === document.activeElement), true);
+  await module.getByRole("button", { name: "近 7 天", exact: true }).click();
+  await module.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
+  assert.equal(await custom.getAttribute("aria-pressed"), "false");
+  await custom.click();
+  await calendar.getByRole("button", { name: "2026-10-01", exact: true }).focus();
+  await page.keyboard.press("ArrowLeft");
+  await page.waitForFunction(() => document.activeElement?.getAttribute("data-date") === "2026-09-30");
+  await page.keyboard.press("Enter");
+  await calendar.getByRole("button", { name: "下个月", exact: true }).click();
+  await calendar.getByRole("button", { name: "2026-10-02", exact: true }).click();
+  assert.equal(await calendar.getByLabel("开始日期", { exact: true }).inputValue(), "2026-09-30");
+  assert.equal(await calendar.getByLabel("结束日期", { exact: true }).inputValue(), "2026-10-02");
+  await module.getByText("时间", { exact: true }).click();
+  assert.equal(await calendar.count(), 0, "clicking outside discards the cross-month draft");
   await page.screenshot({ path: `${output}/module.png`, fullPage: true });
 
   await page.getByRole("tab", { name: "周期收益", exact: true }).click();
@@ -243,6 +298,30 @@ try {
         `${name}/${theme} has no page overflow`,
       );
       await page.screenshot({ path: `${output}/${theme}-${name}.png`, fullPage: true });
+      if (name === "模组分析") {
+        await custom.click();
+        const bounds = await calendar.boundingBox();
+        assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 900, `${theme} calendar stays inside the viewport`);
+        await page.screenshot({ path: `${output}/${theme}-module-calendar.png`, fullPage: true });
+        await page.setViewportSize({ width: 720, height: 600 });
+        const smallBounds = await calendar.boundingBox();
+        assert.ok(smallBounds.x >= 0 && smallBounds.x + smallBounds.width <= 720, `${theme} narrow calendar fits`);
+        assert.ok(smallBounds.y >= 0 && smallBounds.y + smallBounds.height <= 600, `${theme} short calendar fits`);
+        assert.equal(
+          await calendar.evaluate((element) => {
+            const input = element.querySelector("input");
+            const bounds = input.getBoundingClientRect();
+            return element.contains(
+              document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2),
+            );
+          }),
+          true,
+          `${theme} calendar fields stay above the sticky tab bar`,
+        );
+        await page.screenshot({ path: `${output}/${theme}-module-calendar-narrow.png`, fullPage: true });
+        await calendar.getByRole("button", { name: "取消", exact: true }).click();
+        await page.setViewportSize({ width: 900, height: 1000 });
+      }
     }
   }
   // A failed new scope keeps the old chart explicitly labelled and its controls remain usable
