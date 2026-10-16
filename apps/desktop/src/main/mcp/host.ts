@@ -46,6 +46,7 @@ import {
 } from "@glaze/netease";
 import { app, BrowserWindow, dialog, Notification, safeStorage } from "electron";
 import { getAboutInfo, getDependencyLicenses } from "../ipc/about";
+import { changedModule } from "../ipc/data-changes";
 import { sendEvent } from "../ipc/rpc";
 import { uploadSelectedWorkFile } from "../ipc/work-files";
 import type { LogService } from "../logs/service";
@@ -308,6 +309,21 @@ export function createMcpHost(
       ),
     assetRoot: join(root, "materials"),
   };
+  // Tell open views which platform data an AI write may have changed, including failed or uncertain writes
+  const notifyChanged = <T>(module: string, write: Promise<T>): Promise<T> =>
+    write.finally(() => broadcast("data.changed", { modules: [module] }));
+  const writes = { invoke: ports.invoke, saveWork: ports.saveWork, createWork: ports.createWork, review: ports.review };
+  if (writes.invoke) {
+    const invokeBusiness = writes.invoke;
+    ports.invoke = (method, params, guard, beforeWrite) => {
+      const module = changedModule(method);
+      const call = invokeBusiness(method, params, guard, beforeWrite);
+      return module ? notifyChanged(module, call) : call;
+    };
+  }
+  ports.saveWork = (...args) => notifyChanged("works", writes.saveWork(...args));
+  ports.createWork = (...args) => notifyChanged("works", writes.createWork(...args));
+  ports.review = (...args) => notifyChanged("works", writes.review(...args));
   const service = new McpService(data, ports);
   const cleanup = setInterval(() => {
     void service.cleanupMaterials().catch(() => undefined);

@@ -1,4 +1,4 @@
-import { type CommentListParams, type CommentPage, callHost, type RpcError } from "@glaze/plugin-sdk";
+import { type CommentListParams, type CommentPage, callHost, onHostEvent, type RpcError } from "@glaze/plugin-sdk";
 import { useEffect, useState } from "react";
 import type { CommentPageCache } from "./comment-cache";
 import { commentQueryKey, loadCommentPage } from "./comment-query";
@@ -17,6 +17,19 @@ export function useComments(
   stars: number[] = [],
 ): CommentQuery {
   const paramsKey = commentQueryKey(params, stars);
+  const [changes, setChanges] = useState(0);
+  // Replies sent by an AI tool or another window drop cached pages; current rows stay until the reload lands
+  useEffect(() => {
+    try {
+      return onHostEvent("data.changed", ({ modules }) => {
+        if (!modules.includes("comments")) return;
+        cache.clear();
+        setChanges((value) => value + 1);
+      });
+    } catch {
+      return undefined;
+    }
+  }, [cache]);
   const [query, setQuery] = useState<CommentQuery & { key: string }>(() => ({
     key: paramsKey,
     data: cache.peek(paramsKey),
@@ -26,6 +39,7 @@ export function useComments(
   useEffect(() => {
     let active = true;
     void revision;
+    void changes;
     setQuery((current) => ({
       key: paramsKey,
       data: cache.peek(paramsKey) ?? (current.key === paramsKey ? current.data : null),
@@ -47,7 +61,7 @@ export function useComments(
     return () => {
       active = false;
     };
-  }, [paramsKey, revision, cache]);
+  }, [paramsKey, revision, cache, changes]);
   return query.key === paramsKey
     ? query
     : { data: cache.peek(paramsKey), error: null, loading: !cache.fresh(paramsKey) };

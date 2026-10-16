@@ -5,6 +5,7 @@ import {
   type MessagePage,
   type MessageSummary,
   type MessageType,
+  onHostEvent,
   QueryCache,
 } from "@glaze/plugin-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -12,6 +13,23 @@ import { useCallback, useEffect, useRef, useState } from "react";
 const PAGE_SIZE = 20;
 // First pages survive page switches so returning to the mailbox shows rows at once
 const firstPages = new QueryCache<MessagePage>({ ttl: 30_000, capacity: 20, errorMessage: "消息加载失败，请重试" });
+const changeListeners = new Set<() => void>();
+let listening = false;
+
+/** Drop cached first pages when messages change elsewhere, e.g. read or deleted by an AI tool */
+function listenForChanges(): void {
+  if (listening) return;
+  try {
+    onHostEvent("data.changed", ({ modules }) => {
+      if (!modules.includes("messages")) return;
+      firstPages.invalidate();
+      for (const notify of changeListeners) notify();
+    });
+    listening = true;
+  } catch {
+    // Outside the app window there is no host to report changes
+  }
+}
 
 /** Own account-scoped mailbox requests; ignore stale responses and serialize mutations */
 export function useMessages(account: string, filters: Omit<MessageListParams, "account" | "start" | "span">) {
@@ -72,6 +90,18 @@ export function useMessages(account: string, filters: Omit<MessageListParams, "a
     },
     [account, filterKey, cacheKey],
   );
+
+  // Mounted mailboxes reload in place; cached rows stay visible until the new page arrives
+  useEffect(() => {
+    listenForChanges();
+    const notify = () => {
+      if (!locked.current) void load(false, true);
+    };
+    changeListeners.add(notify);
+    return () => {
+      changeListeners.delete(notify);
+    };
+  }, [load]);
 
   useEffect(() => {
     const cached = firstPages.peek(cacheKey);

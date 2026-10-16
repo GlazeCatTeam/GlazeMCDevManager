@@ -23,6 +23,11 @@ export class WorkQueryCache<T> {
     return this.cache.read(key, load);
   }
 
+  /** Mark every entry stale but keep it visible; requests already in flight can no longer fill it */
+  expire(): void {
+    this.cache.expire(undefined, { detach: true });
+  }
+
   /** Forget matching entries; an older outstanding request cannot repopulate them */
   invalidate(prefix = ""): void {
     this.cache.invalidate((key) => key.startsWith(prefix));

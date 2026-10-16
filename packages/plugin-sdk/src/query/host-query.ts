@@ -70,8 +70,21 @@ export function expireHostQueries(match: (method: RpcMethod) => boolean = () => 
   for (const [key, entry] of entries) {
     if (!match(entry.method)) continue;
     entry.expires = 0;
+    // A request already in flight may predate the change; its result is ignored once detached
+    delete entry.pending;
     if (entry.listeners.size) void readHostQuery(key, entry.method, entry.params, { force: true });
   }
+}
+
+// Reads whose data a write to the key module can change, beyond the module itself
+const RELATED: Record<string, string[]> = {
+  works: ["income", "promotion", "analytics"],
+  promotion: ["works"],
+};
+
+/** Modules affected by a change, including dependent views such as income estimates after a work edit */
+export function affectedModules(modules: readonly string[]): Set<string> {
+  return new Set(modules.flatMap((module) => [module, ...(RELATED[module] ?? [])]));
 }
 
 /** Subscribe once to host signals that invalidate cached reads */
@@ -80,12 +93,17 @@ function wire(): void {
   wired = true;
   try {
     onHostEvent("cache.cleared", clearHostQueries);
+    // Writes from this window, other windows or AI tools all arrive here
+    onHostEvent("data.changed", ({ modules }) => {
+      const affected = affectedModules(modules);
+      expireHostQueries((method) => affected.has(method.split(".")[0] ?? ""));
+    });
   } catch {
     // Outside the app window there is no host to clear caches
   }
   onHostWrite((method) => {
-    const module = method.split(".")[0];
-    expireHostQueries((read) => read.split(".")[0] === module);
+    const affected = affectedModules([method.split(".")[0] ?? ""]);
+    expireHostQueries((read) => affected.has(read.split(".")[0] ?? ""));
   });
 }
 

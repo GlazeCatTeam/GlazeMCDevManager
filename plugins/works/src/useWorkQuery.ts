@@ -1,6 +1,7 @@
 import {
   callHost,
   type HostQuery,
+  onHostEvent,
   type RpcResult,
   type WorkDetail,
   type WorkEditorDocument,
@@ -16,6 +17,26 @@ const covers = new WorkQueryCache<WorkDetail>(5 * 60_000, 200);
 const editors = new WorkQueryCache<WorkEditorDocument>(15_000, 30);
 const options = new WorkQueryCache<WorkEditorOptions>(5 * 60_000, 5);
 let generation = 0;
+const changeListeners = new Set<() => void>();
+let listening = false;
+
+/** Expire cached rows when works change elsewhere, e.g. through an AI tool, and wake mounted lists and covers */
+function listenForChanges(): void {
+  if (listening) return;
+  try {
+    onHostEvent("data.changed", ({ modules }) => {
+      if (!modules.includes("works") && !modules.includes("promotion")) return;
+      pages.expire();
+      covers.expire();
+      // Open editors keep their document; the next visit revalidates instead of replacing it mid-edit
+      editors.expire();
+      for (const notify of changeListeners) notify();
+    });
+    listening = true;
+  } catch {
+    // Outside the app window there is no host to report changes
+  }
+}
 
 /** Share the same read between idle warmup and the mounted first page */
 export function preloadWorksPage(account: string): Promise<RpcResult<WorkPage>> {
@@ -89,8 +110,18 @@ function useCachedWork<T>(
   key: string,
   load: () => Promise<RpcResult<T>>,
   refreshToken = 0,
+  followChanges = true,
 ): HostQuery<T> {
   const [version, setVersion] = useState(0);
+  useEffect(() => {
+    listenForChanges();
+    if (!followChanges) return;
+    const notify = () => setVersion((value) => value + 1);
+    changeListeners.add(notify);
+    return () => {
+      changeListeners.delete(notify);
+    };
+  }, [followChanges]);
   const [state, setState] = useState(() => ({
     key,
     data: cache.peek(key),
@@ -139,13 +170,13 @@ export function useWorksPage(account: string, page: number, pageSize: number): H
 /** Reuse a recent or intent-prefetched detail; expired documents revalidate before editing */
 export function useWorkEditor(account: string, itemId: string): HostQuery<WorkEditorDocument> {
   const load = useCallback(() => callHost("works.editor", { account, itemId }), [account, itemId]);
-  return useCachedWork(editors, JSON.stringify([account, itemId]), load);
+  return useCachedWork(editors, JSON.stringify([account, itemId]), load, 0, false);
 }
 
 /** Keep platform dictionaries out of the repeated detail-navigation request path */
 export function useWorkOptions(account: string): HostQuery<WorkEditorOptions> {
   const load = useCallback(() => callHost("works.options", { account }), [account]);
-  return useCachedWork(options, JSON.stringify([account, "options"]), load);
+  return useCachedWork(options, JSON.stringify([account, "options"]), load, 0, false);
 }
 
 /** Covers load independently of the page and survive pagination and route changes */

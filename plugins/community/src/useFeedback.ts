@@ -1,4 +1,10 @@
-import { callHost, type FeedbackTypeCode, MAX_FEEDBACK_REPLY_LENGTH, type PlayerFeedback } from "@glaze/plugin-sdk";
+import {
+  callHost,
+  type FeedbackTypeCode,
+  MAX_FEEDBACK_REPLY_LENGTH,
+  onHostEvent,
+  type PlayerFeedback,
+} from "@glaze/plugin-sdk";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type FeedbackReplyFilter, filterFeedbackPage, loadAllFeedback } from "./feedback-query";
 import { createFeedbackLoader } from "./feedback-requests";
@@ -130,6 +136,17 @@ export function useFeedback(
   }, [state, key, page, filtered, replyFilter, replies]);
   /** Explicit refresh always revalidates; pending identical requests are shared */
   const refresh = () => setVersion((value) => value + 1);
+
+  // Replies sent by an AI tool or another window refresh the visible list
+  useEffect(() => {
+    try {
+      return onHostEvent("data.changed", ({ modules }) => {
+        if (modules.includes("feedback")) setVersion((value) => value + 1);
+      });
+    } catch {
+      return undefined;
+    }
+  }, []);
   return {
     entries: data.entries,
     total: data.total,

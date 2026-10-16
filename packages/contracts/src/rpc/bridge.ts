@@ -193,6 +193,8 @@ export interface RpcMethods {
 
 export interface EventPayloads {
   "app.navigate": { route: string; params: Record<string, string> };
+  /** Platform data of these modules may have changed, from the app or an AI tool */
+  "data.changed": { modules: string[] };
   "mcp.changed": { pendingCount: number; requestCount: number; connectedCount: number };
   "sessionSettings.changed": SessionSettings;
   "plugins.changed": PluginSnapshot;

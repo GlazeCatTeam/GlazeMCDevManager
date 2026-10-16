@@ -77,6 +77,7 @@ import type { SessionManager } from "../session/session-manager";
 import { closeLoginWindow, loginWithOfficialWindow } from "../windows/login-window";
 import { appWindows } from "../windows/main-window";
 import { getAboutInfo, getDependencyLicenses, openProjectLink, openRuntimeNotices } from "./about";
+import { changedModule } from "./data-changes";
 import { CapabilityError, fromNeteaseError } from "./errors";
 import { createPromotionHandlers } from "./promotion";
 import { exportLogs, openLogs, pickPlugin } from "./settings-files";
@@ -566,6 +567,11 @@ export function registerRpc(
       const handler = handlers[method] as Handler<RpcMethod>;
       plugins.assertMethodEnabled(method);
       const value = await handler((request as { params?: unknown }).params as undefined, event);
+      // Other windows refresh reads this write may have changed, including uncertain outcomes; the caller refreshes itself
+      const changed = changedModule(method);
+      if (changed)
+        for (const win of appWindows())
+          if (win.webContents !== event.sender) sendEvent(win, "data.changed", { modules: [changed] });
       if (
         [
           "appearance.set",
