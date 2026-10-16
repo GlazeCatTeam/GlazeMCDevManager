@@ -13,6 +13,7 @@ const projectLinks = {
   homepage: "https://github.com/GlazeCatTeam/GlazeMCDevManager",
   feedback: "https://github.com/GlazeCatTeam/GlazeMCDevManager/issues",
   reference: "https://github.com/BitterLemonn/MCDevManager",
+  releases: "https://github.com/GlazeCatTeam/GlazeMCDevManager/releases",
 } as const;
 
 /** Read the packaged app version or the desktop manifest in development, never Electron's app version */
@@ -43,11 +44,11 @@ export function getDependencyLicenses(): DependencyLicense[] {
 
 /** Accept only fixed project destinations; renderer-provided URLs never reach the operating system */
 export async function openProjectLink(link: unknown): Promise<undefined> {
-  if (link !== "homepage" && link !== "feedback" && link !== "reference") {
+  if (typeof link !== "string" || !Object.hasOwn(projectLinks, link)) {
     throw new CapabilityError("validation", "项目链接无效");
   }
   try {
-    await shell.openExternal(projectLinks[link]);
+    await shell.openExternal(projectLinks[link as keyof typeof projectLinks]);
   } catch {
     throw new CapabilityError("internal", "无法打开默认浏览器，请检查系统浏览器设置后重试");
   }

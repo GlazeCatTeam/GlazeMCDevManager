@@ -55,6 +55,7 @@ import type { PluginRegistry } from "../plugins/registry";
 import { discoverPluginTools } from "../plugins/tools";
 import { type ApplicationServices, type Broadcast, createApplicationActions } from "../preferences/actions";
 import type { SessionManager } from "../session/session-manager";
+import type { UpdateService } from "../update/service";
 import { appWindows } from "../windows/main-window";
 import { createMcpApplication } from "./application";
 import { createMcpBusiness } from "./business";
@@ -76,6 +77,7 @@ export function createMcpHost(
   settings: Omit<ApplicationServices, "sessions" | "plugins">,
   logs: LogService,
   broadcast: Broadcast,
+  update: Pick<UpdateService, "state" | "check">,
 ) {
   const root = join(app.getPath("userData"), "mcp");
   const file = join(root, "state.bin");
@@ -102,6 +104,8 @@ export function createMcpHost(
   const reads: Record<string, (params: Record<string, unknown>) => Promise<unknown>> = {
     "app.getAbout": async () => getAboutInfo(),
     "app.getLicenses": async () => getDependencyLicenses(),
+    "update.state": async () => update.state(),
+    "update.check": () => update.check(),
     "developer.level": (p) => sessions.request(p.account as string, getDeveloperLevel),
     "analytics.overview": (p) => sessions.request(p.account as string, getAnalyticsOverview),
     "analytics.daily": (p) => {

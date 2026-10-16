@@ -63,7 +63,6 @@ export function SettingsPage({
   const section = contributed.find((item) => `${item.pluginId}/${item.contribution.id}` === category);
   const [localAppearance, setLocalAppearance] = useState(initialAppearance);
   const general = useGeneralSettings(category === "general");
-  const [autoUpdate, setAutoUpdate] = useState(true);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [notice, setNotice] = useState("");
   const [restoring, setRestoring] = useState(false);
@@ -180,16 +179,7 @@ export function SettingsPage({
               </Suspense>
             )}
             {category === "logs" && <LogsSection />}
-            {category === "about" && (
-              <AboutSection
-                autoUpdate={autoUpdate}
-                onAutoUpdateChange={(enabled) => {
-                  setAutoUpdate(enabled);
-                  setNotice("已更新自动检查选项，更新服务尚未接入。");
-                }}
-                onNotice={setNotice}
-              />
-            )}
+            {category === "about" && <AboutSection onNotice={setNotice} />}
           </div>
           <div className={styles.notice} role="status" aria-live="polite">
             {notice ||

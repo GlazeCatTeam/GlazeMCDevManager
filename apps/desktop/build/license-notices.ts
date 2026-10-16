@@ -7,8 +7,42 @@ interface PackageMetadata {
   name: string;
   version: string;
   license?: string;
+  author?: string | { name?: string };
   dependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
+}
+
+// Packages that declare a license in package.json but ship no license file; any other missing text fails the build
+const declaredOnly: Record<string, "MIT"> = { "lazy-val": "MIT" };
+
+/** Standard MIT text for a declared-only package, labelled so the about page does not present it as the package's own file */
+function mitNotice(pkg: PackageMetadata) {
+  const author = typeof pkg.author === "string" ? pkg.author : (pkg.author?.name ?? pkg.name);
+  return {
+    file: "LICENSE（包内未附原文，按 package.json 声明的 MIT 生成）",
+    text: `MIT License
+
+Copyright (c) ${author}
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+`,
+  };
 }
 
 /** Resolve package metadata even when the dependency's exports hide package.json */
@@ -36,6 +70,8 @@ export function collectLicenseNotices(desktop: string): DependencyLicense[] {
         .filter((file) => /^(licen[cs]e|copying|notice)([.-]|$)/i.test(file))
         .sort()
         .map((file) => ({ file, text: readFileSync(join(actual, file), "utf8") }));
+      if (!notices.length && declaredOnly[pkg.name] && pkg.license === declaredOnly[pkg.name])
+        notices.push(mitNotice(pkg));
       if (!notices.length) throw new Error(`Missing license text for ${pkg.name}@${pkg.version}`);
       entries.set(`${pkg.name}@${pkg.version}`, {
         name: pkg.name,

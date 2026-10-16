@@ -32,6 +32,8 @@ export const readSchemas: Partial<Record<RpcMethod, z.ZodObject>> = {
   "account.current": z.strictObject({}),
   "app.getAbout": z.strictObject({}),
   "app.getLicenses": z.strictObject({}),
+  "update.state": z.strictObject({}),
+  "update.check": z.strictObject({}),
   "developer.level": z.strictObject(account),
   "analytics.overview": z.strictObject(account),
   "analytics.daily": z.strictObject({

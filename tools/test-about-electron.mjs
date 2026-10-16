@@ -207,8 +207,9 @@ try {
   };
   await capture("licenses.png");
   await dialog.getByRole("button", { name: "关闭", exact: true }).click();
-  await page.getByRole("button", { name: "检查更新", exact: true }).click();
-  await page.getByText("更新服务尚未接入，暂时无法检查最新版本。", { exact: true }).waitFor();
+  // A development build cannot update itself and points to the releases page instead
+  await page.getByText("开发模式或免安装版不能自动更新，可到发布页下载安装包", { exact: true }).waitFor();
+  assert.equal((await page.evaluate(() => window.glaze.rpc("update.check"))).value.phase, "unsupported");
   await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1280, 900));
   await page.getByRole("region", { name: "关于设置", exact: true }).evaluate((element) => {
     for (const child of element.querySelectorAll("div")) child.scrollTop = 0;

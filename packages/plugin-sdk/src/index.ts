@@ -87,6 +87,8 @@ export type {
   RpcResult,
   SessionSettings,
   SessionStatus,
+  UpdatePhase,
+  UpdateState,
   WorkCrop,
   WorkDetail,
   WorkEditorDocument,

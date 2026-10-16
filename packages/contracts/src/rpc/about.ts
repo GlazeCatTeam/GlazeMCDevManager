@@ -1,4 +1,4 @@
-export type ProjectLink = "homepage" | "feedback" | "reference";
+export type ProjectLink = "homepage" | "feedback" | "reference" | "releases";
 
 export interface ProjectLicense {
   id: string;

@@ -14,7 +14,7 @@ function Preview() {
   return (
     <SessionProvider value={{ current: null, accounts: [] }}>
       <main style={{ maxWidth: 780, margin: "24px auto", padding: 24 }}>
-        <AboutSection autoUpdate={false} onAutoUpdateChange={() => {}} onNotice={setNotice} />
+        <AboutSection onNotice={setNotice} />
         <p role="status">{notice}</p>
       </main>
     </SessionProvider>

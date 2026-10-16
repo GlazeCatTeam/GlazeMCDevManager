@@ -1,19 +1,18 @@
-import { AppLogo, Button, callHost, type ProjectLink, Switch, Tag, TextButton, useHostQuery } from "@glaze/plugin-sdk";
+import { AppLogo, Button, callHost, type ProjectLink, Tag, TextButton, useHostQuery } from "@glaze/plugin-sdk";
 import { useState } from "react";
 import { SettingGroup, SettingRow } from "../widgets/SettingRow";
 import styles from "./AboutSection.module.css";
 import { LicenseDialog } from "./LicenseDialog";
 import sections from "./Sections.module.css";
+import { UpdateGroup } from "./UpdateGroup";
 
 export interface AboutSectionProps {
-  autoUpdate: boolean;
-  onAutoUpdateChange: (enabled: boolean) => void;
-  /** Report native action results and unavailable update features */
+  /** Report native action and update results */
   onNotice: (message: string) => void;
 }
 
 /** App identity, update options and project links */
-export function AboutSection({ autoUpdate, onAutoUpdateChange, onNotice }: AboutSectionProps) {
+export function AboutSection({ onNotice }: AboutSectionProps) {
   const about = useHostQuery("app.getAbout");
   const [licensesOpen, setLicensesOpen] = useState(false);
   const [opening, setOpening] = useState(false);
@@ -80,16 +79,7 @@ export function AboutSection({ autoUpdate, onAutoUpdateChange, onNotice }: About
           </div>
         </dl>
       )}
-      <SettingGroup title="更新">
-        <SettingRow title="当前版本" description="开发预览版，更新服务尚未接入">
-          <Button size="xs" onClick={() => onNotice("更新服务尚未接入，暂时无法检查最新版本。")}>
-            检查更新
-          </Button>
-        </SettingRow>
-        <SettingRow title="自动检查更新" description="设置选项预览，尚未启动自动检查">
-          <Switch label="自动检查更新" checked={autoUpdate} onChange={onAutoUpdateChange} />
-        </SettingRow>
-      </SettingGroup>
+      <UpdateGroup onOpenReleases={() => void openLink("releases")} onNotice={onNotice} />
       <SettingGroup title="项目与许可">
         <SettingRow title="项目主页" description="GlazeCatTeam / GlazeMCDevManager · 查看源码与开发进度">
           <TextButton disabled={opening} onClick={() => void openLink("homepage")}>

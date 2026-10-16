@@ -106,6 +106,30 @@ export const capabilities: Record<RpcMethod, Capability> = {
         "读取构建时收集的生产依赖、Electron 与内置第三方资源的版本、许可标识及声明原文。离线可用；Chromium 等运行时第三方声明在随应用分发的 LICENSES.chromium.html 中单独提供。",
     },
   },
+  "update.state": {
+    caller: "any",
+    permission: null,
+    risk: "read",
+    mcp: {
+      title: "应用更新状态",
+      description:
+        "读取应用更新状态：当前版本、上次检查发现的新版本与更新说明、下载进度、是否已下载待重启安装、自动检查开关。不发起网络请求；开发版和免安装版返回 unsupported。",
+    },
+  },
+  // Checking and downloading never touch user data or install anything, so it is a read
+  "update.check": {
+    caller: "any",
+    permission: null,
+    risk: "read",
+    mcp: {
+      title: "检查应用更新",
+      description:
+        "立即从 GitHub Releases 检查新版本，有新版本时在后台下载，返回最新状态（下载通常还在进行，可稍后用应用更新状态查看）。不会安装或重启应用；安装须由用户在应用内点击「重启并安装」。",
+    },
+  },
+  // Restarting closes the user's windows and unsaved forms, so only the user may trigger it
+  "update.install": shellOnly(null, "write"),
+  "update.setAutoCheck": shellOnly(null, "write"),
   "app.openProjectLink": shellOnly(null, "write"),
   "app.openRuntimeNotices": shellOnly(null, "write"),
   "sessionSettings.get": shellOnly("netease:account.read", "read"),

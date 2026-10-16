@@ -2,6 +2,7 @@ import { join } from "node:path";
 import type { EventName, EventPayloads } from "@glaze/contracts";
 import { AccountStore, type Cipher, openDatabase, PreferenceStore, Vault } from "@glaze/storage";
 import { app, safeStorage, session } from "electron";
+import { getAboutInfo } from "../ipc/about";
 import { sendEvent } from "../ipc/rpc";
 import { LogService } from "../logs/service";
 import { createMcpHost, type McpHost } from "../mcp/host";
@@ -15,6 +16,8 @@ import { SessionSettingsService } from "../preferences/session-settings";
 import { clearRemoteImageCache } from "../protocols/remote-image";
 import { ExpiryNotification } from "../session/expiry-notification";
 import { SessionManager } from "../session/session-manager";
+import { createUpdater } from "../update/electron";
+import { UpdateService } from "../update/service";
 import { appWindows } from "../windows/main-window";
 
 /** Windows DPAPI through Electron safeStorage; refuses to store anything when it is unavailable */
@@ -80,6 +83,13 @@ export function createServices(ensureTray: () => void, showWindow: () => void) {
     cache: new CacheService(session.defaultSession, clearRemoteImageCache, () => broadcast("cache.cleared", undefined)),
     sessionSettings,
   };
+  const update = new UpdateService(
+    preferences,
+    createUpdater(),
+    getAboutInfo().version,
+    (state) => broadcast("update.changed", state),
+    (level, message) => logs.write(level, "update", message),
+  );
   mcp = createMcpHost(
     sessions,
     plugins,
@@ -92,9 +102,11 @@ export function createServices(ensureTray: () => void, showWindow: () => void) {
     settings,
     logs,
     broadcast,
+    update,
   );
   return {
     mcp,
+    update,
     sessions,
     logs,
     plugins,

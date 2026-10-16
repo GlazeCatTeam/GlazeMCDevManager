@@ -44,7 +44,8 @@ export default defineConfig({
       },
     ],
     build: {
-      externalizeDeps: { exclude: workspacePackages },
+      // electron-updater is bundled too: the installer ships out/ without node_modules
+      externalizeDeps: { exclude: [...workspacePackages, "electron-updater"] },
       rolldownOptions: {
         input: {
           index: resolve(import.meta.dirname, "src/main/index.ts"),

@@ -74,6 +74,7 @@ import type { CacheService } from "../preferences/cache";
 import type { GeneralService } from "../preferences/general";
 import type { SessionSettingsService } from "../preferences/session-settings";
 import type { SessionManager } from "../session/session-manager";
+import type { UpdateService } from "../update/service";
 import { closeLoginWindow, loginWithOfficialWindow } from "../windows/login-window";
 import { appWindows } from "../windows/main-window";
 import { getAboutInfo, getDependencyLicenses, openProjectLink, openRuntimeNotices } from "./about";
@@ -161,6 +162,7 @@ function createHandlers(
   logs: LogService,
   sessionSettings: SessionSettingsService,
   mcp: McpHost,
+  update: UpdateService,
 ): HandlerTable {
   const actions = createApplicationActions(
     { sessions, appearance, general, cache, plugins, sessionSettings },
@@ -188,6 +190,10 @@ function createHandlers(
     "app.getLicenses": () => getDependencyLicenses(),
     "app.openProjectLink": (params) => openProjectLink(params?.link),
     "app.openRuntimeNotices": () => openRuntimeNotices(),
+    "update.state": () => update.state(),
+    "update.check": () => update.check(),
+    "update.install": () => update.install(),
+    "update.setAutoCheck": (params) => update.setAutoCheck(params?.enabled),
     "sessionSettings.get": () => sessionSettings.get(),
     "sessionSettings.set": (params) => actions.session(params),
     ...createWorkOperationHandlers(sessions),
@@ -536,8 +542,9 @@ export function registerRpc(
   logs: LogService,
   sessionSettings: SessionSettingsService,
   mcp: McpHost,
+  update: UpdateService,
 ): void {
-  const handlers = createHandlers(sessions, appearance, general, cache, plugins, logs, sessionSettings, mcp);
+  const handlers = createHandlers(sessions, appearance, general, cache, plugins, logs, sessionSettings, mcp, update);
   const isRpcMethod = (method: unknown): method is RpcMethod =>
     typeof method === "string" && Object.hasOwn(handlers, method);
 
@@ -553,6 +560,7 @@ export function registerRpc(
           method.startsWith("sessionSettings.") ||
           method.startsWith("logs.") ||
           method.startsWith("general.") ||
+          method.startsWith("update.") ||
           method === "app.rememberRoute" ||
           method === "app.reportRendererError" ||
           method === "app.getAbout" ||

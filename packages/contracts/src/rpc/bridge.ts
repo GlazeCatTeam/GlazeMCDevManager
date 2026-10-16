@@ -49,6 +49,7 @@ import type {
 } from "./promotion";
 import type { RankBoard, RankEntry, RankIconsParams, RankListParams, RankPage, RankPageParams } from "./rank";
 import type { SessionSettings } from "./session-settings";
+import type { UpdateState } from "./update";
 import type { WorkCropParams, WorkImageDraft, WorkImageParams, WorkReference, WorkSearchParams } from "./work-assets";
 import type { WorkCreateParams } from "./work-create";
 import type {
@@ -110,6 +111,10 @@ export interface RpcMethods {
   "app.getLicenses": { params: undefined; result: DependencyLicense[] };
   "app.openProjectLink": { params: { link: ProjectLink }; result: undefined };
   "app.openRuntimeNotices": { params: undefined; result: undefined };
+  "update.state": { params: undefined; result: UpdateState };
+  "update.check": { params: undefined; result: UpdateState };
+  "update.install": { params: undefined; result: undefined };
+  "update.setAutoCheck": { params: { enabled: boolean }; result: UpdateState };
   "sessionSettings.get": { params: undefined; result: SessionSettings };
   "sessionSettings.set": { params: SessionSettings; result: SessionSettings };
   "app.reportRendererError": { params: { kind: "error" | "unhandled-rejection" }; result: undefined };
@@ -203,6 +208,7 @@ export interface EventPayloads {
   "plugins.changed": PluginSnapshot;
   "logs.changed": undefined;
   "general.changed": GeneralState;
+  "update.changed": UpdateState;
   "cache.cleared": undefined;
   "appearance.changed": AppearanceSettings;
   "layout.rankingChanged": RankBoard[];

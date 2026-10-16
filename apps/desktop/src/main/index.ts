@@ -39,10 +39,13 @@ if (process.argv.includes("--mcp")) {
       services.logs,
       services.sessionSettings,
       services.mcp,
+      services.update,
     );
     lifecycle.attach(createMainWindow());
     void services.mcp.start().catch(() => services.logs.write("error", "mcp", "MCP 服务启动失败"));
+    services.update.start();
     app.on("before-quit", () => {
+      services.update.stop();
       void services.mcp.stop();
     });
     // Check the saved session in the background; the window opens from saved state right away
