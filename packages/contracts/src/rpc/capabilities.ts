@@ -23,6 +23,16 @@ export interface Capability {
 const shellOnly = (permission: string | null, risk: Risk): Capability => ({ caller: "shell", permission, risk });
 
 export const capabilities: Record<RpcMethod, Capability> = {
+  "mcp.snapshot": shellOnly(null, "read"),
+  "mcp.resolveOperation": shellOnly(null, "write"),
+  "mcp.setEnabled": shellOnly(null, "write"),
+  "mcp.invite": shellOnly(null, "write"),
+  "mcp.grant": shellOnly(null, "write"),
+  "mcp.disconnect": shellOnly(null, "write"),
+  "mcp.revoke": shellOnly(null, "write"),
+  "mcp.directory": shellOnly(null, "write"),
+  "mcp.decide": shellOnly(null, "write"),
+  "mcp.editDraft": shellOnly(null, "write"),
   "promotion.activities": {
     caller: "any",
     permission: "netease:promotion.read",
@@ -105,7 +115,16 @@ export const capabilities: Record<RpcMethod, Capability> = {
   "messages.delete": shellOnly("netease:messages.write", "write"),
   "comments.list": shellOnly("netease:community.read", "read"),
   "comments.reply": shellOnly("netease:community.write", "write"),
-  "analytics.daily": shellOnly("netease:analytics.read", "read"),
+  "analytics.daily": {
+    caller: "any",
+    permission: "netease:analytics.read",
+    risk: "read",
+    mcp: {
+      title: "作品数据分析",
+      description:
+        "按作品 ID 和日期范围查询 PE/PC 日度数据。最多 500 个作品，日期范围不超过 366 天；数据缺失保留 null，不把缺失视为零。",
+    },
+  },
   "analytics.periodIncome": shellOnly("netease:analytics.read", "read"),
   "analytics.monthly": shellOnly("netease:analytics.read", "read"),
   "analytics.realtime": shellOnly("netease:income.read", "read"),

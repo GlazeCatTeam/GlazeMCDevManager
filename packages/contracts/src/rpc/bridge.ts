@@ -24,6 +24,7 @@ import type {
   IncomePlatform,
 } from "./income";
 import type { LogPage, LogQuery } from "./logs";
+import type { McpDraft, McpGrant, McpInvitation, McpSnapshot } from "./mcp";
 import type { MessageContent, MessageDeleteParams, MessageListParams, MessagePage, MessageParams } from "./messages";
 import type { PluginInstallPreview, PluginSnapshot } from "./plugins";
 import type {
@@ -43,6 +44,7 @@ import type { WorkCreateParams } from "./work-create";
 import type {
   WorkEditorDocument,
   WorkEditorOptions,
+  WorkRecord,
   WorkReviewResult,
   WorkSaveParams,
   WorkUpload,
@@ -63,6 +65,16 @@ export interface WindowState {
 }
 
 export interface RpcMethods {
+  "mcp.snapshot": { params: undefined; result: McpSnapshot };
+  "mcp.resolveOperation": { params: { operationId: string }; result: undefined };
+  "mcp.setEnabled": { params: { enabled: boolean }; result: McpSnapshot };
+  "mcp.invite": { params: { name: string }; result: McpInvitation };
+  "mcp.grant": { params: { clientId: string; grant: McpGrant }; result: McpSnapshot };
+  "mcp.disconnect": { params: { clientId: string }; result: undefined };
+  "mcp.revoke": { params: { clientId: string }; result: undefined };
+  "mcp.directory": { params: { clientId: string; removeId?: string }; result: undefined };
+  "mcp.decide": { params: { operationId: string; revision: number; approve: boolean }; result: undefined };
+  "mcp.editDraft": { params: { draftId: string; revision: number; patch: WorkRecord }; result: McpDraft };
   "promotion.activities": { params: PromotionPageParams; result: { records: PromotionActivity[]; total: number } };
   "promotion.discount": { params: AccountParams | undefined; result: { activity: PromotionActivity | null } };
   "promotion.module": { params: PromotionModuleParams; result: PromotionModuleData };
@@ -156,6 +168,7 @@ export interface RpcMethods {
 }
 
 export interface EventPayloads {
+  "mcp.changed": { pendingCount: number };
   "sessionSettings.changed": SessionSettings;
   "plugins.changed": PluginSnapshot;
   "logs.changed": undefined;

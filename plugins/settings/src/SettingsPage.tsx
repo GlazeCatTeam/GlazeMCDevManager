@@ -1,11 +1,10 @@
 import { Button, callHost, Dialog, PageHeader, Panel, useNavigation } from "@glaze/plugin-sdk";
-import { type CSSProperties, useCallback, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useState } from "react";
 import {
   type AppearanceSettings,
   categories,
   confirmationCopy,
   initialAppearance,
-  initialClients,
   initialGeneral,
   type PendingAction,
   type SettingsCategory,
@@ -37,11 +36,13 @@ export function SettingsPage({
   appearanceStatus,
   themePreviewStyles,
 }: SettingsPageProps) {
-  const { navigate } = useNavigation();
-  const [category, setCategory] = useState<SettingsCategory>("appearance");
+  const { navigate, params } = useNavigation();
+  const [category, setCategory] = useState<SettingsCategory>(params.category === "ai" ? "ai" : "appearance");
+  useEffect(() => {
+    if (params.category === "ai") setCategory("ai");
+  }, [params.category]);
   const [localAppearance, setLocalAppearance] = useState(initialAppearance);
   const general = useGeneralSettings(category === "general");
-  const [clients, setClients] = useState(initialClients);
   const [autoUpdate, setAutoUpdate] = useState(true);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [notice, setNotice] = useState("");
@@ -80,9 +81,6 @@ export function SettingsPage({
       } finally {
         setRestoring(false);
       }
-    } else if (pending.kind === "revoke") {
-      setClients((items) => items.filter((client) => client.id !== pending.client.id));
-      setNotice(`已移除模拟客户端「${pending.client.name}」。真实授权服务尚未接入。`);
     } else if (pending.kind === "cache") {
       setRestoring(true);
       try {
@@ -156,13 +154,7 @@ export function SettingsPage({
               />
             )}
             {category === "plugins" && <PluginsSection />}
-            {category === "ai" && (
-              <AiSection
-                clients={clients}
-                onRevoke={(client) => setPending({ kind: "revoke", client })}
-                onUnavailable={setNotice}
-              />
-            )}
+            {category === "ai" && <AiSection />}
             {category === "logs" && <LogsSection />}
             {category === "about" && (
               <AboutSection
@@ -185,7 +177,9 @@ export function SettingsPage({
                     ? "插件启停自动保存；本地安装支持无代码主题包。"
                     : category === "logs"
                       ? "运行日志自动记录并脱敏，可导出当前级别的最近 500 条。"
-                      : "界面预览 · 系统功能与业务服务尚待接入")}
+                      : category === "ai"
+                        ? "MCP 授权与操作记录保存在本机；平台写入需要应用内确认。"
+                        : "界面预览 · 系统功能与业务服务尚待接入")}
           </div>
         </Panel>
       </div>
@@ -213,7 +207,6 @@ export function SettingsPage({
             </>
           }
         >
-          {pending.kind === "revoke" && <p className={styles.dialogClient}>{pending.client.name}</p>}
           {confirmationCopy[pending.kind].body}
         </Dialog>
       )}

@@ -4,6 +4,7 @@ import { AccountStore, type Cipher, openDatabase, PreferenceStore, Vault } from 
 import { app, safeStorage, session } from "electron";
 import { sendEvent } from "../ipc/rpc";
 import { LogService } from "../logs/service";
+import { createMcpHost, type McpHost } from "../mcp/host";
 import { bundledPlugins, bundledThemes } from "../plugins/bundled";
 import { PluginRegistry } from "../plugins/registry";
 import { AppearanceService } from "../preferences/appearance";
@@ -42,12 +43,14 @@ export function createServices(ensureTray: () => void, showWindow: () => void) {
   const db = openDatabase(join(app.getPath("userData"), "glaze.db"));
   const preferences = new PreferenceStore(db);
   const sessionSettings = new SessionSettingsService(preferences);
+  let mcp: McpHost | undefined;
   const expiryNotification = new ExpiryNotification(showWindow, (message) => logs.write("warn", "account", message));
   const sessions = new SessionManager(
     new AccountStore(db),
     new Vault(db, dpapiCipher),
     {
       changed: (payload) => {
+        mcp?.service.accountsChanged();
         logs.write("info", "account", "账号会话状态已更新");
         broadcast("account.changed", payload);
       },
@@ -68,7 +71,13 @@ export function createServices(ensureTray: () => void, showWindow: () => void) {
   logs.write("info", "app", `应用启动，已发现 ${plugins.snapshot().plugins.length} 个插件与主题`);
   process.on("uncaughtExceptionMonitor", () => logs.write("error", "app", "主进程发生未捕获异常"));
   app.on("render-process-gone", () => logs.write("error", "renderer", "界面进程意外退出"));
+  mcp = createMcpHost(sessions, plugins, () =>
+    broadcast("mcp.changed", {
+      pendingCount: mcp?.service.data.operations.filter((operation) => operation.state === "pending").length ?? 0,
+    }),
+  );
   return {
+    mcp,
     sessions,
     sessionSettings,
     logs,

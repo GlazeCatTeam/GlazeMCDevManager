@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@glaze/contracts": "workspace:*",
+    "@glaze/mcp": "workspace:*",
     "@glaze/netease": "workspace:*",
     "@glaze/plugin-account": "workspace:*",
     "@glaze/plugin-analytics": "workspace:*",

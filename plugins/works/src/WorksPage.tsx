@@ -6,11 +6,12 @@ import {
   PageHeader,
   Pagination,
   TextButton,
+  useNavigation,
   useSession,
   type WorkStatus,
   type WorkSummary,
 } from "@glaze/plugin-sdk";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { EditorRoute } from "./EditorRoute";
 import { loadWorkEditor } from "./editor-loader";
 import type { WorkAction } from "./status";
@@ -28,6 +29,7 @@ import { type ListWriteAction, WorkActionDialog } from "./widgets/WorkActionDial
 import { WorkTile } from "./widgets/WorkTile";
 
 const PER_PAGE = 9;
+const McpDraftPage = lazy(() => import("./McpDraftPage").then((module) => ({ default: module.McpDraftPage })));
 const LOADING_SLOTS = Array.from({ length: PER_PAGE }, (_, position) => `loading-${position}`);
 
 /** One-line summary under the title */
@@ -42,6 +44,13 @@ function summary(list: WorkSummary[], total: number): string {
 /** Works management: the account's works as fixed-size tiles, nine per page, like MCDevManager's 上架管理 */
 export function WorksPage() {
   const { current: account } = useSession();
+  const { params } = useNavigation();
+  if (params.mcpDraft)
+    return (
+      <Suspense fallback={<Notice>正在加载 AI 草稿…</Notice>}>
+        <McpDraftPage key={params.mcpDraft} id={params.mcpDraft} />
+      </Suspense>
+    );
   return account ? <WorksForAccount key={account.id} account={account} /> : <Notice>请先登录账号。</Notice>;
 }
 

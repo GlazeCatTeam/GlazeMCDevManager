@@ -47,17 +47,20 @@ export async function uploadDroppedWorkResource(
 }
 
 /** Validate the account, file and live category immediately before a single upload */
-async function uploadSelectedWorkFile(
+export async function uploadSelectedWorkFile(
   sessions: SessionManager,
   window: BrowserWindow,
   params: WorkUploadParams,
   path: string,
+  authorize?: () => void,
+  fileName = basename(path),
 ): Promise<WorkUpload> {
   const account = params.account;
   const resource = params.kind === "resource";
   const video = params.kind === "video";
   const extensions: readonly string[] = resource ? workResourceExtensions : video ? ["mp4"] : ["png", "jpg", "jpeg"];
-  if (sessions.current()?.id !== account) throw new CapabilityError("account_changed", "账号已切换，已取消上传");
+  if (authorize) authorize();
+  else if (sessions.current()?.id !== account) throw new CapabilityError("account_changed", "账号已切换，已取消上传");
   const info = await stat(path);
   const limit = (resource ? 2048 : video ? 50 : 10) * 1024 * 1024;
   const extension = extname(path).slice(1).toLowerCase();
@@ -101,7 +104,8 @@ async function uploadSelectedWorkFile(
         expected ? `图片须为 ${expected.width} × ${expected.height}` : "无法读取图片",
       );
   }
-  if (window.isDestroyed() || sessions.current()?.id !== account)
+  if (authorize) authorize();
+  if (window.isDestroyed() || (!authorize && sessions.current()?.id !== account))
     throw new CapabilityError("account_changed", "窗口或账号已变化，已取消上传");
   const type = resource
     ? extension === "png"
@@ -114,6 +118,6 @@ async function uploadSelectedWorkFile(
         : "image/jpeg";
   const blob = await openAsBlob(path, { type });
   return sessions.request(account, (session) =>
-    uploadWorkFile(session, blob, basename(path), resource ? "zip_package" : video ? "video" : "image"),
+    uploadWorkFile(session, blob, fileName, resource ? "zip_package" : video ? "video" : "image", authorize),
   );
 }

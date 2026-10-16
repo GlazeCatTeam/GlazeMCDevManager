@@ -26,6 +26,7 @@ import {
   type RpcMethods,
   type RpcResult,
 } from "@glaze/contracts";
+import { McpError } from "@glaze/mcp";
 import {
   createWork,
   deleteMessages,
@@ -63,6 +64,7 @@ import {
 } from "@glaze/netease";
 import { BrowserWindow, type IpcMainInvokeEvent, ipcMain } from "electron";
 import type { LogService } from "../logs/service";
+import type { McpHost } from "../mcp/host";
 import type { PluginRegistry } from "../plugins/registry";
 import type { AppearanceService } from "../preferences/appearance";
 import type { CacheService } from "../preferences/cache";
@@ -153,6 +155,7 @@ function createHandlers(
   plugins: PluginRegistry,
   logs: LogService,
   sessionSettings: SessionSettingsService,
+  mcp: McpHost,
 ): HandlerTable {
   let lastRendererError = 0;
   /** Pin mailbox writes and detail reads to the account that initiated them */
@@ -162,6 +165,7 @@ function createHandlers(
     return account;
   };
   return {
+    ...mcp.handlers,
     "sessionSettings.get": () => sessionSettings.get(),
     "sessionSettings.set": (params) => {
       const saved = sessionSettings.set(params);
@@ -508,8 +512,9 @@ export function registerRpc(
   plugins: PluginRegistry,
   logs: LogService,
   sessionSettings: SessionSettingsService,
+  mcp: McpHost,
 ): void {
-  const handlers = createHandlers(sessions, appearance, general, cache, plugins, logs, sessionSettings);
+  const handlers = createHandlers(sessions, appearance, general, cache, plugins, logs, sessionSettings, mcp);
   const isRpcMethod = (method: unknown): method is RpcMethod =>
     typeof method === "string" && Object.hasOwn(handlers, method);
 
@@ -520,7 +525,8 @@ export function registerRpc(
     }
     try {
       if (
-        (method.startsWith("plugins.") ||
+        (method.startsWith("mcp.") ||
+          method.startsWith("plugins.") ||
           method.startsWith("sessionSettings.") ||
           method.startsWith("logs.") ||
           method.startsWith("general.") ||
@@ -577,7 +583,7 @@ export function registerRpc(
     } catch (error) {
       // Never record request parameters, remote response bodies or exception text containing credentials
       if (!method.startsWith("logs.")) logs.write("error", "rpc", `操作失败：${method}`);
-      if (error instanceof CapabilityError) {
+      if (error instanceof CapabilityError || error instanceof McpError) {
         return { ok: false, error: { kind: error.kind, message: error.message } };
       }
       return {

@@ -1,5 +1,7 @@
 import { type AccountSummary, remoteImageUrl, type SessionStatus } from "@glaze/contracts";
+import { callHost, onHostEvent } from "@glaze/plugin-sdk";
 import { Avatar, avatarColorsFor, Icon } from "@glaze/ui";
+import { useEffect, useState } from "react";
 import type { NavEntry } from "./nav";
 import styles from "./Sidebar.module.css";
 
@@ -23,11 +25,30 @@ export interface SidebarProps {
   entries: NavEntry[];
   activeRoute: string;
   account: AccountSummary | null;
-  onNavigate: (route: string) => void;
+  onNavigate: (route: string, params?: Record<string, string>) => void;
 }
 
 /** Group workbench navigation by task, with account management anchored below */
 export function Sidebar({ entries, activeRoute, account, onNavigate }: SidebarProps) {
+  const [mcpPending, setMcpPending] = useState(0);
+  useEffect(() => {
+    let active = true;
+    let changed = false;
+    const off = onHostEvent("mcp.changed", ({ pendingCount }) => {
+      changed = true;
+      setMcpPending(pendingCount);
+    });
+    void callHost("mcp.snapshot")
+      .then((result) => {
+        if (active && !changed && result.ok)
+          setMcpPending(result.value.operations.filter((operation) => operation.state === "pending").length);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+      off();
+    };
+  }, []);
   const accountActive = activeRoute === accountRoute;
   const topEntries = entries.filter((entry) => entry.group === "top");
   const sections = navigationSections.map((section) => ({
@@ -65,6 +86,15 @@ export function Sidebar({ entries, activeRoute, account, onNavigate }: SidebarPr
           ))}
       </div>
       <div className={styles.spacer} />
+      {mcpPending > 0 && (
+        <button
+          type="button"
+          className={styles.item}
+          onClick={() => onNavigate("glaze.settings/settings", { category: "ai" })}
+        >
+          AI 待处理 · {mcpPending}
+        </button>
+      )}
       <div className={styles.utilities}>{entries.filter((e) => e.group === "bottom").map(renderItem)}</div>
       {account && (
         <button

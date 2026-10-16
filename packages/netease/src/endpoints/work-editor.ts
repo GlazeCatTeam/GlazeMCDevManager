@@ -405,7 +405,11 @@ function serializeUpdate(value: WorkRecord): string {
   );
 }
 /** Merge only edited fields; concurrent changes to those fields require reloading */
-export async function saveWorkEditor(session: NeteaseSession, params: WorkSaveParams): Promise<Result<undefined>> {
+export async function saveWorkEditor(
+  session: NeteaseSession,
+  params: WorkSaveParams,
+  beforeWrite?: () => void,
+): Promise<Result<undefined>> {
   if (!isWorkSaveParams(params)) return fail({ kind: "business", code: "invalid_input", message: "保存参数无效" });
   const response = await getMcDevData("items.pe.editor", `/items/categories/pe/${params.itemId}`, session);
   if (!response.ok) return response;
@@ -495,6 +499,7 @@ export async function saveWorkEditor(session: NeteaseSession, params: WorkSavePa
       body.sync_item_info = { ...sync, channel: channels };
     }
   }
+  beforeWrite?.();
   const saved = await writeMcDevData(
     "items.pe.update",
     `/items/categories/pe/${params.itemId}/update`,
@@ -505,11 +510,19 @@ export async function saveWorkEditor(session: NeteaseSession, params: WorkSavePa
   return saved.ok ? ok(undefined) : saved;
 }
 /** Submit separately from saving and surface the platform's extra-review requirement */
-export async function submitWorkReview(session: NeteaseSession, itemId: string): Promise<Result<WorkReviewResult>> {
+export async function submitWorkReview(
+  session: NeteaseSession,
+  itemId: string,
+  expected?: WorkRecord,
+  beforeWrite?: () => void,
+): Promise<Result<WorkReviewResult>> {
   const detail = await readWorkEditor(session, itemId);
   if (!detail.ok) return detail;
+  if (expected && canonical(detail.value.fields) !== canonical(expected))
+    return fail({ kind: "business", code: "conflict", message: "作品内容已变化，已停止提交审核" });
   if (!editableStates.has(detail.value.status))
     return fail({ kind: "business", code: "read_only", message: "作品当前状态不能提交审核" });
+  beforeWrite?.();
   const result = await writeMcDevData(
     "items.pe.apply_review",
     `/items/categories/pe/${itemId}/apply_review`,

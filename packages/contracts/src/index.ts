@@ -10,6 +10,7 @@ export * from "./rpc/general";
 export * from "./rpc/images";
 export * from "./rpc/income";
 export * from "./rpc/logs";
+export * from "./rpc/mcp";
 export * from "./rpc/messages";
 export * from "./rpc/plugins";
 export * from "./rpc/promotion";

@@ -17,18 +17,7 @@ export const initialAppearance: AppearanceSettings = { ...defaultAppearance };
 
 export const initialGeneral: GeneralSettings = { ...defaultGeneral };
 
-export interface PairedClient {
-  id: string;
-  name: string;
-  lastSeen: string;
-}
-
-export const initialClients: PairedClient[] = [
-  { id: "sample-claude", name: "Claude Code", lastSeen: "2026-10-15 10:24" },
-  { id: "sample-codex", name: "Codex", lastSeen: "2026-10-14 21:08" },
-];
-
-export type PendingAction = { kind: "restore" } | { kind: "cache" } | { kind: "revoke"; client: PairedClient };
+export type PendingAction = { kind: "restore" } | { kind: "cache" };
 
 export const confirmationCopy = {
   restore: {
@@ -40,10 +29,5 @@ export const confirmationCopy = {
     title: "清除本地缓存？",
     body: "将清理页面资源、脚本、图片和查询缓存，后续访问时重新加载。账号、登录凭据、偏好设置与未保存的编辑内容会保留。",
     action: "清除缓存",
-  },
-  revoke: {
-    title: "撤销客户端授权？",
-    body: "将移除此模拟客户端。真实 MCP 配对服务尚未接入，本次不会改变任何外部工具的权限。",
-    action: "撤销授权",
   },
 } as const;

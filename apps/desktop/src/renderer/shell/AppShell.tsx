@@ -130,7 +130,7 @@ export function AppShell() {
                 )}
                 activeRoute={location.route}
                 account={current}
-                onNavigate={(route) => navigation.navigate(route)}
+                onNavigate={(route, params) => navigation.navigate(route, params)}
               />
               <main key={location.route} className={styles.main}>
                 <RouteView route={location.route} title={title} />

@@ -47,6 +47,7 @@ export async function uploadWorkFile(
   file: Blob,
   name: string,
   fileType: "image" | "video" | "zip_package",
+  beforeWrite?: () => void,
 ): Promise<Result<WorkUpload>> {
   const token = await getMcDevData(
     "filepicker.file_token",
@@ -61,6 +62,7 @@ export async function uploadWorkFile(
     const form = new FormData();
     form.append("Authorization", token.value.token);
     form.append("fpfile", file, name);
+    beforeWrite?.();
     const response = await fetch(target, {
       method: "POST",
       body: form,

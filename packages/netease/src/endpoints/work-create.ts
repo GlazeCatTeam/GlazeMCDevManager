@@ -102,13 +102,18 @@ export function buildWorkCreate(fields: WorkRecord): WorkRecord {
 }
 
 /** Create once; the upstream endpoint succeeds without returning a work id */
-export async function createWork(session: NeteaseSession, params: WorkCreateParams): Promise<Result<undefined>> {
+export async function createWork(
+  session: NeteaseSession,
+  params: WorkCreateParams,
+  beforeWrite?: () => void,
+): Promise<Result<undefined>> {
   if (!isWorkCreateParams(params)) return fail({ kind: "business", code: "validation", message: "新建作品参数无效" });
   const fields = { ...emptyWorkCreateFields(), ...params.fields };
   const choices = await getWorkEditorOptions(session);
   if (!choices.ok) return choices;
   const invalid = validateWorkCreate(fields, choices.value);
   if (invalid) return fail({ kind: "business", code: "validation", message: invalid });
+  beforeWrite?.();
   const result = await writeMcDevData(
     "items.pe.create",
     "/items/categories/pe/upload",

@@ -29,8 +29,15 @@ export {
 } from "./endpoints/promotion";
 export { getRankList, getRankPage } from "./endpoints/rank";
 export { getUserInfo, type UserInfo } from "./endpoints/user";
-export { createWork } from "./endpoints/work-create";
-export { getWorkEditorOptions, readWorkEditor, saveWorkEditor, submitWorkReview } from "./endpoints/work-editor";
+export { validateWorkAdvanced } from "./endpoints/work-advanced";
+export { createWork, validateWorkCreate } from "./endpoints/work-create";
+export {
+  getWorkEditorOptions,
+  readWorkEditor,
+  saveWorkEditor,
+  submitWorkReview,
+  validateWorkPatch,
+} from "./endpoints/work-editor";
 export { performWorkOperation } from "./endpoints/work-operations";
 export { searchWorkReferences } from "./endpoints/work-references";
 export { uploadWorkFile } from "./endpoints/work-upload";

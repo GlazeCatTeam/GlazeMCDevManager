@@ -1,18 +1,107 @@
 .permissions {
-  padding: 18px;
+  padding: 16px;
   background: var(--g-surface-app);
   border-radius: var(--g-radius-panel);
-}
-
-.permissions h3 {
-  margin: 0;
-  font-size: 14px;
-}
-
-.permissions ul {
-  margin: 12px 0 0;
-  padding-left: 18px;
   color: var(--g-text-muted);
   font-size: 12px;
-  line-height: 1.9;
+  line-height: 1.8;
+}
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  max-height: 65vh;
+  overflow: auto;
+  padding: 4px;
+}
+.form p {
+  margin: 0;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.form label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.form fieldset {
+  border: 1px solid var(--g-border-subtle);
+  border-radius: var(--g-radius-panel);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+.form legend {
+  color: var(--g-text-muted);
+  font-size: 12px;
+  padding: 0 6px;
+}
+.form select,
+.input,
+.form textarea {
+  background: var(--g-surface-app);
+  color: var(--g-text-primary);
+  border: 1px solid var(--g-border-subtle);
+  border-radius: 5px;
+  padding: 8px;
+  min-width: 0;
+}
+.form textarea {
+  width: 100%;
+  resize: vertical;
+  font: 12px / 1.6 monospace;
+  box-sizing: border-box;
+}
+.audit {
+  display: flex;
+  flex-direction: column;
+  max-height: 360px;
+  overflow: auto;
+}
+.audit > div {
+  display: grid;
+  grid-template-columns: 75px minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--g-border-subtle);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.audit time {
+  color: var(--g-text-muted);
+}
+.diff details {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--g-border-subtle);
+}
+.diff summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.diff details > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.diff pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: 12px / 1.6 monospace;
+  background: var(--g-surface-app);
+  padding: 12px;
+  max-height: 200px;
+  overflow: auto;
+}
+.dialog {
+  width: min(720px, calc(100vw - 32px));
+}
+.media {
+  max-width: 100%;
+  max-height: 160px;
+  object-fit: contain;
+  display: block;
+  margin: 8px 0;
 }

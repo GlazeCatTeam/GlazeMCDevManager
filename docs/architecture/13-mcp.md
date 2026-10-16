@@ -2,6 +2,8 @@
 
 让外部 AI 工具（Claude Code、Codex、Cursor 等）通过 MCP 使用本应用的功能。应用本身不内置 AI。决定见 [ADR-0008](../adr/0008-capabilities-and-mcp.md)。
 
+> 2026-10-16 实装更新：Windows stdio 接入、客户端授权、作品隔离草稿、材料流程与保存/提审审批已接入代码，设置页已使用真实状态。实际入口、工具、存储、测试及尚未完成的真实平台验收见 [22 MCP 实装](22-mcp-runtime.md)。下文保留最初架构与分阶段设计记录；其中“服务待接入/尚未实现”描述的是当时状态，传输、默认账号及批准规则以 22 文为准。HTTP 与第三方插件贡献工具仍待后续实现。
+
 ## 核心原则：能力优先
 
 每个业务功能都先定义成一个**能力**，再做界面。界面、插件、MCP 是同一份能力的三个调用方：
@@ -137,7 +139,6 @@ type CallerIdentity =
 应用已定义并接入 `works.cancelReview`、`works.publish`、`works.appointOnline`、`works.cancelAppointOnline`、`works.submitSelfTest`、`works.cancelTest`、`works.delete`、`works.changePrice`。权限均为 `netease:works.write`; 删除风险为 `dangerous`, 其他为 `write`。目前均为 `shellOnly`, 没有 MCP exposure; 上表关于独立上架和删除未开放 MCP 的范围保持不变。取消定时上架只允许 `appoint_online`, 发送显式 null 清除预约。
 
 能力接收固定账号、作品 ID 和预期状态; 自测额外携带免机审选择, 定时上架携带北京时间, 调价携带原币种/价格与新价格。主进程对参数、调用窗口、账号、作品实时状态和价格规则进行校验, 同一账号/作品的列表写操作互斥。所有八项操作都经过应用内确认, 不自动重试写入; 无法判断写结果时返回 `outcome: uncertain`, 界面要求核对后再操作。未来 MCP 接入必须复用这些校验并接入批准机制, 不能直接开放现有 IPC。
-
 
 ## 作品创建、更新与提交审核（2026-10-16 设计，尚未实现）
 

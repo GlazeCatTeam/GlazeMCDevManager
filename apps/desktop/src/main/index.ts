@@ -10,7 +10,10 @@ registerRemoteImageScheme();
 let lifecycle: WindowLifecycle | undefined;
 
 // A second launch, including Windows login startup, restores the existing window
-if (!app.requestSingleInstanceLock()) {
+if (process.argv.includes("--mcp")) {
+  process.stderr.write("请在设置 → AI 接入复制连接配置；Windows stdio 需要使用随应用提供的 Node 桥。\n");
+  app.exit(1);
+} else if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on("second-instance", () => lifecycle?.show());
@@ -35,8 +38,13 @@ if (!app.requestSingleInstanceLock()) {
       services.plugins,
       services.logs,
       services.sessionSettings,
+      services.mcp,
     );
     lifecycle.attach(createMainWindow());
+    void services.mcp.start().catch(() => services.logs.write("error", "mcp", "MCP 服务启动失败"));
+    app.on("before-quit", () => {
+      void services.mcp.stop();
+    });
     // Check the saved session in the background; the window opens from saved state right away
     void services.sessions.restore();
   });
