@@ -31,6 +31,7 @@ let listRequests = 0;
 const sentReplies = new Map<string, string>();
 const sparseRatings = new URLSearchParams(location.search).has("sparse-ratings");
 const progressive = new URLSearchParams(location.search).has("progressive");
+const emptyContent = new URLSearchParams(location.search).has("empty-content");
 let failLater = new URLSearchParams(location.search).has("fail-later");
 
 /** Fixture bridge supports pagination, filtering, failures and intentionally late responses */
@@ -67,7 +68,14 @@ const rpc: GlazeBridge["rpc"] = async (method, input) => {
       work: "空岛奇境",
       stars: sparseRatings ? (index === 0 || index === (progressive ? 121 : 21) ? 1 : 5) : (index % 5) + 1,
       publishTime: Math.floor(new Date(2026, 9, 15 - index, 14, 30).getTime() / 1000),
-      content: index === 0 ? "非常喜欢这个组件，希望增加更多冒险地图。" : `评论内容 ${index + 1}`,
+      content:
+        emptyContent && index % 3 === 0
+          ? index % 6 === 0
+            ? ""
+            : " \n\t　"
+          : index === 0
+            ? "非常喜欢这个组件，希望增加更多冒险地图。"
+            : `评论内容 ${index + 1}`,
       tag: index % 2 ? "问题求助" : "默认类型",
       canReply: index !== 2 && !sentReplies.has(`${params.account}-${index}`),
       ...(sentReplies.has(`${params.account}-${index}`)

@@ -105,9 +105,43 @@ try {
   await page.getByText("共 1 条评论 · 当前页 1 条", { exact: true }).waitFor();
   await list.getByText("玩家乙1", { exact: true }).waitFor();
   assert.equal(await list.getByText("玩家甲122", { exact: true }).count(), 0);
+
+  await page.goto(`${server.resolvedUrls.local[0]}tests/fixtures/comments.html?empty-content=1`);
+  const hideEmpty = page.getByRole("checkbox", { name: "屏蔽无文字评论", exact: true });
+  await page.getByText("共 43 条评论 · 当前页 20 条", { exact: true }).waitFor();
+  assert.equal(await hideEmpty.isChecked(), false);
+  await page.getByText("（该评论没有文字内容）", { exact: true }).waitFor();
+  await pagination.getByRole("button", { name: "第 3 页", exact: true }).click();
+  await page.getByText("共 43 条评论 · 当前页 3 条", { exact: true }).waitFor();
+  await hideEmpty.check();
+  await page.getByText("筛选后共 28 条评论 · 当前页 20 条", { exact: true }).waitFor();
+  await page.getByRole("heading", { name: "玩家甲2", exact: true }).waitFor();
+  assert.equal(await page.getByText("（该评论没有文字内容）", { exact: true }).count(), 0);
+  await pagination.getByRole("button", { name: "下一页 ›", exact: true }).click();
+  await page.getByText("筛选后共 28 条评论 · 当前页 8 条", { exact: true }).waitFor();
+  assert.equal(await list.getByRole("listitem").count(), 8);
+  await hideEmpty.uncheck();
+  await page.getByText("共 43 条评论 · 当前页 20 条", { exact: true }).waitFor();
+  await page.getByText("（该评论没有文字内容）", { exact: true }).waitFor();
+  await hideEmpty.check();
+  await page.getByText("筛选后共 28 条评论 · 当前页 20 条", { exact: true }).waitFor();
+  await rating(5).click();
+  await page.getByText("筛选后共 5 条评论 · 当前页 5 条", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "默认类型", exact: true }).click();
+  await page.getByText("筛选后共 3 条评论 · 当前页 3 条", { exact: true }).waitFor();
+  const search = page.getByPlaceholder("搜索昵称、内容、组件名…");
+  await search.fill("评论内容 15");
+  await page.getByText("筛选后共 1 条评论 · 当前页 1 条", { exact: true }).waitFor();
+  await list.getByText("玩家甲15", { exact: true }).waitFor();
+  await search.fill("不存在的评论");
+  await page.getByText("筛选后共 0 条评论 · 当前页 0 条", { exact: true }).waitFor();
+  assert.equal(await pagination.count(), 0);
+  await page.getByRole("button", { name: "切换测试账号", exact: true }).click();
+  await page.getByText("共 1 条评论 · 当前页 1 条", { exact: true }).waitFor();
+  assert.equal(await hideEmpty.isChecked(), false);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: rating pagination, progressive matches before completion, partial failure/retry, refresh retention and account isolation",
+    "PASS: rating/text filter pagination, combined filters, progressive matches, partial failure/retry, refresh retention and account isolation",
   );
 } finally {
   await browser?.close();

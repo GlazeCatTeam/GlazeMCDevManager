@@ -1,5 +1,6 @@
 import {
   Button,
+  Checkbox,
   Chip,
   type CommentListParams,
   type CommentTypeCode,
@@ -48,7 +49,7 @@ export function CommentsPage() {
   );
 }
 
-/** Reset pagination when filters change and show rating matches as batches arrive */
+/** Reset pagination when filters change and show matching comments as batches arrive */
 function AccountComments({ account }: { account: string }) {
   const [cache] = useState(() => new CommentPageCache());
   const replies = useCommentReplies(account);
@@ -56,6 +57,7 @@ function AccountComments({ account }: { account: string }) {
   const [keyword, setKeyword] = useState("");
   const [range, setRange] = useState<CommentDateRange>("全部");
   const [stars, setStars] = useState<number[]>([]);
+  const [hideEmpty, setHideEmpty] = useState(false);
   const [tag, setTag] = useState<CommentTypeCode | "">("");
   const [page, setPage] = useState(0);
   const [revision, setRevision] = useState(0);
@@ -67,7 +69,7 @@ function AccountComments({ account }: { account: string }) {
     ...(keyword ? { keyword } : {}),
     ...(tag ? { tag } : {}),
   };
-  const query = useComments(params, revision, cache, stars);
+  const query = useComments(params, revision, cache, stars, hideEmpty);
 
   useEffect(() => {
     if (search.trim() === keyword) return;
@@ -140,6 +142,15 @@ function AccountComments({ account }: { account: string }) {
             ))}
             <span className={styles.filterNote}>可多选 · 分批加载，筛选后分页</span>
           </fieldset>
+          <Checkbox
+            checked={hideEmpty}
+            onChange={(checked) => {
+              setHideEmpty(checked);
+              setPage(0);
+            }}
+          >
+            屏蔽无文字评论
+          </Checkbox>
           <div className={styles.filterGroup}>
             <span className={styles.filterLabel}>评论类型</span>
             <Chip
@@ -167,9 +178,9 @@ function AccountComments({ account }: { account: string }) {
         </div>
       </section>
       <CommentResults
-        key={commentQueryKey(params, stars)}
+        key={commentQueryKey(params, stars, hideEmpty)}
         query={query}
-        stars={stars}
+        filtered={stars.length > 0 || hideEmpty}
         page={page}
         onPage={setPage}
         onRefresh={refresh}
@@ -182,7 +193,7 @@ function AccountComments({ account }: { account: string }) {
 
 interface CommentResultsProps {
   query: ReturnType<typeof useComments>;
-  stars: number[];
+  filtered: boolean;
   page: number;
   onPage: (page: number) => void;
   onRefresh: () => void;
@@ -191,7 +202,7 @@ interface CommentResultsProps {
 }
 
 /** Display already filtered pages without leaking results across queries or accounts */
-function CommentResults({ query, stars, page, onPage, onRefresh, onReplySent, replies }: CommentResultsProps) {
+function CommentResults({ query, filtered, page, onPage, onRefresh, onReplySent, replies }: CommentResultsProps) {
   const [selectedId, setSelectedId] = useState<string>();
   const entries = useMemo(
     () =>
@@ -236,11 +247,11 @@ function CommentResults({ query, stars, page, onPage, onRefresh, onReplySent, re
             ? `已检查 ${query.progress.scanned} / ${query.progress.total} 条评论，已找到 ${query.progress.matched} 条匹配 · ${query.partial ? "继续加载中…" : "继续加载中，当前显示上次结果…"}`
             : query.data
               ? "正在更新评论，当前显示上次加载结果…"
-              : stars.length
-                ? "正在分批加载评论并筛选评分，匹配结果会陆续显示…"
+              : filtered
+                ? "正在分批加载并筛选评论，匹配结果会陆续显示…"
                 : "正在加载评论…"
           : query.data
-            ? `${query.partial ? "已加载匹配" : stars.length ? "筛选后共" : "共"} ${query.data.total} 条评论 · 当前页 ${entries.length} 条`
+            ? `${query.partial ? "已加载匹配" : filtered ? "筛选后共" : "共"} ${query.data.total} 条评论 · 当前页 ${entries.length} 条`
             : "评论暂未加载"}
       </div>
       <div className={styles.columns} aria-busy={query.loading}>

@@ -11,14 +11,15 @@ interface CommentQuery {
   progress: { scanned: number; total: number; matched: number } | null;
 }
 
-/** Keep cached rows visible and publish rating matches as source batches arrive */
+/** Keep cached rows visible and publish local filter matches as source batches arrive */
 export function useComments(
   params: CommentListParams,
   revision: number,
   cache: CommentPageCache,
   stars: number[] = [],
+  hideEmpty = false,
 ): CommentQuery {
-  const paramsKey = commentQueryKey(params, stars);
+  const paramsKey = commentQueryKey(params, stars, hideEmpty);
   const [changes, setChanges] = useState(0);
   // Replies sent by an AI tool or another window drop cached pages; current rows stay until the reload lands
   useEffect(() => {
@@ -53,7 +54,7 @@ export function useComments(
       partial: current.key === paramsKey && current.partial,
       progress: null,
     }));
-    const { stars: ratings = [], ...source } = JSON.parse(paramsKey);
+    const { stars: ratings = [], hideEmpty: excludeEmpty = false, ...source } = JSON.parse(paramsKey);
     const load = () =>
       loadCommentPage(
         cache,
@@ -81,9 +82,10 @@ export function useComments(
           });
         },
         controller.signal,
+        excludeEmpty,
       );
     // Subscribe on every effect, including StrictMode replay, even when the source scan is shared
-    const pending = ratings.length ? load() : cache.read(paramsKey, load);
+    const pending = ratings.length || excludeEmpty ? load() : cache.read(paramsKey, load);
     pending.then((result) => {
       if (!active) return;
       setQuery((current) => ({
