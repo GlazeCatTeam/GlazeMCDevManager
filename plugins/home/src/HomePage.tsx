@@ -1,4 +1,4 @@
-import { avatarColorsFor, Notice, remoteImageUrl, TextButton, useSession } from "@glaze/plugin-sdk";
+import { avatarColorsFor, Notice, remoteImageUrl, TextButton, useNavigation, useSession } from "@glaze/plugin-sdk";
 import { useMemo, useState } from "react";
 import styles from "./HomePage.module.css";
 import { useHomeQuery } from "./useHomeQuery";
@@ -15,9 +15,6 @@ const profitMonthLabels: Record<ProfitMonth, string> = {
   last: "上月收益速算",
 };
 
-// Detail pages do not exist yet
-const noop = () => {};
-
 /** "YYYY-MM" of this month and last month in local time */
 function recentMonths(now: Date): Record<ProfitMonth, string> {
   const format = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
@@ -27,6 +24,7 @@ function recentMonths(now: Date): Record<ProfitMonth, string> {
 /** Home page; a fixed arrangement for now, moved onto the layout grid in M1 */
 export function HomePage() {
   const { current } = useSession();
+  const { navigate } = useNavigation();
   const [month, setMonth] = useState<ProfitMonth>("this");
   const otherMonth: ProfitMonth = month === "this" ? "last" : "this";
   const months = useMemo(() => recentMonths(new Date()), []);
@@ -81,7 +79,7 @@ export function HomePage() {
             error={estimates[month].error?.message ?? null}
             loading={estimates[month].loading}
             onRetry={estimates[month].reload}
-            onOpenDetail={noop}
+            onOpenDetail={() => navigate("glaze.analytics/analytics")}
           />
           <ProfitMonthStrip
             title={profitMonthLabels[otherMonth]}
