@@ -17,16 +17,20 @@ export function useRefresh(reload: () => void, version: number): void {
 export function QueryState({
   query,
   label = "数据",
+  scopeLabel,
 }: {
-  query: Pick<HostQuery<unknown>, "loading" | "error" | "reload" | "data">;
+  query: Pick<HostQuery<unknown>, "loading" | "error" | "reload" | "data"> & { previous?: boolean };
   label?: string;
+  scopeLabel?: string;
 }) {
   const message = query.loading
     ? query.data !== null
-      ? "正在后台更新，当前结果仍可查看"
+      ? query.previous
+        ? `正在加载新筛选 · 暂显示 ${scopeLabel ?? "上次结果"}`
+        : "正在后台更新，当前结果仍可查看"
       : "正在查询平台数据…"
     : query.error
-      ? `${label}加载失败：${query.error.message}${query.data !== null ? " · 已保留上次成功结果" : ""}`
+      ? `${label}加载失败：${query.error.message}${query.data !== null ? ` · 已保留${query.previous ? ` ${scopeLabel ?? "上次成功结果"}` : "上次成功结果"}` : ""}`
       : query.data !== null
         ? "已更新 · 筛选自动生效"
         : "";

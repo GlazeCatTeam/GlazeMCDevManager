@@ -24,6 +24,9 @@ const emptyValues: AnalyticsValues = {
   emeralds: null,
   favorites: null,
   rating: null,
+  activeUsers: null,
+  refundRate: null,
+  playtime: null,
 };
 
 /** Normalize month keys or full calendar dates without accepting invalid date overflow */
@@ -110,7 +113,7 @@ function analyticsPayloadShape(value: unknown): string {
   return `载荷=${type(value)}，data=${type(payload.data)}，data.data=${type(nested.data)}；结构=${structure(value, 0)}`;
 }
 
-/** Normalize platform rows while keeping unavailable metrics distinct from zero */
+/** Normalize daily sales and engagement or monthly totals, keeping unavailable metrics distinct from zero */
 export function readAnalyticsRecords(value: unknown, monthly = false): Result<AnalyticsRecord[]> {
   const endpoint = monthly ? "data_analysis.month_detail" : "data_analysis.day_detail";
   const label = monthly ? "月汇总" : "日追踪";
@@ -149,6 +152,8 @@ export function readAnalyticsRecords(value: unknown, monthly = false): Result<An
       favorites: monthly ? null : readNumber(row.focus_cnt),
       rating: monthly ? null : readNumber(row.star_adjusted),
       refundRate: monthly ? null : readNumber(row.refund_rate),
+      activeUsers: monthly ? null : readNumber(row.DAU),
+      playtime: monthly ? null : readNumber(row.avg_playtime),
       peers: monthly
         ? { ...emptyValues }
         : {

@@ -58,7 +58,8 @@ try {
   await panel.getByText("110 成功 · 0 失败").waitFor();
   await page.getByRole("button", { name: "恢复请求", exact: true }).click();
   await panel.getByRole("button", { name: "昨天", exact: true }).click();
-  assert.equal(await panel.getByText("110 成功 · 0 失败").count(), 0, "new dates cannot display previous totals");
+  assert.equal(await panel.getByText("110 成功 · 0 失败").count(), 1, "new dates retain the previous result until ready");
+  await panel.getByText(/暂显示.*实时收益/).waitFor();
   await page.waitForFunction(() => globalThis.__realtimeRequests.length === 6);
   await panel.getByRole("button", { name: "今天", exact: true }).click();
   await panel.getByText("85 成功 · 25 失败").waitFor();

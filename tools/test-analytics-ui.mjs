@@ -41,7 +41,9 @@ try {
   const before = await page.evaluate(() => __analyticsTest.requests.length);
   await tracking.getByRole("button", { name: "近 7 天", exact: true }).click();
   await tracking.getByRole("button", { name: "近 30 天", exact: true }).click();
-  await tracking.getByRole("table").waitFor();
+  assert.equal(await tracking.getByRole("table").count(), 1, "cold filters keep the previous result visible");
+  await tracking.getByText(/暂显示/).waitFor();
+  await tracking.getByText(/共 3 个资源 · 30 天/).waitFor();
   assert.equal(await page.evaluate(() => __analyticsTest.requests.length), before + 1);
   await tracking.getByRole("button", { name: "近 14 天", exact: true }).click();
   assert.equal(await tracking.getByRole("table").count(), 1);
@@ -49,7 +51,7 @@ try {
   await tracking.getByRole("button", { name: "选择资源", exact: true }).click();
   await tracking.getByRole("searchbox", { name: "搜索对比资源", exact: true }).fill("资源 18");
   await tracking.getByRole("checkbox").check();
-  await tracking.getByRole("table").waitFor();
+  await tracking.getByText(/共 4 个资源 · 14 天/).waitFor();
   await tracking.getByRole("button", { name: "收起资源", exact: true }).click();
   assert.equal(await tracking.getByRole("table").getByRole("row").count(), 5);
   const legend = tracking.getByRole("group", { name: "图表系列，点击切换显示" });
@@ -97,6 +99,18 @@ try {
   await page.getByRole("tab", { name: "数据汇总", exact: true }).click();
   const summary = page.getByRole("tabpanel", { name: "数据汇总", exact: true });
   await summary.getByRole("searchbox", { name: "搜索月度资源", exact: true }).waitFor();
+  await page.evaluate(() => {
+    __analyticsTest.controls.delay = 600;
+  });
+  await summary.getByRole("button", { name: "近 3 个月", exact: true }).click();
+  await summary.getByText(/暂显示/).waitFor();
+  assert.equal(
+    await summary.getByRole("combobox", { name: "月份", exact: true }).locator("option").count(),
+    1,
+    "old monthly data keeps its original scope",
+  );
+  await summary.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
+  assert.equal(await summary.getByRole("combobox", { name: "月份", exact: true }).locator("option").count(), 3);
   assert.equal(await summary.getByRole("group", { name: "图表系列，点击切换显示" }).getByRole("button").count(), 1);
   await summary.getByRole("button", { name: "第 2 页", exact: true }).click();
   await summary.getByRole("searchbox", { name: "搜索月度资源", exact: true }).fill("资源 18");
@@ -113,18 +127,27 @@ try {
   const input = module.getByRole("combobox", { name: "搜索模组", exact: true });
   await input.fill("资源 18");
   await input.press("Enter");
-  await module.getByRole("table").waitFor();
+  await module.getByText(/暂显示/).waitFor();
+  assert.doesNotMatch(
+    await module.getByRole("table").innerText(),
+    /测试资源 18/,
+    "new selector cannot relabel an old resource's values",
+  );
+  await module.getByRole("columnheader", { name: /测试资源 18/ }).waitFor();
   assert.match(await module.getByRole("table").innerText(), /测试资源 18/);
   await module.getByRole("button", { name: /^模组 测试资源/ }).click();
   await input.press("Escape");
   assert.equal(await module.getByRole("dialog").count(), 0);
+  await module.getByRole("button", { name: "近 7 天", exact: true }).click();
+  await module.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
   await page.screenshot({ path: `${output}/module.png`, fullPage: true });
 
   await page.getByRole("tab", { name: "周期收益", exact: true }).click();
   const period = page.getByRole("tabpanel", { name: "周期收益", exact: true });
   await period.getByRole("region", { name: "周期收益趋势", exact: true }).waitFor();
   await period.getByRole("button", { name: "上一周期", exact: true }).click();
-  await period.getByRole("region", { name: "周期收益趋势", exact: true }).waitFor();
+  await period.getByText(/暂显示/).waitFor();
+  await period.getByText("已更新 · 筛选自动生效", { exact: true }).last().waitFor();
   const cycle = await period.getByRole("combobox", { name: "收益周期", exact: true }).inputValue();
   const peCalls = await page.evaluate(() => __analyticsTest.requests.length);
   await period.getByRole("button", { name: /^统计资源 全部/ }).click();
@@ -149,12 +172,50 @@ try {
   const realtime = page.getByRole("tabpanel", { name: "实时收益", exact: true });
   await realtime.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
   await realtime.getByRole("button", { name: "昨天", exact: true }).click();
+  await realtime.getByText(/暂显示.*实时收益/).waitFor();
+  assert.equal(await realtime.getByRole("table").count(), 2, "changing dates does not remove realtime tables");
   await realtime.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
   await realtime.getByRole("button", { name: "今天", exact: true }).click();
   assert.equal(
     await realtime.getByRole("table").count(),
     2,
     "returning to today's exact scope immediately reuses its snapshot",
+  );
+  await realtime.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "离开分析页", exact: true }).click();
+  await page.getByRole("button", { name: "返回分析页", exact: true }).click();
+  assert.equal(await page.getByRole("tab", { name: "实时收益", exact: true }).getAttribute("aria-selected"), "true");
+  assert.equal(
+    await realtime.getByRole("table").count(),
+    2,
+    "reentering analytics immediately restores the realtime snapshot",
+  );
+  await realtime.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
+  await page.getByRole("tab", { name: "数据汇总", exact: true }).click();
+  assert.equal(
+    await summary.getByRole("button", { name: "近 3 个月", exact: true }).getAttribute("aria-pressed"),
+    "true",
+  );
+  assert.equal(
+    await summary.getByRole("button", { name: "资源 Top 10", exact: true }).getAttribute("aria-pressed"),
+    "true",
+  );
+  await page.getByRole("tab", { name: "模组分析", exact: true }).click();
+  assert.equal(await module.getByRole("button", { name: /^模组 测试资源 18/ }).count(), 1);
+  assert.equal(await module.getByRole("button", { name: "近 7 天", exact: true }).getAttribute("aria-pressed"), "true");
+  await page.getByRole("tab", { name: "周期收益", exact: true }).click();
+  await period.getByRole("combobox", { name: "收益周期", exact: true }).waitFor();
+  assert.equal(await period.getByRole("combobox", { name: "收益周期", exact: true }).inputValue(), cycle);
+  assert.equal(await period.getByRole("button", { name: /^统计资源 测试资源 18/ }).count(), 1);
+
+  await page.getByRole("tab", { name: "数据汇总", exact: true }).click();
+  await page.reload();
+  await summary.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
+  assert.equal(await page.getByRole("tab", { name: "数据汇总", exact: true }).getAttribute("aria-selected"), "true");
+  assert.equal(
+    await page.evaluate(() => __analyticsTest.requests.some((entry) => entry.method === "works.list")),
+    false,
+    "monthly-only entry skips the unrelated resource list",
   );
 
   for (const theme of ["dark", "light", "fluent"]) {
@@ -172,6 +233,25 @@ try {
       await page.screenshot({ path: `${output}/${theme}-${name}.png`, fullPage: true });
     }
   }
+  // A failed new scope keeps the old chart explicitly labelled and its controls remain usable
+  await page.getByRole("tab", { name: "模组分析", exact: true }).click();
+  await module.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "模拟请求失败", exact: true }).click();
+  const previousDates = await module
+    .getByRole("combobox", { name: "查看数值", exact: true })
+    .locator("option")
+    .allTextContents();
+  await module.getByRole("button", { name: "近 30 天", exact: true }).click();
+  await module.getByText(/数据加载失败.*已保留/).waitFor();
+  assert.deepEqual(
+    await module.getByRole("combobox", { name: "查看数值", exact: true }).locator("option").allTextContents(),
+    previousDates,
+  );
+  assert.equal(await module.getByRole("button", { name: "钻石收益", exact: true }).count(), 1);
+  await page.getByRole("button", { name: "恢复请求", exact: true }).click();
+  await module.getByRole("button", { name: "重试", exact: true }).click();
+  await module.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
+  assert.equal(await module.getByRole("combobox", { name: "查看数值", exact: true }).locator("option").count(), 30);
   await page.getByRole("tab", { name: "数据追踪", exact: true }).click();
   await page.evaluate(() => {
     __analyticsTest.controls.delay = 900;
@@ -179,13 +259,140 @@ try {
   });
   assert.equal(await tracking.getByRole("table").count(), 0, "explicit cache clearing discards visible snapshots");
   await tracking.getByRole("table").waitFor();
+  // Restore explicit selections and presentation choices after navigation and a fresh document
+  await tracking.getByRole("button", { name: "近 7 天", exact: true }).click();
+  await tracking.getByText(/共 4 个资源 · 7 天/).waitFor();
+  await tracking.getByRole("button", { name: "钻石收益", exact: true }).click();
+  await tracking.getByRole("button", { name: "柱状", exact: true }).click();
+  const selection = await tracking.getByRole("group", { name: "已选对比资源" }).innerText();
+  await page.getByRole("button", { name: "离开分析页", exact: true }).click();
+  await page.getByRole("button", { name: "返回分析页", exact: true }).click();
+  await tracking.getByRole("table").waitFor();
+  assert.equal(await tracking.getByRole("group", { name: "已选对比资源" }).innerText(), selection);
+  await page.reload();
+  await tracking.getByRole("table").waitFor();
+  assert.equal(await tracking.getByRole("group", { name: "已选对比资源" }).innerText(), selection);
+  for (const name of ["近 7 天", "钻石收益", "柱状"]) {
+    assert.equal(await tracking.getByRole("button", { name, exact: true }).getAttribute("aria-pressed"), "true");
+  }
+  const restoredRequest = await page.evaluate(() =>
+    __analyticsTest.requests.find((r) => r.method === "analytics.daily"),
+  );
+  assert.deepEqual(restoredRequest.params.resourceIds, ["1", "2", "3", "18"], "first request uses saved resources");
+  await tracking.getByRole("button", { name: "清空", exact: true }).click();
+  await page.reload();
+  await tracking.getByText("尚未选择资源，点击“选择资源”添加对比作品", { exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => __analyticsTest.requests.some((r) => r.method === "analytics.daily")), false);
+  await tracking.getByRole("button", { name: "Top 10", exact: true }).click();
+  await tracking.getByText(/按钻石收益区间合计降序展示 10/).waitFor();
+  await tracking.getByRole("button", { name: "折线", exact: true }).click();
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await page.evaluate(() => __analyticsTest.theme("dark"));
+  const comparison = tracking.getByRole("region", { name: "资源数据趋势", exact: true });
+  const readout = comparison.getByRole("group", { name: "图表系列，点击切换显示" });
+  assert.equal(await comparison.getByRole("tooltip").count(), 0, "readout never covers the chart");
+  assert.equal(await readout.getByRole("button").count(), 10);
+  assert.equal(await readout.evaluate((element) => element.scrollHeight <= element.clientHeight), true);
+  const colors = await comparison
+    .locator("[data-series-id] path")
+    .evaluateAll((paths) => paths.map((path) => getComputedStyle(path).stroke));
+  assert.equal(new Set(colors).size, 10, "all ten plotted resources have distinct colors");
+  await readout.getByRole("button").first().hover();
+  assert.equal(
+    await comparison.locator('[data-series-id][opacity="0.18"]').count(),
+    9,
+    "resource hover highlights its curve",
+  );
+  await readout.getByRole("button").first().click();
+  assert.equal(await comparison.locator("[data-series-id]").count(), 9);
+  await comparison.getByRole("button", { name: "显示全部", exact: true }).click();
+  assert.equal(await comparison.locator("[data-series-id]").count(), 10);
+  const lastDate = await datePicker.inputValue();
+  await comparison.getByRole("button", { name: "上一个日期", exact: true }).click();
+  assert.notEqual(await datePicker.inputValue(), lastDate);
+  await comparison.getByRole("button", { name: "下一个日期", exact: true }).click();
+  assert.equal(await datePicker.inputValue(), lastDate);
+  assert.equal(await comparison.getByRole("button", { name: "下一个日期", exact: true }).isDisabled(), true);
+  const plotBox = await chart.boundingBox();
+  await page.mouse.move(plotBox.x + 66, plotBox.y + 80);
+  const firstDate = await datePicker.locator("option").first().getAttribute("value");
+  assert.equal(await datePicker.inputValue(), firstDate, "hover previews the nearest date");
+  await page.mouse.click(plotBox.x + 66, plotBox.y + 80);
+  await comparison.getByRole("button", { name: "显示全部", exact: true }).hover();
+  assert.equal(await datePicker.inputValue(), firstDate, "click pins the date after the pointer leaves");
+  await chart.focus();
+  await page.keyboard.press("Escape");
+  assert.equal(await datePicker.inputValue(), lastDate);
+  await comparison.screenshot({ path: `${output}/tracking-comparison.png` });
+  await page.setViewportSize({ width: 760, height: 1000 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  assert.equal(await readout.evaluate((element) => element.scrollHeight <= element.clientHeight), true);
+  await comparison.screenshot({ path: `${output}/tracking-comparison-narrow.png` });
+  await page.reload();
+  await tracking.getByText(/按钻石收益区间合计降序展示 10/).waitFor();
   await tracking.getByRole("button", { name: "近 30 天", exact: true }).click();
   await page.getByRole("button", { name: "切换测试账号", exact: true }).click();
   await page.getByText(/当前账号暂无可分析的手游资源/).waitFor();
   assert.equal(await page.getByRole("table").count(), 0, "late requests cannot expose another account's results");
+  await page.getByRole("button", { name: "切换测试账号", exact: true }).click();
+  await tracking.getByText(/按钻石收益区间合计降序展示 10/).waitFor();
+  assert.equal(
+    await tracking.getByRole("button", { name: "近 30 天", exact: true }).getAttribute("aria-pressed"),
+    "true",
+  );
+  // Ignore foreign-account preferences and unavailable resource IDs without selecting default resources
+  await page.evaluate(() => {
+    localStorage.setItem("glaze:analytics:tracking:v1:analytics-b", JSON.stringify({ resourceIds: ["17"] }));
+    localStorage.setItem("glaze:analytics:tracking:v1:analytics-a", JSON.stringify({ resourceIds: ["18", "missing"] }));
+  });
+  await page.reload();
+  await tracking.getByRole("table").waitFor();
+  assert.equal(await tracking.getByRole("group", { name: "已选对比资源" }).getByRole("button").count(), 1);
+  assert.deepEqual(
+    await page.evaluate(() => __analyticsTest.requests.find((r) => r.method === "analytics.daily").params.resourceIds),
+    ["18"],
+  );
+  for (const invalid of [
+    "{broken",
+    JSON.stringify({ resourceIds: 42, days: 999, metric: "invalid", chartKind: "invalid" }),
+  ]) {
+    await page.evaluate((value) => localStorage.setItem("glaze:analytics:tracking:v1:analytics-a", value), invalid);
+    await page.reload();
+    await tracking.getByRole("table").waitFor();
+    assert.equal(await tracking.getByRole("group", { name: "已选对比资源" }).getByRole("button").count(), 3);
+    for (const name of ["近 14 天", "新增购买", "折线"]) {
+      assert.equal(await tracking.getByRole("button", { name, exact: true }).getAttribute("aria-pressed"), "true");
+    }
+  }
+  // Follower counts need extended statistics; other metrics reuse the ordinary daily response
+  const metricCalls = await page.evaluate(() => __analyticsTest.requests.length);
+  for (const name of ["新增购买", "销售总量", "钻石收益", "绿宝石收益", "日活", "退款率", "人均游玩时长", "组件涨粉"]) {
+    await tracking.getByRole("button", { name, exact: true }).click();
+    await tracking.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
+    if (["日活", "退款率", "人均游玩时长"].includes(name)) {
+      assert.equal(await tracking.getByRole("columnheader", { name: "已返回数据合计", exact: true }).count(), 0);
+      assert.equal(await tracking.getByRole("columnheader", { name: "有数据日均", exact: true }).count(), 1);
+    }
+    if (name === "退款率") {
+      assert.match(await tracking.getByRole("group", { name: "图表系列，点击切换显示" }).innerText(), /0\.3%/);
+      await tracking
+        .getByRole("region", { name: "资源数据趋势", exact: true })
+        .screenshot({ path: `${output}/tracking-refund-rate.png` });
+    }
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  }
+  assert.equal(await page.evaluate(() => __analyticsTest.requests.length), metricCalls + 1);
+  assert.equal(await page.evaluate(() => __analyticsTest.requests.at(-1).params.includePeers), true);
+  await tracking.getByRole("button", { name: "退款率", exact: true }).click();
+  await page.reload();
+  await tracking.getByRole("table").waitFor();
+  assert.equal(
+    await tracking.getByRole("button", { name: "退款率", exact: true }).getAttribute("aria-pressed"),
+    "true",
+  );
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: automatic filters, request coalescing, cache reuse, refresh recovery, preserved chart state, searchable resources, monthly paging, PE/PC isolation, cache clearing, account isolation and five tabs in three themes",
+    "PASS: automatic filters, request coalescing, cache reuse, refresh recovery, preserved chart state, searchable resources, monthly paging, PE/PC isolation, cache clearing, account isolation, persistent comparison preferences and five tabs in three themes",
   );
 } finally {
   await browser?.close();

@@ -1,5 +1,4 @@
 import { Panel, SegmentedControl } from "@glaze/plugin-sdk";
-import { useState } from "react";
 import {
   aggregate,
   type DayRange,
@@ -11,7 +10,8 @@ import {
   trackingSeries,
 } from "../data";
 import { QuerySkeleton, QueryState, useRefresh } from "../QueryState";
-import { useAnalyticsQuery } from "../useAnalyticsQuery";
+import { useAnalysisPreference } from "../useAnalysisPreference";
+import { useAnalysisSnapshot, useAnalyticsQuery } from "../useAnalyticsQuery";
 import { DataTable } from "../widgets/DataTable";
 import { SearchableSelect } from "../widgets/SearchableSelect";
 import { StatStrip } from "../widgets/StatStrip";
@@ -38,17 +38,19 @@ function leadText(value: number | null, peer: number | null): string {
 
 /** One real resource compared with the platform's matching daily peer means */
 export function ModuleView({ resources, refreshVersion }: { resources: Resource[]; refreshVersion: number }) {
-  const [resourceId, setResourceId] = useState(resources[0]?.id ?? "");
-  const [days, setDays] = useState<DayRange>(14);
-  const [metric, setMetric] = useState<Metric>("purchases");
-  const resource = resources.find((item) => item.id === resourceId) ?? resources[0];
-  const dates = daysInRange(days);
-  const result = useAnalyticsQuery("analytics.daily", {
+  const [resourceId, setResourceId] = useAnalysisPreference("module.resource", resources[0]?.id ?? "");
+  const [days, setDays] = useAnalysisPreference<DayRange>("module.days", 14, [7, 14, 30]);
+  const [metric, setMetric] = useAnalysisPreference<Metric>("module.metric", "purchases", moduleMetrics);
+  const requestedResource = resources.find((item) => item.id === resourceId) ?? resources[0];
+  const requestedDates = daysInRange(days);
+  const query = useAnalyticsQuery("analytics.daily", {
     includePeers: true,
-    resourceIds: resource ? [resource.id] : [],
-    startDate: dates[0] as string,
-    endDate: dates.at(-1) as string,
+    resourceIds: requestedResource ? [requestedResource.id] : [],
+    startDate: requestedDates[0] as string,
+    endDate: requestedDates.at(-1) as string,
   });
+  const result = useAnalysisSnapshot(query, { resource: requestedResource, dates: requestedDates });
+  const { resource, dates } = result.scope;
   useRefresh(result.reload, refreshVersion);
   const records = result.data ?? [];
   const peers = records.map((row) => ({ ...row, ...row.peers }));
@@ -71,19 +73,19 @@ export function ModuleView({ resources, refreshVersion }: { resources: Resource[
         <div className={styles.filterRow}>
           <SearchableSelect
             label="模组"
-            value={resource?.id ?? ""}
+            value={requestedResource?.id ?? ""}
             options={resources.map((item) => ({ value: item.id, label: item.name }))}
             onChange={setResourceId}
           />
-          <span className={styles.muted}>{resource?.category}</span>
+          <span className={styles.muted}>{requestedResource?.category}</span>
         </div>
         <div className={styles.filterRow}>
           <span className={styles.filterLabel}>时间</span>
           <SegmentedControl label="模组分析日期范围" options={dayRangeOptions} value={days} onChange={setDays} />
-          <span className={styles.dateRange}>{rangeText(dates)}</span>
+          <span className={styles.dateRange}>{rangeText(requestedDates)}</span>
         </div>
       </Panel>
-      <QueryState query={result} />
+      <QueryState query={result} scopeLabel={`${resource?.name} · ${rangeText(dates)}`} />
       <QuerySkeleton loading={result.loading && result.data === null} />
       {result.data !== null && (
         <>
@@ -127,7 +129,7 @@ export function ModuleView({ resources, refreshVersion }: { resources: Resource[
           <Panel
             className={styles.tablePanel}
             title="指标对比"
-            actions={<span className={styles.muted}>近 {days} 天 · 平台已返回日期的日均值</span>}
+            actions={<span className={styles.muted}>{rangeText(dates)} · 平台已返回日期的日均值</span>}
           >
             <DataTable
               caption="当前模组与平台同类均值的指标对比"

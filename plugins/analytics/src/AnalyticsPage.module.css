@@ -15,6 +15,11 @@
 }
 
 .tabs {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--g-surface-app);
+  padding-top: 8px;
   display: flex;
   gap: 8px;
   border-bottom: var(--g-border-width) solid var(--g-border-subtle);
@@ -43,6 +48,7 @@
 }
 
 .workspace {
+  scroll-margin-top: 64px;
   min-width: 0;
   display: flex;
   flex-direction: column;

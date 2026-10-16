@@ -12,7 +12,8 @@ import {
   trackingSeries,
 } from "../data";
 import { QuerySkeleton, QueryState, useRefresh } from "../QueryState";
-import { useAnalyticsQuery } from "../useAnalyticsQuery";
+import { useAnalysisPreference } from "../useAnalysisPreference";
+import { useAnalysisSnapshot, useAnalyticsQuery } from "../useAnalyticsQuery";
 import { InlineSelect } from "../widgets/InlineSelect";
 import { ResourceCard, ResourceGrid } from "../widgets/ResourceCard";
 import { StatStrip } from "../widgets/StatStrip";
@@ -33,17 +34,26 @@ export function SummaryView({ refreshVersion }: { refreshVersion: number }) {
   const today = todayKey();
   const currentMonth = today.slice(0, 7);
   const endDate = shiftDay(today, -1);
-  const [months, setMonths] = useState<MonthRange>(1);
-  const [metric, setMetric] = useState<Metric>("diamonds");
-  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+  const [months, setMonths] = useAnalysisPreference<MonthRange>("summary.months", 1, [1, 3, 6, 12]);
+  const [metric, setMetric] = useAnalysisPreference<Metric>(
+    "summary.metric",
+    "diamonds",
+    summaryMetrics.map((item) => item.id),
+  );
+  const [selectedMonth, setSelectedMonth] = useAnalysisPreference("summary.month", currentMonth);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
-  const [chartScope, setChartScope] = useState<"total" | "resources">("total");
-  const monthKeys = monthsInRange(months);
-  const activeMonth = monthKeys.includes(selectedMonth) ? selectedMonth : currentMonth;
-  const startDate = `${monthKeys[0]}-01`;
+  const [chartScope, setChartScope] = useAnalysisPreference<"total" | "resources">("summary.scope", "total", [
+    "total",
+    "resources",
+  ]);
+  const requestedMonths = monthsInRange(months);
+  const startDate = `${requestedMonths[0]}-01`;
   const hasCompletedDays = startDate <= endDate;
-  const result = useAnalyticsQuery("analytics.monthly", { startDate, endDate }, hasCompletedDays);
+  const query = useAnalyticsQuery("analytics.monthly", { startDate, endDate }, hasCompletedDays);
+  const result = useAnalysisSnapshot(query, { monthKeys: requestedMonths, endDate }, hasCompletedDays);
+  const { monthKeys } = result.scope;
+  const activeMonth = monthKeys.includes(selectedMonth) ? selectedMonth : currentMonth;
   useRefresh(result.reload, refreshVersion);
   const records = result.data ?? [];
   const resources = useMemo(
@@ -74,11 +84,11 @@ export function SummaryView({ refreshVersion }: { refreshVersion: number }) {
           <span className={styles.filterLabel}>时间</span>
           <SegmentedControl label="汇总月份范围" options={monthRangeOptions} value={months} onChange={setMonths} />
           <span className={styles.dateRange}>
-            {months === 1 ? currentMonth : rangeText(monthKeys)} · 截至 {endDate}
+            {months === 1 ? currentMonth : rangeText(requestedMonths)} · 截至 {endDate}
           </span>
         </div>
       </Panel>
-      <QueryState query={result} />
+      <QueryState query={result} scopeLabel={`${rangeText(monthKeys)} · 截至 ${result.scope.endDate}`} />
       {!hasCompletedDays && <p className={styles.muted}>当月暂无已完成日期的数据，请于明日查看或切换时间范围</p>}
       <QuerySkeleton loading={result.loading && result.data === null} />
       {result.data !== null && (
@@ -87,7 +97,7 @@ export function SummaryView({ refreshVersion }: { refreshVersion: number }) {
             items={summaryMetrics.map((item) => ({
               label: item.label,
               value: formatValue(aggregate(records, item.id)),
-              note: `${months === 1 ? "当月" : `近 ${months} 个月`}已返回数据 · ${item.unit}`,
+              note: `${rangeText(monthKeys)} 已返回数据 · ${item.unit}`,
             }))}
           />
           <Panel

@@ -66,7 +66,20 @@ function record(resourceId: string, date: string): AnalyticsRecord {
     purchases: 12,
     favorites: 0,
     rating: 4.2,
-    peers: { downloads: null, diamonds: 1000, emeralds: null, purchases: 10, favorites: 0, rating: null },
+    activeUsers: Number(resourceId) * 10,
+    refundRate: Number(resourceId) / 1000,
+    playtime: 12.5 + Number(resourceId),
+    peers: {
+      downloads: null,
+      diamonds: 1000,
+      emeralds: null,
+      purchases: 10,
+      favorites: 0,
+      rating: null,
+      activeUsers: null,
+      refundRate: null,
+      playtime: null,
+    },
   };
 }
 
@@ -84,7 +97,7 @@ const rpc: GlazeBridge["rpc"] = async (method, params) => {
   let value: unknown;
   if (method === "works.list") value = callAccount === account.id ? (params as { platform?: string } | undefined)?.platform === "pc" ? works.slice(0, 1).map(work => ({ ...work, itemId: "900", name: "PC 独立资源" })) : works : [];
   else if (method === "analytics.daily" || method === "analytics.periodIncome") {
-    const query = params as { resourceIds: string[]; startDate: string; endDate: string; platform?: string; settlementMonth?: string; allResources?: boolean };
+    const query = params as { resourceIds: string[]; startDate: string; endDate: string; platform?: string; settlementMonth?: string; allResources?: boolean; includePeers?: boolean };
     value = periodPreview
       ? Array.from(
           { length: Math.round((Date.parse(query.endDate) - Date.parse(query.startDate)) / 86_400_000) + 1 },
@@ -100,6 +113,9 @@ const rpc: GlazeBridge["rpc"] = async (method, params) => {
           },
         ).flat()
       : query.resourceIds.map((id) => record(id, query.startDate));
+    if (method === "analytics.daily" && !query.includePeers) {
+      value = (value as AnalyticsRecord[]).map((item) => ({ ...item, favorites: null }));
+    }
     if (method === "analytics.periodIncome") {
       const records = value as AnalyticsRecord[];
       const month = query.settlementMonth ?? query.endDate.slice(0, 7);

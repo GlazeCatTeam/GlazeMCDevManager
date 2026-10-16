@@ -1,7 +1,17 @@
 import type { AccountParams } from "./developer";
 import type { IncomeEstimate, IncomePlatform } from "./income";
 
-export type AnalyticsMetric = "downloads" | "purchases" | "diamonds" | "emeralds" | "favorites" | "rating";
+export type AnalyticsMetric =
+  | "downloads"
+  | "purchases"
+  | "diamonds"
+  | "emeralds"
+  | "favorites"
+  | "rating"
+  | "activeUsers"
+  | "refundRate"
+  | "playtime";
+/** Daily refundRate is a 0-1 ratio; playtime is the platform's per-player average in minutes */
 export type AnalyticsValues = Record<AnalyticsMetric, number | null>;
 
 export interface AnalyticsRecord extends AnalyticsValues {
@@ -9,8 +19,6 @@ export interface AnalyticsRecord extends AnalyticsValues {
   name: string;
   date: string;
   peers: AnalyticsValues;
-  /** Platform daily refund rate; absent values use the homepage estimate's zero-refund fallback */
-  refundRate?: number | null;
 }
 
 export interface AnalyticsPeriodIncome {
@@ -45,7 +53,7 @@ export interface AnalyticsDailyParams extends AnalyticsRangeParams {
   /** Settlement platform; PC analytics maps to the upstream comp category */
   platform?: IncomePlatform;
   resourceIds: string[];
-  /** Only module comparison needs the platform's extra peer statistics */
+  /** Enable platform peer statistics and PE resource follower counts */
   includePeers?: boolean;
 }
 

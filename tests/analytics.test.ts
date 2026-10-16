@@ -180,6 +180,65 @@ test("daily rows retain real zeros, absent peer values and large string identifi
   assert.equal(readAnalyticsRecords({ data: [{ ...row, dateid: "20260230" }] }).ok, false);
 });
 
+test("daily engagement metrics preserve platform units, missing values and genuine zeros", () => {
+  const parsed = readAnalyticsRecords({
+    data: [
+      { ...row, DAU: "120", avg_playtime: "12.5", refund_rate: "0.025", focus_cnt: "6" },
+      { ...row, dateid: "20261002", DAU: 0, avg_playtime: 0, refund_rate: 0, focus_cnt: 0 },
+      { ...row, dateid: "20261003" },
+    ],
+  });
+  assert.ok(parsed.ok);
+  assert.deepEqual(
+    parsed.value.map((item) => [item.activeUsers, item.playtime, item.refundRate]),
+    [
+      [120, 12.5, 0.025],
+      [0, 0, 0],
+      [null, null, null],
+    ],
+  );
+  assert.equal(parsed.value[0]?.favorites, 6);
+  assert.equal(parsed.value[0]?.peers.activeUsers, null);
+  const monthly = readAnalyticsRecords(
+    [{ iid: id, monthid: "202610", DAU: 120, avg_playtime: 12.5, refund_rate: 0.025 }],
+    true,
+  );
+  assert.ok(monthly.ok);
+  assert.equal(monthly.value[0]?.activeUsers, null);
+  assert.equal(monthly.value[0]?.playtime, null);
+  assert.equal(monthly.value[0]?.refundRate, null);
+});
+
+test("engagement summaries average daily measurements and percentage formatting converts ratios once", () => {
+  const parsed = readAnalyticsRecords({
+    data: [
+      { ...row, DAU: 100, avg_playtime: 10, refund_rate: 0.1, focus_cnt: 3 },
+      { ...row, dateid: "20261002", DAU: 200, avg_playtime: 30, refund_rate: 0.3, focus_cnt: 2 },
+    ],
+  });
+  assert.ok(parsed.ok);
+  assert.equal(aggregate(parsed.value, "activeUsers"), 150);
+  assert.equal(aggregate(parsed.value, "playtime"), 20);
+  assert.equal(aggregate(parsed.value, "refundRate"), 0.2);
+  assert.equal(aggregate(parsed.value, "favorites"), 5);
+  assert.equal(formatValue(0.025, "refundRate"), "2.5%");
+  assert.equal(formatValue(0, "refundRate"), "0%");
+  assert.equal(formatValue(null, "refundRate"), "—");
+  const first = parsed.value[0];
+  assert.ok(first);
+  assert.equal(aggregate([{ ...first, refundRate: 2 }], "refundRate"), null);
+  assert.equal(aggregate([{ ...first, playtime: null }], "playtime"), null);
+  const resources = [
+    { id, name: "甲", category: "pe", color: "red" },
+    { id: "2", name: "乙", category: "pe", color: "blue" },
+  ];
+  const records = [...parsed.value, { ...first, resourceId: "2", activeUsers: 180 }];
+  assert.deepEqual(
+    topResources(resources, records, ["2026-10-01", "2026-10-02"], "activeUsers").map((item) => item.id),
+    ["2", id],
+  );
+});
+
 test("daily batches send authenticated read queries and keep only requested resources/dates", async () => {
   const calls: URL[] = [];
   globalThis.fetch = async (input, init) => {
@@ -832,7 +891,7 @@ test("nonempty mismatched responses report the cause rather than silently drawin
   assert.deepEqual(await getAnalyticsDaily(session, { ...range, resourceIds: [id] }), { ok: true, value: [] });
 });
 
-test("peer statistics are requested only by module comparison and malformed flags never reach the network", async () => {
+test("extended statistics are requested on demand and malformed flags never reach the network", async () => {
   let calls = 0;
   globalThis.fetch = async (input) => {
     calls++;

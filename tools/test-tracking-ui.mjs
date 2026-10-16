@@ -34,12 +34,12 @@ try {
   await panel.getByRole("table").waitFor();
   await panel.getByRole("button", { name: "清空", exact: true }).click();
   await top10.click();
-  await panel.getByText(/按购买次数区间合计降序展示 10/).waitFor();
+  await panel.getByText(/按新增购买区间合计降序展示 10/).waitFor();
   assert.equal(await panel.getByRole("group", { name: "已选对比资源" }).getByRole("button").count(), 10);
   assert.equal(await panel.getByRole("table").getByRole("row").count(), 11);
   const calls = await page.locator("#calls").textContent();
-  await panel.getByRole("button", { name: "组件下载", exact: true }).click();
-  await panel.getByText(/按组件下载区间合计降序展示 10/).waitFor();
+  await panel.getByRole("button", { name: "销售总量", exact: true }).click();
+  await panel.getByText(/按销售总量区间合计降序展示 10/).waitFor();
   assert.equal(await page.locator("#calls").textContent(), calls, "metric changes reuse all-resource data");
   await panel.getByRole("button", { name: "近 7 天", exact: true }).click();
   await top10.click();
@@ -49,14 +49,18 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.screenshot({ path: `${output}/top10-narrow.png`, fullPage: true });
   await panel.getByRole("group", { name: "已选对比资源" }).getByRole("button").first().click();
-  await panel.getByRole("button", { name: "查询数据", exact: true }).click();
   await panel.getByText(/共 9 个资源 · 7 天/).waitFor();
   assert.equal(await panel.getByText(/区间合计降序展示/).count(), 0, "manual selection exits top ten mode");
   await page.getByRole("button", { name: "模拟请求失败", exact: true }).click();
   await panel.getByRole("button", { name: "近 30 天", exact: true }).click();
   await top10.click();
   await panel.getByText(/数据加载失败/).waitFor();
-  assert.equal(await panel.getByRole("table").count(), 0, "failed ranking cannot show an old result");
+  assert.equal(
+    await panel.getByRole("table").count(),
+    1,
+    "failed ranking keeps the explicitly labelled previous scope",
+  );
+  await panel.getByText(/数据加载失败.*已保留/).waitFor();
   await page.getByRole("button", { name: "恢复请求", exact: true }).click();
   await panel.getByRole("button", { name: "重试", exact: true }).click();
   await panel.getByText(/共 10 个资源 · 30 天/).waitFor();

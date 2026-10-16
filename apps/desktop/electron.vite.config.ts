@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "electron-vite";
@@ -18,6 +18,22 @@ export default defineConfig({
       __GLAZE_PROJECT_NOTICE__: JSON.stringify(projectNotice),
     },
     plugins: [
+      {
+        name: "watch-main-workspace-source",
+        /** Watch real workspace paths because linked package changes can be skipped under node_modules */
+        buildStart() {
+          if (!this.meta.watchMode) return;
+          for (const name of ["contracts", "core", "netease", "storage", "mcp"]) {
+            const directory = resolve(import.meta.dirname, "../../packages", name, "src");
+            this.addWatchFile(directory);
+            for (const entry of readdirSync(directory, { recursive: true, withFileTypes: true })) {
+              if (entry.isDirectory() || entry.name.endsWith(".ts")) {
+                this.addWatchFile(resolve(entry.parentPath, entry.name));
+              }
+            }
+          }
+        },
+      },
       {
         name: "project-license-files",
         /** Preserve readable license files beside the bundled main process for redistribution */

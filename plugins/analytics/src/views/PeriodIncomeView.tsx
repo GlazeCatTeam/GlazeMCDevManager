@@ -8,7 +8,7 @@ import {
   SegmentedControl,
   TextButton,
 } from "@glaze/plugin-sdk";
-import { useMemo, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 import { formatValue, type Resource, todayKey, workResources } from "../data";
 import {
   type IncomeMetric,
@@ -19,7 +19,8 @@ import {
   summarizePeriodIncome,
 } from "../period-income";
 import { QuerySkeleton, QueryState, useRefresh } from "../QueryState";
-import { useAnalyticsQuery } from "../useAnalyticsQuery";
+import { useAnalysisPreference } from "../useAnalysisPreference";
+import { AnalysisActivity, useAnalysisSnapshot, useAnalyticsQuery } from "../useAnalyticsQuery";
 import { DataTable, TableNote } from "../widgets/DataTable";
 import { InlineSelect } from "../widgets/InlineSelect";
 import { MinecraftCurrencyIcon } from "../widgets/MinecraftCurrencyIcon";
@@ -35,8 +36,9 @@ const metricOptions = incomeMetrics.map(({ id, label }) => ({ value: id, label }
 
 /** Keep each visited platform's filters mounted while preserving separate resource and query scopes */
 export function PeriodIncomeView({ refreshVersion }: { refreshVersion: number }) {
-  const [platform, setPlatform] = useState<IncomePlatform>("pe");
-  const [visited, setVisited] = useState<IncomePlatform[]>(["pe"]);
+  const visible = useContext(AnalysisActivity);
+  const [platform, setPlatform] = useAnalysisPreference<IncomePlatform>("period.platform", "pe", ["pe", "pc"]);
+  const [visited, setVisited] = useState<IncomePlatform[]>([platform]);
   const [versions, setVersions] = useState({ pe: refreshVersion, pc: refreshVersion });
   const [previous, setPrevious] = useState(refreshVersion);
   if (previous !== refreshVersion) {
@@ -62,7 +64,9 @@ export function PeriodIncomeView({ refreshVersion }: { refreshVersion: number })
       </Panel>
       {visited.map((item) => (
         <div key={item} hidden={platform !== item} className={styles.platformContent}>
-          <PlatformPeriodIncome platform={item} refreshVersion={versions[item]} />
+          <AnalysisActivity.Provider value={visible && platform === item}>
+            <PlatformPeriodIncome platform={item} refreshVersion={versions[item]} />
+          </AnalysisActivity.Provider>
         </div>
       ))}
     </>
@@ -101,8 +105,12 @@ function PeriodIncomeScope({
   platform: IncomePlatform;
 }) {
   const today = todayKey();
-  const [offset, setOffset] = useState(0);
-  const [resourceId, setResourceId] = useState("all");
+  const [offset, setOffset] = useAnalysisPreference<number>(
+    `period.${platform}.offset`,
+    0,
+    Array.from({ length: 12 }, (_, index) => -index),
+  );
+  const [resourceId, setResourceId] = useAnalysisPreference<string>(`period.${platform}.resource`, "all");
   const cycle = incomeCycle(offset, today);
   const selectedResources = resources.filter((resource) => resourceId === "all" || resource.id === resourceId);
   const cycleOptions = Array.from({ length: 12 }, (_, index) => {
@@ -174,10 +182,10 @@ function PeriodIncomeScope({
 
 /** Show returned income totals, inspectable day trends and paginated resource breakdowns */
 function PeriodIncomeResults({
-  selectedId,
+  selectedId: requestedId,
   platform,
   resources,
-  cycle,
+  cycle: requestedCycle,
   refreshVersion,
 }: {
   selectedId: string;
@@ -186,22 +194,29 @@ function PeriodIncomeResults({
   cycle: ReturnType<typeof incomeCycle>;
   refreshVersion: number;
 }) {
-  const [metric, setMetric] = useState<IncomeMetric>("diamonds");
+  const [metric, setMetric] = useAnalysisPreference<IncomeMetric>(
+    `period.${platform}.metric`,
+    "diamonds",
+    incomeMetrics.map((item) => item.id),
+  );
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
+  const requestedResources = resources.filter((resource) => requestedId === "all" || resource.id === requestedId);
+  const query = useAnalyticsQuery("analytics.periodIncome", {
+    settlementMonth: requestedCycle.endDate.slice(0, 7),
+    allResources: platform === "pe" || requestedId === "all",
+    platform,
+    resourceIds: (platform === "pe" ? resources : requestedResources).map((resource) => resource.id),
+    startDate: requestedCycle.startDate,
+    endDate: requestedCycle.queryEnd as string,
+  });
+  const result = useAnalysisSnapshot(query, { cycle: requestedCycle, selectedId: requestedId });
+  const { cycle, selectedId } = result.scope;
   const allResources = selectedId === "all";
   const displayedResources = useMemo(
     () => resources.filter((resource) => selectedId === "all" || resource.id === selectedId),
     [resources, selectedId],
   );
-  const result = useAnalyticsQuery("analytics.periodIncome", {
-    settlementMonth: cycle.endDate.slice(0, 7),
-    allResources: platform === "pe" || allResources,
-    platform,
-    resourceIds: (platform === "pe" ? resources : displayedResources).map((resource) => resource.id),
-    startDate: cycle.startDate,
-    endDate: cycle.queryEnd as string,
-  });
   useRefresh(result.reload, refreshVersion);
   const summary = useMemo(
     () => summarizePeriodIncome(displayedResources, result.data?.records ?? [], cycle.dates),
@@ -225,7 +240,10 @@ function PeriodIncomeResults({
 
   return (
     <>
-      <QueryState query={result} />
+      <QueryState
+        query={result}
+        scopeLabel={`${platform.toUpperCase()} · ${cycle.startDate} — ${cycle.endDate} · ${selectedId === "all" ? "全部资源" : (displayedResources[0]?.name ?? "所选资源")}`}
+      />
       <QuerySkeleton loading={result.loading && result.data === null} />
       {result.data !== null && (
         <>

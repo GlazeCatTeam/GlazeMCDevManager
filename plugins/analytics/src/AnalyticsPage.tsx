@@ -3,7 +3,8 @@ import { type KeyboardEvent, type ReactNode, useMemo, useState } from "react";
 import styles from "./AnalyticsPage.module.css";
 import { workResources } from "./data";
 import { QuerySkeleton, QueryState } from "./QueryState";
-import { useAnalyticsQuery } from "./useAnalyticsQuery";
+import { useAnalysisPreference } from "./useAnalysisPreference";
+import { AnalysisActivity, useAnalyticsQuery } from "./useAnalyticsQuery";
 import { ModuleView } from "./views/ModuleView";
 import { PeriodIncomeView } from "./views/PeriodIncomeView";
 import { RealtimeView } from "./views/RealtimeView";
@@ -39,8 +40,12 @@ export function AnalyticsPage() {
 
 /** Keep resource selections and responses scoped to the current account */
 function AccountAnalytics() {
-  const [tab, setTab] = useState<Tab>("tracking");
-  const [visited, setVisited] = useState<Tab[]>(["tracking"]);
+  const [tab, setTab] = useAnalysisPreference<Tab>(
+    "tab",
+    "tracking",
+    tabs.map((item) => item.id),
+  );
+  const [visited, setVisited] = useState<Tab[]>([tab]);
   const [refreshVersions, setRefreshVersions] = useState<Record<Tab, number>>({
     tracking: 0,
     summary: 0,
@@ -48,17 +53,15 @@ function AccountAnalytics() {
     period: 0,
     realtime: 0,
   });
-  const works = useAnalyticsQuery("works.list");
+  const needsResources = tab === "tracking" || tab === "module" || tab === "realtime";
+  const works = useAnalyticsQuery("works.list", undefined, needsResources);
   const resources = useMemo(() => workResources(works.data ?? []), [works.data]);
 
-  /** Keep visited tabs and their filters; realtime income refreshes whenever revisited */
+  /** Keep visited tabs mounted; their query hooks revalidate when they become visible again */
   const selectTab = (next: Tab) => {
     if (next === tab) return;
     setTab(next);
     setVisited((current) => (current.includes(next) ? current : [...current, next]));
-    if (next === "realtime" && visited.includes(next)) {
-      setRefreshVersions((current) => ({ ...current, realtime: current.realtime + 1 }));
-    }
   };
 
   /** Reload the actual resource list and the active analysis */
@@ -141,8 +144,9 @@ function AccountAnalytics() {
             />
           )}
           {visited.includes(item.id) &&
-            (item.id === "summary" || item.id === "period" || (works.data && resources.length > 0)) &&
-            views[item.id]}
+            (item.id === "summary" || item.id === "period" || (works.data && resources.length > 0)) && (
+              <AnalysisActivity.Provider value={tab === item.id}>{views[item.id]}</AnalysisActivity.Provider>
+            )}
         </div>
       ))}
     </div>

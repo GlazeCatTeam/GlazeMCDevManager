@@ -1,5 +1,5 @@
 import { callHost, type HostQuery, onHostEvent, type RpcMethods, useSession } from "@glaze/plugin-sdk";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AnalyticsQueryCache } from "./query-cache";
 
 type Queries = Pick<
@@ -8,6 +8,7 @@ type Queries = Pick<
 >;
 
 const cache = new AnalyticsQueryCache();
+export const AnalysisActivity = createContext(true);
 let listening = false;
 let generation = 0;
 const listeners = new Set<() => void>();
@@ -34,6 +35,35 @@ function observeAccounts(): void {
   listening = true;
 }
 
+/** Share invalidation identity with retained views so account and cache clearing remove old data immediately */
+export function useAnalysisEpoch(): number {
+  return useSyncExternalStore(subscribe, () => generation);
+}
+
+/** Keep the last successful result with its original scope while a new filter is loading or has failed */
+export function useAnalysisSnapshot<T, S>(query: HostQuery<T>, scope: S, enabled = true) {
+  const { current } = useSession();
+  const epoch = useAnalysisEpoch();
+  const identity = JSON.stringify([current?.id, current?.lastLoginAt, epoch]);
+  const scopeKey = JSON.stringify(scope);
+  const [last, setLast] = useState<{ identity: string; scopeKey: string; scope: S; data: T } | null>(null);
+  if (query.data !== null && enabled) {
+    if (last?.identity !== identity || last.scopeKey !== scopeKey || last.data !== query.data) {
+      setLast({ identity, scopeKey, scope, data: query.data });
+    }
+  } else if ((!enabled || last?.identity !== identity || query.error?.kind === "session_expired") && last) {
+    setLast(null);
+  }
+  const previous =
+    enabled && query.data === null && last?.identity === identity && query.error?.kind !== "session_expired";
+  return {
+    ...query,
+    data: enabled ? (query.data ?? (previous ? last.data : null)) : null,
+    scope: previous ? last.scope : scope,
+    previous,
+  };
+}
+
 /** Reuse exact queries, coalesce rapid filter changes and keep successful data during refresh */
 export function useAnalyticsQuery<M extends keyof Queries>(
   method: M,
@@ -41,9 +71,10 @@ export function useAnalyticsQuery<M extends keyof Queries>(
   enabled = true,
 ): HostQuery<Queries[M]["result"]> {
   const { current } = useSession();
+  const visible = useContext(AnalysisActivity);
   const account = current?.id ?? null;
   const paramsKey = JSON.stringify(params ?? {});
-  const epoch = useSyncExternalStore(subscribe, () => generation);
+  const epoch = useAnalysisEpoch();
   const key = JSON.stringify([account, current?.lastLoginAt, epoch, method, paramsKey]);
   const ttl = method === "analytics.realtime" ? 0 : method === "works.list" ? 30_000 : 60_000;
   const [version, setVersion] = useState(0);
@@ -58,6 +89,10 @@ export function useAnalyticsQuery<M extends keyof Queries>(
 
   useEffect(() => {
     observeAccounts();
+    if (!visible) {
+      inFlight.current = false;
+      return;
+    }
     let active = true;
     const changed = previousKey.current !== key;
     previousKey.current = key;
@@ -94,7 +129,7 @@ export function useAnalyticsQuery<M extends keyof Queries>(
       active = false;
       window.clearTimeout(timer);
     };
-  }, [key, method, paramsKey, account, ttl, version, enabled]);
+  }, [key, method, paramsKey, account, ttl, version, enabled, visible]);
 
   const reload = useCallback(() => {
     if (inFlight.current) return;

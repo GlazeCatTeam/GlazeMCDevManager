@@ -3,6 +3,8 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { formatValue, type RealtimeDay, type Resource, shiftDay, todayKey } from "../data";
 import { QuerySkeleton, QueryState, useRefresh } from "../QueryState";
 import { scrollWithinView } from "../scroll";
+import { useAnalysisPreference } from "../useAnalysisPreference";
+import { useAnalysisSnapshot } from "../useAnalyticsQuery";
 import { useRealtimeIncome } from "../useRealtimeIncome";
 import { DataTable, mutedClass } from "../widgets/DataTable";
 import { InlineSelect } from "../widgets/InlineSelect";
@@ -54,12 +56,25 @@ function orderTime(value: string): string {
 
 /** Scan large resource sets without squeezing cards or rendering every order at once */
 export function RealtimeView({ resources, refreshVersion }: { resources: Resource[]; refreshVersion: number }) {
-  const [day, setDay] = useState<RealtimeDay>("today");
-  const [resourceId, setResourceId] = useState("all");
-  const [currency, setCurrency] = useState("all");
+  const [day, setDay] = useAnalysisPreference<RealtimeDay>("realtime.day", "today", ["today", "yesterday"]);
+  const [resourceId, setResourceId] = useAnalysisPreference<string>("realtime.resource", "all");
+  const [currency, setCurrency] = useAnalysisPreference<string>(
+    "realtime.currency",
+    "all",
+    currencyOptions.map((item) => item.value),
+  );
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<ResourceFilter>("all");
-  const [sort, setSort] = useState("diamonds");
+  const [filter, setFilter] = useAnalysisPreference<ResourceFilter>("realtime.filter", "all", [
+    "all",
+    "income",
+    "zero",
+    "failed",
+  ]);
+  const [sort, setSort] = useAnalysisPreference<string>(
+    "realtime.sort",
+    "diamonds",
+    sortOptions.map((item) => item.value),
+  );
   const [resourcePage, setResourcePage] = useState(0);
   const [orderPage, setOrderPage] = useState(0);
   const resourcePanel = useRef<HTMLDivElement>(null);
@@ -72,10 +87,11 @@ export function RealtimeView({ resources, refreshVersion }: { resources: Resourc
     setScrollTarget(null);
   }, [scrollTarget]);
   const date = shiftDay(todayKey(), day === "today" ? 0 : -1);
-  const result = useRealtimeIncome(
+  const query = useRealtimeIncome(
     date,
     resources.map((resource) => resource.id),
   );
+  const result = { ...query, ...useAnalysisSnapshot(query, { date }) };
   useRefresh(result.reload, refreshVersion);
   const incomes = result.data?.resources;
   const failed = result.data?.failedResourceIds;
@@ -207,7 +223,7 @@ export function RealtimeView({ resources, refreshVersion }: { resources: Resourc
           收益按平台返回总额汇总
         </p>
       </Panel>
-      <QueryState query={result} />
+      <QueryState query={result} scopeLabel={`${result.scope.date} · 实时收益`} />
       <QuerySkeleton loading={result.loading && result.data === null} chart={false} />
       {result.data !== null && (
         <>
@@ -215,7 +231,7 @@ export function RealtimeView({ resources, refreshVersion }: { resources: Resourc
           {counts.failed > 0 && (
             <Notice
               action={
-                <TextButton tone="warning" disabled={result.loading} onClick={result.retryFailures}>
+                <TextButton tone="warning" disabled={result.loading || result.previous} onClick={result.retryFailures}>
                   仅重试失败资源
                 </TextButton>
               }
