@@ -67,9 +67,20 @@ try {
   await page.getByRole("tab", { name: "热搜榜", exact: true }).click();
   assert.equal(await page.getByRole("status").textContent(), "");
   const searchGeometry = await list.boundingBox();
-  assert.equal(searchGeometry.y, geometry.y, "hot search keeps category space");
-  assert.equal(searchGeometry.height, geometry.height);
+  assert.ok(searchGeometry.y < geometry.y, "hot search removes unused category space");
+  assert.equal(
+    searchGeometry.y + searchGeometry.height,
+    geometry.y + geometry.height,
+    "hot search expands the list within the fixed card",
+  );
+  const tabGeometry = await page.getByRole("tablist", { name: "榜单" }).boundingBox();
+  assert.ok(
+    searchGeometry.y - tabGeometry.y - tabGeometry.height <= 18,
+    "hot search follows the tabs with only the normal panel gap",
+  );
+  await page.screenshot({ path: `${output}/rank-hot-search.png` });
   await page.getByRole("tab", { name: "手游免费榜", exact: true }).click();
+  assert.deepEqual(await list.boundingBox(), geometry, "category boards restore their original layout");
   await page.evaluate(() => {
     rankTest.controls.delay = 700;
   });

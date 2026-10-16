@@ -115,26 +115,23 @@ export function RankingCard({ className }: RankingCardProps) {
         ))}
       </div>
 
-      <div
-        className={styles.chips}
-        style={{ visibility: hasCategories ? "visible" : "hidden" }}
-        aria-hidden={!hasCategories}
-      >
-        {rankCategories.map(({ label }, index) => (
-          <button
-            key={label}
-            type="button"
-            aria-pressed={index === subCategory}
-            className={index === subCategory ? `${styles.chip} ${styles.chipActive}` : styles.chip}
-            onClick={() => setSubCategory(index)}
-            onPointerEnter={() => preload(category, index)}
-            onFocus={() => preload(category, index)}
-            tabIndex={hasCategories ? 0 : -1}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {hasCategories && (
+        <div className={styles.chips}>
+          {rankCategories.map(({ label }, index) => (
+            <button
+              key={label}
+              type="button"
+              aria-pressed={index === subCategory}
+              className={index === subCategory ? `${styles.chip} ${styles.chipActive}` : styles.chip}
+              onClick={() => setSubCategory(index)}
+              onPointerEnter={() => preload(category, index)}
+              onFocus={() => preload(category, index)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {ranking.error && (
         <Notice
