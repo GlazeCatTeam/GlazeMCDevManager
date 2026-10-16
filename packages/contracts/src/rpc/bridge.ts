@@ -37,7 +37,7 @@ import type {
   PromotionModuleParams,
   PromotionPageParams,
 } from "./promotion";
-import type { RankBoard, RankEntry, RankListParams, RankPage, RankPageParams } from "./rank";
+import type { RankBoard, RankEntry, RankIconsParams, RankListParams, RankPage, RankPageParams } from "./rank";
 import type { SessionSettings } from "./session-settings";
 import type { WorkCropParams, WorkImageDraft, WorkImageParams, WorkReference, WorkSearchParams } from "./work-assets";
 import type { WorkCreateParams } from "./work-create";
@@ -151,6 +151,7 @@ export interface RpcMethods {
   "income.detail": { params: IncomeDetailParams; result: IncomeDetail };
   "rank.list": { params: RankListParams; result: RankEntry[] };
   "rank.page": { params: RankPageParams; result: RankPage };
+  "rank.icons": { params: RankIconsParams; result: Record<string, string> };
   "works.list": { params: (AccountParams & { platform?: IncomePlatform }) | undefined; result: WorkSummary[] };
   "works.page": { params: WorkPageParams; result: WorkPage };
   "works.search": { params: WorkSearchPageParams; result: WorkSearchPage };

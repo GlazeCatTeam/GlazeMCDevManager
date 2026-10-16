@@ -157,6 +157,22 @@ test("missing, unsafe and failed thumbnails preserve rankings and can retry", as
   assert.equal((await getRankIcons(["9001"])).get("9001"), imageUrl);
 });
 
+test("text-only pages finish without starting a public cover request", async (t) => {
+  let calls = 0;
+  t.mock.method(globalThis, "fetch", async (input: string) => {
+    calls++;
+    assert.match(String(input), /\/square\//, "cover latency must not enter the page request");
+    return Response.json({
+      status: "ok",
+      data: { count: 1, data: [{ item_id: "731001", item_name: "Immediate text" }] },
+    });
+  });
+  const result = await getRankPage(session, "pe_download", "mod", 0, 50, false);
+  assert.equal(result.ok && result.value.items[0]?.title, "Immediate text");
+  assert.equal(result.ok && result.value.items[0]?.iconUrl, null);
+  assert.equal(calls, 1);
+});
+
 test("hot search skips covers; native thumbnails skip the public lookup; mobile categories remain correct", async (t) => {
   const paths: URL[] = [];
   t.mock.method(globalThis, "fetch", async (input: string) => {

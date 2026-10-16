@@ -52,7 +52,7 @@ export function RankingCard({ className }: RankingCardProps) {
     return () => tabs.removeEventListener("wheel", onWheel);
   }, []);
 
-  // Observe the list's own bottom, not the window, and pause automatic retry after a network failure
+  // Fetch roughly one viewport ahead so normal scrolling rarely reaches an unloaded page
   useEffect(() => {
     const end = endRef.current;
     if (!end || ranking.loading || ranking.moreLoading || ranking.moreError || ranking.nextStart === null) return;
@@ -60,7 +60,7 @@ export function RankingCard({ className }: RankingCardProps) {
       ([entry]) => {
         if (entry?.isIntersecting) void ranking.loadMore();
       },
-      { root: listRef.current, rootMargin: "0px 0px 120px 0px" },
+      { root: listRef.current, rootMargin: `0px 0px ${listRef.current?.clientHeight ?? 480}px 0px` },
     );
     observer.observe(end);
     return () => observer.disconnect();
@@ -74,6 +74,7 @@ export function RankingCard({ className }: RankingCardProps) {
       category: nextBoard === "hot_search" ? "mod" : (rankCategories[subIndex]?.category ?? "mod"),
       start: 0,
       limit: RANK_LIMIT,
+      includeIcons: false,
     });
   };
 

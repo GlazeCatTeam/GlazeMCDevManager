@@ -7,7 +7,13 @@ import {
   remoteImageUrl,
 } from "@glaze/plugin-sdk";
 
-export type HomeMethod = "rank.list" | "rank.page" | "developer.level" | "analytics.overview" | "income.estimate";
+export type HomeMethod =
+  | "rank.list"
+  | "rank.page"
+  | "rank.icons"
+  | "developer.level"
+  | "analytics.overview"
+  | "income.estimate";
 type HomeData = RpcMethods[HomeMethod]["result"];
 type Snapshot = Omit<HostQuery<HomeData>, "reload">;
 

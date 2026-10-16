@@ -71,13 +71,14 @@ function readEntry(board: RankBoard, row: Record<string, unknown>, position: num
       };
 }
 
-/** Read one bounded page, preserving absolute positions and authoritative pagination metadata */
+/** Read a bounded page, optionally deferring public thumbnails so text never waits for them */
 export async function getRankPage(
   session: NeteaseSession,
   board: RankBoard,
   category: RankCategory,
   start: number,
   limit: number,
+  includeIcons = true,
 ): Promise<Result<RankPage>> {
   if (!Object.hasOwn(boardPaths, board)) return fail({ kind: "business", code: "validation", message: "榜单类型无效" });
   if (!Number.isInteger(start) || start < 0 || start > 1_000_000 || !Number.isInteger(limit) || limit < 1 || limit > 50)
@@ -102,7 +103,7 @@ export async function getRankPage(
     entries.push(entry);
   }
   const visible = entries.slice(0, limit);
-  if (board.startsWith("pe_")) {
+  if (includeIcons && board.startsWith("pe_")) {
     const icons = await getRankIcons(
       visible.flatMap((entry) => (!entry.iconUrl && entry.itemId ? [entry.itemId] : [])),
     );

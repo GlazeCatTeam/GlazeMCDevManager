@@ -28,6 +28,7 @@ export {
   savePromotionBanner,
 } from "./endpoints/promotion";
 export { getRankList, getRankPage } from "./endpoints/rank";
+export { getRankIcons } from "./endpoints/rank-images";
 export { getUserInfo, type UserInfo } from "./endpoints/user";
 export { validateWorkAdvanced } from "./endpoints/work-advanced";
 export { createWork, validateWorkCreate } from "./endpoints/work-create";

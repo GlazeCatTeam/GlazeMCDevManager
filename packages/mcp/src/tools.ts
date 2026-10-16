@@ -40,7 +40,12 @@ export const readSchemas: Partial<Record<RpcMethod, z.ZodObject>> = {
   "income.detail": z.strictObject({ ...account, id }),
   "income.estimate": z.strictObject({ ...account, month: month.optional() }),
   "rank.list": z.strictObject(rank),
-  "rank.page": z.strictObject({ ...rank, start: z.number().int().min(0).max(1_000_000).optional() }),
+  "rank.page": z.strictObject({
+    ...rank,
+    start: z.number().int().min(0).max(1_000_000).optional(),
+    includeIcons: z.boolean().optional(),
+  }),
+  "rank.icons": z.strictObject({ ...account, itemIds: z.array(itemId).max(50) }),
   "works.list": z.strictObject({ ...account, platform: platform.optional() }),
   "works.get": z.strictObject(work),
   "works.reviewFeedback": z.strictObject(work),

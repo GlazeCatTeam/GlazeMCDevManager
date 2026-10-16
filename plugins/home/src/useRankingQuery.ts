@@ -6,9 +6,10 @@ import {
   type RpcError,
   useSession,
 } from "@glaze/plugin-sdk";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RANK_LIMIT } from "./boards";
 import { useHomeQuery } from "./useHomeQuery";
+import { useRankingIcons } from "./useRankingIcons";
 
 interface MoreRows {
   key: string;
@@ -19,12 +20,12 @@ interface MoreRows {
   error: RpcError | null;
 }
 
-/** Cache the first page and append real pages on demand, isolating account, board and refresh races */
+/** Show text before covers and preserve successful pages while background reads are in progress */
 export function useRankingQuery(board: RankBoard, category: RankCategory) {
   const { current } = useSession();
   const account = current?.id;
   const key = JSON.stringify([account, current?.lastLoginAt, board, category]);
-  const first = useHomeQuery("rank.page", { board, category, start: 0, limit: RANK_LIMIT });
+  const first = useHomeQuery("rank.page", { board, category, start: 0, limit: RANK_LIMIT, includeIcons: false });
   const [more, setMore] = useState<MoreRows | null>(null);
   const epoch = useRef(0);
   const pending = useRef<{ key: string; data: RankPage } | null>(null);
@@ -32,7 +33,8 @@ export function useRankingQuery(board: RankBoard, category: RankCategory) {
   latest.current = { key, data: first.data };
   const active = more?.key === key && more.first === first.data ? more : null;
   const nextStart = active ? active.nextStart : (first.data?.nextStart ?? null);
-  const items = [...(first.data?.items ?? []), ...(active?.items ?? [])];
+  const rows = useMemo(() => [...(first.data?.items ?? []), ...(active?.items ?? [])], [first.data, active?.items]);
+  const items = useRankingIcons(rows, key);
 
   // Cancel appended-page state when leaving a board, including a rapid return to its cached first page
   useEffect(() => {
@@ -44,11 +46,11 @@ export function useRankingQuery(board: RankBoard, category: RankCategory) {
     };
   }, [key]);
 
-  /** Explicit refresh discards appended rows and prevents an old append from returning afterwards */
+  /** Retain all loaded rows until refresh succeeds and prevent older appends from returning */
   const reload = useCallback(() => {
     epoch.current++;
     pending.current = null;
-    setMore(null);
+    setMore((previous) => (previous ? { ...previous, loading: false, error: null } : null));
     first.reload();
   }, [first.reload]);
 
@@ -64,7 +66,14 @@ export function useRankingQuery(board: RankBoard, category: RankCategory) {
     const base: MoreRows = { key, first: data, items: active?.items ?? [], nextStart, loading: true, error: null };
     setMore(base);
     try {
-      const result = await callHost("rank.page", { account, board, category, start: nextStart, limit: RANK_LIMIT });
+      const result = await callHost("rank.page", {
+        account,
+        board,
+        category,
+        start: nextStart,
+        limit: RANK_LIMIT,
+        includeIcons: false,
+      });
       if (generation !== epoch.current || latest.current.key !== key || latest.current.data !== data) return;
       if (result.ok) {
         setMore({

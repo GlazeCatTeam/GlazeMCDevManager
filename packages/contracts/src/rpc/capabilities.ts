@@ -248,7 +248,17 @@ export const capabilities: Record<RpcMethod, Capability> = {
     mcp: {
       title: "分页读取平台排行榜",
       description:
-        "按 rank.list 的 board/category 查询真实榜单。start 为从 0 开始的偏移，默认 0；limit 1–50，默认 50。返回 items、平台 total 和 nextStart；继续使用 nextStart 读取下一批，null 表示结束。account 可选，不切换当前账号。",
+        "按 rank.list 的 board/category 查询真实榜单。start 为从 0 开始的偏移，默认 0；limit 1–50，默认 50。返回 items、平台 total 和 nextStart；继续使用 nextStart 读取下一批，null 表示结束。includeIcons 默认 true，传 false 不等待缺失封面，可随后用 rank.icons 补全。account 可选，不切换当前账号。",
+    },
+  },
+  "rank.icons": {
+    caller: "any",
+    permission: "netease:rank.read",
+    risk: "read",
+    mcp: {
+      title: "批量读取榜单封面",
+      description:
+        "按 itemIds 中最多 50 个准确数字作品 ID 查询公开封面，返回 ID 到图片地址的映射。缺图或暂时失败的 ID 省略，不影响榜单内容；不携带开发者 Cookie。",
     },
   },
   "works.list": {

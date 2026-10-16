@@ -97,16 +97,24 @@
 }
 
 .item {
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 42px;
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 6px 0;
   min-height: 42px;
+  height: 42px;
   flex-shrink: 0;
 }
 
 .skeleton {
   background: var(--g-surface-sunken);
+}
+
+/* A fixed preview must escape row containment and cover the viewport */
+.item:has([role="dialog"]) {
+  content-visibility: visible;
 }
 
 .skeletonTitle {

@@ -41,6 +41,7 @@ import {
   getIncomeList,
   getMessage,
   getMessageUnreadCount,
+  getRankIcons,
   getRankList,
   getRankPage,
   getReviewFeedback,
@@ -479,9 +480,20 @@ function createHandlers(
       const category = optionalOneOf(params, "category", rankCategories) ?? "mod";
       const start = optionalInteger(params, "start", 0, 1_000_000) ?? 0;
       const limit = optionalInteger(params, "limit", 1, 50) ?? 50;
+      if (params.includeIcons !== undefined && typeof params.includeIcons !== "boolean")
+        throw new CapabilityError("validation", "参数 includeIcons 无效");
       return sessions.request(optionalString(params, "account"), (session) =>
-        getRankPage(session, board, category, start, limit),
+        getRankPage(session, board, category, start, limit, params.includeIcons !== false),
       );
+    },
+    "rank.icons": async (params) => {
+      if (
+        !Array.isArray(params.itemIds) ||
+        params.itemIds.length > 50 ||
+        params.itemIds.some((id) => typeof id !== "string" || !/^\d{1,32}$/.test(id))
+      )
+        throw new CapabilityError("validation", "封面查询需要最多 50 个数字作品 ID");
+      return Object.fromEntries(await getRankIcons(params.itemIds));
     },
     "works.list": (params) => {
       const platform = optionalOneOf(params, "platform", ["pe", "pc"] as const) ?? "pe";

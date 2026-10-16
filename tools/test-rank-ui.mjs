@@ -26,6 +26,15 @@ try {
   await server.listen();
   browser = await chromium.launch({ headless: true, channel: process.argv[3] ?? "msedge" });
   const page = await browser.newPage({ viewport: { width: 1000, height: 800 } });
+  await page.route("glaze-image://**", (route) =>
+    route.fulfill({
+      contentType: "image/png",
+      body: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    }),
+  );
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(`${server.resolvedUrls.local[0]}tests/fixtures/rank.html`);
@@ -47,6 +56,12 @@ try {
     assert.equal(await page.getByRole("status").textContent(), "");
   }
   assert.equal(await page.evaluate(() => rankTest.calls.length), 2, "ten cached tab switches add zero RPCs");
+  assert.equal(
+    await page.evaluate(() => rankTest.iconCalls.length),
+    2,
+    "cover reads coalesce while both requests are held",
+  );
+  assert.equal(await list.locator("img").count(), 0, "text and navigation work while cover service is stalled");
   await page.getByRole("tab", { name: "热搜榜", exact: true }).hover();
   await page.waitForTimeout(300);
   await page.getByRole("tab", { name: "热搜榜", exact: true }).click();
@@ -81,6 +96,19 @@ try {
   await page.getByRole("button", { name: "切换测试账号" }).click();
   assert.equal(await list.getByText("a:pe_download:mod:work-0", { exact: true }).count(), 0);
   await page.getByText("b:pe_download:mod:work-0", { exact: true }).waitFor();
+  await page.evaluate(() => rankTest.releaseIcons());
+  await page.getByRole("button", { name: "放大预览：b:pe_download:mod:work-0", exact: true }).waitFor();
+  assert.equal(await list.locator('img[src*="test-1"]').count(), 0, "late account A covers never enter account B rows");
+  await page.getByRole("button", { name: "放大预览：b:pe_download:mod:work-0", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.waitFor();
+  const backdrop = await dialog.evaluate((el) => {
+    const rect = el.parentElement.getBoundingClientRect();
+    return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+  });
+  assert.deepEqual(backdrop, { x: 0, y: 0, width: 1000, height: 800 }, "row containment never clips the cover preview");
+  await page.keyboard.press("Escape");
+  assert.equal(await dialog.count(), 0);
   await page.getByRole("button", { name: "联机大厅", exact: true }).click();
   await page.getByText("这个榜单暂时没有作品").waitFor();
   await page.getByRole("tab", { name: "手游热门飙升", exact: true }).click();
@@ -116,6 +144,20 @@ try {
   await page.getByText("已显示全部 123 条", { exact: true }).waitFor();
   assert.equal(await list.getByText(/:work-\d+$/).count(), 123);
   assert.equal((await list.boundingBox()).height, geometry.height, "appending rows preserves list geometry");
+  const loadedScroll = await list.evaluate((el) => el.scrollTop);
+  await page.evaluate(() => {
+    rankTest.controls.fail = true;
+    rankTest.controls.delay = 400;
+  });
+  await page.getByRole("button", { name: "刷新排行榜" }).click();
+  assert.equal(await list.getByText(/:work-\d+$/).count(), 123, "refresh keeps every loaded page while pending");
+  await page.getByText(/榜单加载失败/).waitFor();
+  assert.equal(await list.getByText(/:work-\d+$/).count(), 123, "failed refresh keeps appended pages");
+  assert.equal(await list.evaluate((el) => el.scrollTop), loadedScroll, "failed refresh retains scroll position");
+  await page.evaluate(() => {
+    rankTest.controls.fail = false;
+    rankTest.controls.delay = 80;
+  });
   const tabs = page.getByRole("tablist", { name: "榜单" });
   await page.setViewportSize({ width: 360, height: 800 });
   await tabs.hover();
@@ -128,9 +170,14 @@ try {
     rankTest.controls.delay = 400;
   });
   await list.evaluate((el) => {
-    el.scrollTop = el.scrollHeight;
+    el.scrollTop = el.scrollHeight - el.clientHeight * 1.75;
   });
   await list.getByText("正在加载更多…", { exact: true }).waitFor();
+  assert.equal(
+    await list.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight > 120),
+    true,
+    "next page starts before reaching the old bottom threshold",
+  );
   await page.getByRole("tab", { name: "手游热门飙升", exact: true }).click();
   await page.getByRole("tab", { name: "手游畅销榜", exact: true }).click();
   await page.waitForTimeout(450);
@@ -148,10 +195,19 @@ try {
   await page.getByRole("button", { name: "浅色主题", exact: true }).click();
   await page.setViewportSize({ width: 480, height: 760 });
   await page.screenshot({ path: `${output}/rank-light.png` });
+  await page.evaluate(() => {
+    rankTest.controls.failIcons = true;
+  });
+  await page.getByRole("button", { name: "材质光影", exact: true }).click();
+  await page.getByText("b:pe_sell:texture:work-0", { exact: true }).waitFor();
+  await page.waitForTimeout(100);
+  assert.equal(await list.getByText(/:work-\d+$/).count(), 50, "cover service failures preserve all text rows");
+  assert.equal(await page.getByRole("status").textContent(), "");
+  assert.equal(await page.getByText(/榜单加载失败/).count(), 0);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: zero extra RPCs for 10 cached switches, prefetch, stable geometry, race/account isolation, refresh retry, empty state, route re-entry, light/dark",
+    "PASS: cached switches, stalled/failed covers, account isolation, full-screen cover preview, early pagination, 123-row refresh retention, stable scroll, retry, light/dark",
   );
 } finally {
   await browser?.close();

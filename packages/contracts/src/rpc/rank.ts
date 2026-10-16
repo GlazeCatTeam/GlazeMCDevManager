@@ -31,6 +31,13 @@ export interface RankListParams extends AccountParams {
 export interface RankPageParams extends RankListParams {
   /** Zero-based offset in the selected leaderboard */
   start?: number | undefined;
+  /** Defaults to true; false returns rows without waiting for missing public thumbnails */
+  includeIcons?: boolean | undefined;
+}
+
+export interface RankIconsParams extends AccountParams {
+  /** Up to 50 exact numeric work IDs */
+  itemIds: string[];
 }
 
 export interface RankPage {
