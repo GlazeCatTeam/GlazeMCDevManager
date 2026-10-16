@@ -1,0 +1,39 @@
+name: Release
+
+# Pushing a tag such as v0.1.0 builds the installer and uploads it to a draft GitHub Release.
+# The updater ignores drafts, so nothing reaches users until a maintainer reviews and publishes the draft.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: 打包并上传草稿 Release
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      - name: Tag matches app version and release notes exist
+        shell: pwsh
+        run: |
+          $version = (Get-Content apps/desktop/package.json | ConvertFrom-Json).version
+          if ("v$version" -ne "${{ github.ref_name }}") { throw "标签 ${{ github.ref_name }} 与应用版本 v$version 不一致" }
+          if (-not (Test-Path "docs/releases/v$version.md")) { throw "缺少更新说明 docs/releases/v$version.md" }
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Biome check
+        run: pnpm lint
+      - name: Tests
+        run: pnpm test
+      - name: Build installer and upload draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm --filter @glaze/desktop release "-c.releaseInfo.releaseNotesFile=../../docs/releases/${{ github.ref_name }}.md"

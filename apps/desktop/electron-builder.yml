@@ -21,7 +21,15 @@ npmRebuild: false
 electronLanguages:
   - zh-CN
   - en-US
+# GitHub Releases hosts the installer and latest.yml; electron-updater in the installed app reads the same release.
+# CI publishes a draft, which stays invisible to the updater until a maintainer publishes it
+publish:
+  provider: github
+  owner: GlazeCatTeam
+  repo: GlazeMCDevManager
+  releaseType: draft
 win:
+  icon: resources/icon.ico
   target:
     - target: nsis
       arch:
@@ -32,6 +40,8 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
+  installerIcon: resources/icon.ico
+  uninstallerIcon: resources/icon.ico
   shortcutName: Glaze MC Dev Manager
   uninstallDisplayName: Glaze MC Dev Manager
   artifactName: GlazeMCDevManager-${version}-x64-setup.${ext}
