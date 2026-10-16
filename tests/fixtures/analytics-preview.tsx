@@ -6,6 +6,7 @@ import { SessionProvider } from "../../packages/plugin-sdk/src";
 import { applyTheme } from "../../packages/theme/src";
 import { AnalyticsPage } from "../../plugins/analytics/src/AnalyticsPage";
 import oreUi from "../../themes/ore-ui/theme.json";
+import fluentDark from "../../themes/fluent-dark/theme.json";
 import "../../apps/desktop/src/renderer/global.css";
 import shellStyles from "../../apps/desktop/src/renderer/shell/AppShell.module.css";
 import titleStyles from "../../apps/desktop/src/renderer/shell/TitleBar.module.css";
@@ -49,6 +50,8 @@ let activeAccount = account.id;
 let failure = false;
 let calls = 0;
 const realtimeRequests: { date: string; resourceIds: string[] }[] = [];
+const requests: { method: string; params: unknown }[] = [];
+const controls = { delay: 400, failureKind: "network" };
 Object.assign(globalThis, { __realtimeRequests: realtimeRequests });
 
 /** Sparse fixture rows expose missing-day and missing-peer rendering */
@@ -71,11 +74,13 @@ function record(resourceId: string, date: string): AnalyticsRecord {
 const rpc: GlazeBridge["rpc"] = async (method, params) => {
   const callAccount = activeAccount;
   const shouldFail = failure;
+  const failureKind = controls.failureKind;
+  requests.push({ method, params });
   const counter = document.getElementById("calls");
   calls++;
   if (counter) counter.textContent = `请求数：${calls}`;
-  await new Promise((resolve) => setTimeout(resolve, 400));
-  if (shouldFail) return { ok: false, error: { kind: "network", message: "离线测试失败" } };
+  await new Promise((resolve) => setTimeout(resolve, controls.delay));
+  if (shouldFail) return { ok: false, error: { kind: failureKind, message: "离线测试失败" } };
   let value: unknown;
   if (method === "works.list") value = callAccount === account.id ? (params as { platform?: string } | undefined)?.platform === "pc" ? works.slice(0, 1).map(work => ({ ...work, itemId: "900", name: "PC 独立资源" })) : works : [];
   else if (method === "analytics.daily" || method === "analytics.periodIncome") {
@@ -111,7 +116,7 @@ const rpc: GlazeBridge["rpc"] = async (method, params) => {
     }
   } else if (method === "analytics.monthly") {
     const query = params as { startDate: string };
-    value = callAccount === account.id ? [record("1", query.startDate.slice(0, 7))] : [];
+    value = callAccount === account.id ? works.map((work) => record(work.itemId, query.startDate.slice(0, 7))) : [];
   } else if (method === "analytics.realtime") {
     const query = params as { date: string; resourceIds: string[] };
     realtimeRequests.push(query);
@@ -166,13 +171,21 @@ const rpc: GlazeBridge["rpc"] = async (method, params) => {
   } else return { ok: false, error: { kind: "fixture", message: `未定义的接口 ${method}` } };
   return { ok: true, value } as Awaited<ReturnType<GlazeBridge["rpc"]>>;
 };
-const accountListeners = new Set<() => void>();
+const accountListeners = new Map<string, Set<() => void>>();
 Object.assign(globalThis, {
+  __analyticsTest: {
+    requests,
+    controls,
+    clearCache: () => { for (const listener of accountListeners.get("cache.cleared") ?? []) listener(); },
+    theme: (name: string) => applyTheme(name === "fluent" ? fluentDark : oreUi, name === "light" ? "light" : "dark"),
+  },
   glaze: {
     rpc,
-    on: (_event: string, listener: () => void) => {
-      accountListeners.add(listener);
-      return () => accountListeners.delete(listener);
+    on: (event: string, listener: () => void) => {
+      const listeners = accountListeners.get(event) ?? new Set<() => void>();
+      listeners.add(listener);
+      accountListeners.set(event, listeners);
+      return () => listeners.delete(listener);
     },
   },
 });
@@ -200,7 +213,7 @@ function Preview() {
           onClick={() => {
             activeAccount = current.id === account.id ? "analytics-b" : account.id;
             setCurrent({ ...account, id: activeAccount });
-            for (const listener of accountListeners) listener();
+            for (const listener of accountListeners.get("account.changed") ?? []) listener();
           }}
         >
           切换测试账号

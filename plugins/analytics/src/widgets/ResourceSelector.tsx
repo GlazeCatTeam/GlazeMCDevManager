@@ -20,7 +20,7 @@ export function ResourceSelector({ resources, selectedIds, onChange, actions }: 
   const keyword = search.trim().toLocaleLowerCase();
   const visible = resources.filter((resource) => resource.name.toLocaleLowerCase().includes(keyword));
 
-  /** Change the pending selection without querying the platform */
+  /** Update selections immediately; the query layer combines consecutive changes */
   const toggle = (id: string) => {
     onChange(selectedIds.includes(id) ? selectedIds.filter((value) => value !== id) : [...selectedIds, id]);
   };
@@ -74,8 +74,15 @@ export function ResourceSelector({ resources, selectedIds, onChange, actions }: 
         <div className={styles.searchRow}>
           <SearchField label="搜索对比资源" placeholder="搜索资源名称…" value={search} onChange={setSearch} />
           <span className={styles.count}>
-            {keyword ? `找到 ${visible.length} 个资源` : "勾选资源后，点击下方查询数据"}
+            {keyword ? `找到 ${visible.length} 个资源` : "勾选后自动更新，支持连续多选"}
           </span>
+          <TextButton
+            tone="subtle"
+            disabled={visible.length === 0 || visible.every((resource) => selectedIds.includes(resource.id))}
+            onClick={() => onChange([...new Set([...selectedIds, ...visible.map((resource) => resource.id)])])}
+          >
+            {keyword ? "选择匹配资源" : "全选"}
+          </TextButton>
         </div>
         <fieldset className={styles.options} aria-label="选择对比资源">
           {visible.map((resource) => (

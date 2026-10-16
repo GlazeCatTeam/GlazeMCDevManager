@@ -6,6 +6,9 @@
 }
 
 .chart svg {
+  position: absolute;
+  inset: 0;
+  height: 100%;
   flex: 1;
   width: 100%;
   min-height: 150px;
@@ -110,17 +113,40 @@
 }
 
 .legend {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
   min-height: 20px;
   display: flex;
   flex-wrap: wrap;
   gap: 8px 18px;
   font-size: 12px;
+  max-height: 72px;
+  overflow: auto;
+  flex: none;
 }
 
 .legendItem {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  padding: 3px 5px;
+  text-align: left;
+  color: var(--g-text-primary);
+  font: inherit;
+  border-radius: var(--g-radius-control);
+  cursor: pointer;
+}
+
+.legendItem:hover {
+  background: var(--g-panel-hoverBg);
+}
+.legendItem:disabled {
+  cursor: default;
+}
+.hiddenSeries {
+  opacity: 0.45;
 }
 
 .empty {

@@ -1,7 +1,7 @@
 import { Button, Notice, Pagination, Panel, SearchField, SegmentedControl, TextButton } from "@glaze/plugin-sdk";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { formatValue, type RealtimeDay, type Resource, shiftDay, todayKey } from "../data";
-import { QueryState, useRefresh } from "../QueryState";
+import { QuerySkeleton, QueryState, useRefresh } from "../QueryState";
 import { scrollWithinView } from "../scroll";
 import { useRealtimeIncome } from "../useRealtimeIncome";
 import { DataTable, mutedClass } from "../widgets/DataTable";
@@ -40,7 +40,10 @@ const timeFormatter = new Intl.DateTimeFormat("zh-CN", {
 
 /** Preserve unknown currency codes instead of assuming a conversion */
 function currencyName(currency: string): string {
-  return ({ diamond: "钻石", point: "绿宝石", free: "免费", unknown: "币种未提供" } as Record<string, string>)[currency] ?? currency;
+  return (
+    ({ diamond: "钻石", point: "绿宝石", free: "免费", unknown: "币种未提供" } as Record<string, string>)[currency] ??
+    currency
+  );
 }
 
 /** Convert explicitly zoned platform timestamps to Beijing time */
@@ -69,7 +72,10 @@ export function RealtimeView({ resources, refreshVersion }: { resources: Resourc
     setScrollTarget(null);
   }, [scrollTarget]);
   const date = shiftDay(todayKey(), day === "today" ? 0 : -1);
-  const result = useRealtimeIncome(date, resources.map((resource) => resource.id));
+  const result = useRealtimeIncome(
+    date,
+    resources.map((resource) => resource.id),
+  );
   useRefresh(result.reload, refreshVersion);
   const incomes = result.data?.resources;
   const failed = result.data?.failedResourceIds;
@@ -129,7 +135,12 @@ export function RealtimeView({ resources, refreshVersion }: { resources: Resourc
   const page = Math.min(resourcePage, pageCount - 1);
   const pageRows = matching.slice(page * RESOURCE_PAGE_SIZE, (page + 1) * RESOURCE_PAGE_SIZE);
   const orders = useMemo(
-    () => (incomes ?? []).flatMap((income) => income.orders.map((order, position) => ({ ...order, rowKey: `${order.resourceId}-${order.id}-${position}` }))).sort((left, right) => right.time.localeCompare(left.time)),
+    () =>
+      (incomes ?? [])
+        .flatMap((income) =>
+          income.orders.map((order, position) => ({ ...order, rowKey: `${order.resourceId}-${order.id}-${position}` })),
+        )
+        .sort((left, right) => right.time.localeCompare(left.time)),
     [incomes],
   );
   const activeResourceId = resourceById.has(resourceId) ? resourceId : "all";
@@ -192,10 +203,12 @@ export function RealtimeView({ resources, refreshVersion }: { resources: Resourc
           </Button>
         </div>
         <p className={styles.note}>
-          {result.data?.queriedAt ? `最近更新 ${orderTime(result.data.queriedAt)} · ` : ""}普通手游资源 · 收益按平台返回总额汇总
+          {result.data?.queriedAt ? `最近更新 ${orderTime(result.data.queriedAt)} · ` : ""}普通手游资源 ·
+          收益按平台返回总额汇总
         </p>
       </Panel>
       <QueryState query={result} />
+      <QuerySkeleton loading={result.loading && result.data === null} chart={false} />
       {result.data !== null && (
         <>
           {result.error && <p className={styles.failed}>本次更新失败，当前显示上次成功查询的数据。</p>}
@@ -208,7 +221,9 @@ export function RealtimeView({ resources, refreshVersion }: { resources: Resourc
               }
             >
               <div className={styles.failureSummary}>
-                <strong>{counts.failed} 个资源查询失败，{successCount ? "当前为部分汇总" : "暂无可用收益数据"}</strong>
+                <strong>
+                  {counts.failed} 个资源查询失败，{successCount ? "当前为部分汇总" : "暂无可用收益数据"}
+                </strong>
                 <span>
                   已获取 {successCount} / {resources.length} 个资源的数据
                 </span>
@@ -284,7 +299,11 @@ export function RealtimeView({ resources, refreshVersion }: { resources: Resourc
               <DataTable
                 caption="各资源实时收益"
                 columns={["资源", "钻石", "绿宝石", "订单", "查询状态", "明细"]}
-                emptyText={filter === "failed" && counts.failed === 0 ? "全部资源已获取，没有查询失败的资源" : "当前筛选下没有资源，试试其他名称或状态"}
+                emptyText={
+                  filter === "failed" && counts.failed === 0
+                    ? "全部资源已获取，没有查询失败的资源"
+                    : "当前筛选下没有资源，试试其他名称或状态"
+                }
                 rows={pageRows.map(({ resource, income, status }) => (
                   <tr key={resource.id} className={activeResourceId === resource.id ? styles.selectedRow : undefined}>
                     <th scope="row">
@@ -299,9 +318,17 @@ export function RealtimeView({ resources, refreshVersion }: { resources: Resourc
                     <td>
                       <div className={styles.queryStatus}>
                         <span className={status === "failed" ? styles.failed : styles.muted}>
-                          {status === "failed" ? "查询失败" : income?.ordersIncomplete ? "收益已获取 · 明细不完整" : "已获取"}
+                          {status === "failed"
+                            ? "查询失败"
+                            : income?.ordersIncomplete
+                              ? "收益已获取 · 明细不完整"
+                              : "已获取"}
                         </span>
-                        {status === "failed" && <span className={styles.failureReason}>{failureById.get(resource.id) ?? "未返回该资源数据，请重试"}</span>}
+                        {status === "failed" && (
+                          <span className={styles.failureReason}>
+                            {failureById.get(resource.id) ?? "未返回该资源数据，请重试"}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td>
@@ -391,7 +418,8 @@ export function RealtimeView({ resources, refreshVersion }: { resources: Resourc
               {(incompleteResources.length > 0 || unknownCurrencyCount > 0) && (
                 <p className={styles.note}>
                   {unknownCurrencyCount > 0 && `${unknownCurrencyCount} 条订单未提供标价币种，已保留并标注。`}
-                  {incompleteResources.length > 0 && `${incompleteResources.length} 个资源的订单明细未完整返回或无法识别。`}
+                  {incompleteResources.length > 0 &&
+                    `${incompleteResources.length} 个资源的订单明细未完整返回或无法识别。`}
                   收益汇总仍使用平台总额。
                 </p>
               )}

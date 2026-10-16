@@ -10,10 +10,10 @@ import {
   type Resource,
   trackingSeries,
 } from "../data";
-import { QueryState, useRefresh } from "../QueryState";
+import { QuerySkeleton, QueryState, useRefresh } from "../QueryState";
 import { useAnalyticsQuery } from "../useAnalyticsQuery";
 import { DataTable } from "../widgets/DataTable";
-import { InlineSelect } from "../widgets/InlineSelect";
+import { SearchableSelect } from "../widgets/SearchableSelect";
 import { StatStrip } from "../widgets/StatStrip";
 import { TrendChart } from "../widgets/TrendChart";
 import { dayRangeOptions, rangeText } from "./options";
@@ -55,11 +55,13 @@ export function ModuleView({ resources, refreshVersion }: { resources: Resource[
 
   /** Compare daily averages without estimating missing peer fields */
   const averages = (id: Metric) => {
-    const total = aggregate(records, id);
-    const peer = aggregate(peers, id);
+    const ownRows = records.filter((row) => row[id] !== null);
+    const peerRows = peers.filter((row) => row[id] !== null);
+    const total = aggregate(ownRows, id);
+    const peer = aggregate(peerRows, id);
     return {
-      value: total === null ? null : total / (id === "rating" ? 1 : records.length),
-      peer: peer === null ? null : peer / (id === "rating" ? 1 : records.length),
+      value: total === null ? null : total / (id === "rating" ? 1 : ownRows.length),
+      peer: peer === null ? null : peer / (id === "rating" ? 1 : peerRows.length),
     };
   };
 
@@ -67,7 +69,7 @@ export function ModuleView({ resources, refreshVersion }: { resources: Resource[
     <>
       <Panel className={styles.filters} aria-label="模组分析筛选">
         <div className={styles.filterRow}>
-          <InlineSelect
+          <SearchableSelect
             label="模组"
             value={resource?.id ?? ""}
             options={resources.map((item) => ({ value: item.id, label: item.name }))}
@@ -82,7 +84,8 @@ export function ModuleView({ resources, refreshVersion }: { resources: Resource[
         </div>
       </Panel>
       <QueryState query={result} />
-      {result.data !== null && !result.error && (
+      <QuerySkeleton loading={result.loading && result.data === null} />
+      {result.data !== null && (
         <>
           <StatStrip
             items={moduleMetrics.map((id) => {
@@ -142,7 +145,7 @@ export function ModuleView({ resources, refreshVersion }: { resources: Resource[
                 );
               })}
             />
-            <span className={styles.muted}>“—”表示平台未提供或无法比较。</span>
+            <span className={styles.muted}>按有该指标的日期计算日均，缺失值不计为 0；“—”表示未提供或无法比较。</span>
           </Panel>
         </>
       )}

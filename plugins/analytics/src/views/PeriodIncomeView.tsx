@@ -18,7 +18,7 @@ import {
   sumAllocatedIncome,
   summarizePeriodIncome,
 } from "../period-income";
-import { QueryState, useRefresh } from "../QueryState";
+import { QuerySkeleton, QueryState, useRefresh } from "../QueryState";
 import { useAnalyticsQuery } from "../useAnalyticsQuery";
 import { DataTable, TableNote } from "../widgets/DataTable";
 import { InlineSelect } from "../widgets/InlineSelect";
@@ -33,9 +33,16 @@ import styles from "./PeriodIncomeView.module.css";
 const PAGE_SIZE = 10;
 const metricOptions = incomeMetrics.map(({ id, label }) => ({ value: id, label }));
 
-/** Switch platform before selecting resources so neither selections nor results can cross platforms */
+/** Keep each visited platform's filters mounted while preserving separate resource and query scopes */
 export function PeriodIncomeView({ refreshVersion }: { refreshVersion: number }) {
   const [platform, setPlatform] = useState<IncomePlatform>("pe");
+  const [visited, setVisited] = useState<IncomePlatform[]>(["pe"]);
+  const [versions, setVersions] = useState({ pe: refreshVersion, pc: refreshVersion });
+  const [previous, setPrevious] = useState(refreshVersion);
+  if (previous !== refreshVersion) {
+    setPrevious(refreshVersion);
+    setVersions((old) => ({ ...old, [platform]: refreshVersion }));
+  }
   return (
     <>
       <Panel className={styles.filters} aria-label="周期收益平台">
@@ -46,11 +53,18 @@ export function PeriodIncomeView({ refreshVersion }: { refreshVersion: number })
             { value: "pe", label: "PE · 手游" },
             { value: "pc", label: "PC · 电脑版" },
           ]}
-          onChange={setPlatform}
+          onChange={(next) => {
+            setPlatform(next);
+            setVisited((old) => (old.includes(next) ? old : [...old, next]));
+          }}
         />
         <span className={styles.muted}>各平台独立查询和统计</span>
       </Panel>
-      <PlatformPeriodIncome key={platform} platform={platform} refreshVersion={refreshVersion} />
+      {visited.map((item) => (
+        <div key={item} hidden={platform !== item} className={styles.platformContent}>
+          <PlatformPeriodIncome platform={item} refreshVersion={versions[item]} />
+        </div>
+      ))}
     </>
   );
 }
@@ -62,9 +76,9 @@ function PlatformPeriodIncome({ platform, refreshVersion }: { platform: IncomePl
   const resources = workResources(works.data ?? [], platform);
   return (
     <>
-      <QueryState query={works} />
+      <QueryState query={works} label="资源列表" />
+      <QuerySkeleton loading={works.loading && works.data === null} />
       {works.data &&
-        !works.error &&
         (resources.length ? (
           <PeriodIncomeScope platform={platform} resources={resources} refreshVersion={refreshVersion} />
         ) : (
@@ -87,15 +101,10 @@ function PeriodIncomeScope({
   platform: IncomePlatform;
 }) {
   const today = todayKey();
-  const [draftOffset, setDraftOffset] = useState(0);
-  const [draftResource, setDraftResource] = useState("all");
-  const [query, setQuery] = useState({ offset: 0, resourceId: "all", version: 0 });
-  const cycle = incomeCycle(query.offset, today);
-  const draftCycle = incomeCycle(draftOffset, today);
-  const selectedResources = resources.filter(
-    (resource) => query.resourceId === "all" || resource.id === query.resourceId,
-  );
-  const changed = draftOffset !== query.offset || draftResource !== query.resourceId;
+  const [offset, setOffset] = useState(0);
+  const [resourceId, setResourceId] = useState("all");
+  const cycle = incomeCycle(offset, today);
+  const selectedResources = resources.filter((resource) => resourceId === "all" || resource.id === resourceId);
   const cycleOptions = Array.from({ length: 12 }, (_, index) => {
     const item = incomeCycle(-index, today);
     return { value: String(-index), label: `${item.startDate} — ${item.endDate}${index === 0 ? "（当前周期）" : ""}` };
@@ -109,20 +118,20 @@ function PeriodIncomeScope({
           <span className={styles.muted}>北京时间 · 不含当天未完结数据</span>
         </div>
         <div className={styles.controls}>
-          <Button size="sm" disabled={draftOffset === -11} onClick={() => setDraftOffset((value) => value - 1)}>
+          <Button size="sm" disabled={offset === -11} onClick={() => setOffset((value) => value - 1)}>
             上一周期
           </Button>
           <InlineSelect
             label="收益周期"
-            value={String(draftOffset)}
+            value={String(offset)}
             options={cycleOptions}
-            onChange={(value) => setDraftOffset(Number(value))}
+            onChange={(value) => setOffset(Number(value))}
           />
-          <Button size="sm" disabled={draftOffset === 0} onClick={() => setDraftOffset((value) => value + 1)}>
+          <Button size="sm" disabled={offset === 0} onClick={() => setOffset((value) => value + 1)}>
             下一周期
           </Button>
-          {draftOffset !== 0 && (
-            <TextButton tone="subtle" onClick={() => setDraftOffset(0)}>
+          {offset !== 0 && (
+            <TextButton tone="subtle" onClick={() => setOffset(0)}>
               回到当前周期
             </TextButton>
           )}
@@ -130,43 +139,25 @@ function PeriodIncomeScope({
         <div className={styles.controls}>
           <SearchableSelect
             label="统计资源"
-            value={draftResource}
+            value={resourceId}
             options={[
               { value: "all", label: `全部 ${resources.length} 个资源` },
               ...resources.map((resource) => ({ value: resource.id, label: resource.name })),
             ]}
-            onChange={setDraftResource}
+            onChange={setResourceId}
           />
           <span className={styles.muted} role="status">
-            {changed
-              ? "筛选已修改，点击查询收益应用"
-              : draftCycle.queryEnd
-                ? `数据统计至 ${draftCycle.queryEnd}`
-                : "本周期刚开始，尚无完整日数据"}
+            {cycle.queryEnd ? `数据统计至 ${cycle.queryEnd} · 选择后自动更新` : "本周期刚开始，尚无完整日数据"}
           </span>
-          <Button
-            size="sm"
-            variant="primary"
-            onClick={() =>
-              setQuery({
-                offset: draftOffset,
-                resourceId: draftResource,
-                version: changed ? query.version : query.version + 1,
-              })
-            }
-          >
-            查询收益
-          </Button>
         </div>
       </Panel>
       {cycle.queryEnd && selectedResources.length > 0 ? (
         <PeriodIncomeResults
-          key={cycle.startDate}
           platform={platform}
-          selectedId={query.resourceId}
+          selectedId={resourceId}
           resources={resources}
           cycle={cycle}
-          refreshVersion={refreshVersion + query.version}
+          refreshVersion={refreshVersion}
         />
       ) : (
         <Panel title="周期收益" aria-label="周期收益空状态">
@@ -235,7 +226,8 @@ function PeriodIncomeResults({
   return (
     <>
       <QueryState query={result} />
-      {result.data !== null && !result.error && (
+      <QuerySkeleton loading={result.loading && result.data === null} />
+      {result.data !== null && (
         <>
           <div className={styles.heading}>
             <strong>

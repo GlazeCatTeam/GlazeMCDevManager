@@ -1,4 +1,6 @@
 .page {
+  position: relative;
+  min-width: 0;
   max-width: 1120px;
   margin: 0 auto;
   padding: 36px 40px 48px;
@@ -16,9 +18,12 @@
   display: flex;
   gap: 8px;
   border-bottom: var(--g-border-width) solid var(--g-border-subtle);
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 .tab {
+  flex: none;
   height: 40px;
   margin-bottom: calc(-1 * var(--g-border-width));
   padding: 0 14px;
@@ -38,9 +43,31 @@
 }
 
 .workspace {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+.resourceStatus {
+  position: absolute;
+  top: 8px;
+  right: 40px;
+  left: 40px;
+}
+
+@media (max-width: 900px) {
+  .page {
+    padding: 24px 20px 36px;
+  }
+  .resourceStatus {
+    top: 0;
+    left: 20px;
+    right: 20px;
+  }
+  .tab {
+    padding-inline: 10px;
+  }
 }
 
 .workspace[hidden] {

@@ -1,4 +1,11 @@
-import { type AnalyticsRealtime, callHost, type HostQuery, type RpcResult, useSession } from "@glaze/plugin-sdk";
+import {
+  type AnalyticsRealtime,
+  callHost,
+  type HostQuery,
+  onHostEvent,
+  type RpcResult,
+  useSession,
+} from "@glaze/plugin-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { mergeRealtimeIncome } from "./realtime-income";
 
@@ -8,21 +15,40 @@ type QueryState = Omit<HostQuery<AnalyticsRealtime>, "reload"> & { key: string }
 export function useRealtimeIncome(date: string, resourceIds: string[]) {
   const { current } = useSession();
   const account = current?.id;
+  const [epoch, setEpoch] = useState(0);
+  const snapshots = useRef(new Map<string, AnalyticsRealtime>());
+  const busy = useRef(false);
   const idsKey = JSON.stringify(resourceIds);
-  const key = JSON.stringify([account, current?.lastLoginAt, date, idsKey]);
+  const key = JSON.stringify([account, current?.lastLoginAt, epoch, date, idsKey]);
   const [request, setRequest] = useState({ version: 0, key, ids: null as string[] | null });
   const [state, setState] = useState<QueryState>({ key, data: null, error: null, loading: true });
   const pending = useRef<{ key: string; promise: Promise<RpcResult<AnalyticsRealtime>> } | null>(null);
   const scope = useRef(key);
+
+  useEffect(
+    () =>
+      onHostEvent("cache.cleared", () => {
+        snapshots.current.clear();
+        setEpoch((value) => value + 1);
+      }),
+    [],
+  );
 
   useEffect(() => {
     let active = true;
     // Returning to an earlier date starts a full query, even if its last action was a retry
     const scopeChanged = scope.current !== key;
     scope.current = key;
-    const requestedIds: string[] = !scopeChanged && request.key === key && request.ids ? request.ids : JSON.parse(idsKey);
+    const requestedIds: string[] =
+      !scopeChanged && request.key === key && request.ids ? request.ids : JSON.parse(idsKey);
     const requestKey = JSON.stringify([key, request.version, requestedIds]);
-    setState((old) => ({ key, data: old.key === key ? old.data : null, loading: true, error: null }));
+    busy.current = true;
+    setState((old) => ({
+      key,
+      data: old.key === key ? old.data : (snapshots.current.get(key) ?? null),
+      loading: true,
+      error: null,
+    }));
     if (pending.current?.key !== requestKey) {
       pending.current = {
         key: requestKey,
@@ -36,22 +62,33 @@ export function useRealtimeIncome(date: string, resourceIds: string[]) {
     }
     void pending.current.promise.then((result) => {
       if (!active) return;
-      setState((old) => ({
+      busy.current = false;
+      const data = result.ok
+        ? mergeRealtimeIncome(snapshots.current.get(key) ?? null, result.value, requestedIds)
+        : result.error.kind === "session_expired"
+          ? null
+          : (snapshots.current.get(key) ?? null);
+      if (data) {
+        snapshots.current.delete(key);
+        snapshots.current.set(key, data);
+        while (snapshots.current.size > 4) snapshots.current.delete(snapshots.current.keys().next().value as string);
+      } else snapshots.current.delete(key);
+      setState({
         key,
         loading: false,
         error: result.ok ? null : result.error,
-        data: result.ok
-          ? mergeRealtimeIncome(old.key === key ? old.data : null, result.value, requestedIds)
-          : result.error.kind === "session_expired" ? null : old.key === key ? old.data : null,
-      }));
+        data,
+      });
     });
     return () => {
       active = false;
     };
   }, [key, idsKey, account, date, request]);
 
-  /** Full refresh supersedes an in-flight retry and keeps the current day visible */
+  /** Ignore repeat refreshes while a request is pending and keep the current day visible */
   const reload = useCallback(() => {
+    if (busy.current) return;
+    busy.current = true;
     setRequest((old) => ({ version: old.version + 1, key, ids: null }));
   }, [key]);
 
@@ -62,7 +99,7 @@ export function useRealtimeIncome(date: string, resourceIds: string[]) {
   };
 
   return {
-    ...(state.key === key ? state : { key, data: null, error: null, loading: true }),
+    ...(state.key === key ? state : { key, data: snapshots.current.get(key) ?? null, error: null, loading: true }),
     reload,
     retryFailures,
   };

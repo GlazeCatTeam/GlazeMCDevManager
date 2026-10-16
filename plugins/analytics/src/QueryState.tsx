@@ -1,5 +1,6 @@
-import { type HostQuery, Notice, TextButton } from "@glaze/plugin-sdk";
+import { type HostQuery, TextButton } from "@glaze/plugin-sdk";
 import { useEffect, useRef } from "react";
+import styles from "./QueryState.module.css";
 
 /** Refresh the active query without discarding its filters */
 export function useRefresh(reload: () => void, version: number): void {
@@ -12,21 +13,76 @@ export function useRefresh(reload: () => void, version: number): void {
   }, [reload, version]);
 }
 
-/** Loading and failure never masquerade as zero-valued platform data */
-export function QueryState({ query }: { query: Pick<HostQuery<unknown>, "loading" | "error" | "reload" | "data"> }) {
-  if (query.loading)
-    return <p role="status">{query.data !== null ? "正在更新平台数据，当前显示上次查询结果…" : "正在查询平台数据…"}</p>;
-  if (query.error)
-    return (
-      <Notice
-        action={
-          <TextButton tone="warning" onClick={query.reload}>
-            重试
-          </TextButton>
-        }
-      >
-        数据加载失败：{query.error.message}
-      </Notice>
-    );
-  return null;
+/** Reserve a quiet status row so refreshes never push the chart or filters down */
+export function QueryState({
+  query,
+  label = "数据",
+}: {
+  query: Pick<HostQuery<unknown>, "loading" | "error" | "reload" | "data">;
+  label?: string;
+}) {
+  const message = query.loading
+    ? query.data !== null
+      ? "正在后台更新，当前结果仍可查看"
+      : "正在查询平台数据…"
+    : query.error
+      ? `${label}加载失败：${query.error.message}${query.data !== null ? " · 已保留上次成功结果" : ""}`
+      : query.data !== null
+        ? "已更新 · 筛选自动生效"
+        : "";
+  return (
+    <div
+      className={`${styles.status} ${query.loading ? styles.busy : ""} ${query.error ? styles.failed : ""}`}
+      role="status"
+      aria-live="polite"
+    >
+      {message && <span className={styles.indicator} aria-hidden="true" />}
+      <span className={styles.message} title={message}>
+        {message}
+      </span>
+      {query.error && !query.loading && (
+        <TextButton tone="warning" onClick={query.reload}>
+          重试
+        </TextButton>
+      )}
+    </div>
+  );
+}
+
+/** Hold the content footprint on a cold query without presenting invented zero values */
+export function QuerySkeleton({
+  loading,
+  stats = true,
+  chart = true,
+}: {
+  loading: boolean;
+  stats?: boolean;
+  chart?: boolean;
+}) {
+  if (!loading) return null;
+  return (
+    <section className={styles.placeholder} aria-label="正在加载分析内容" aria-busy="true">
+      {stats && (
+        <div className={styles.stats} aria-hidden="true">
+          {[0, 1, 2].map((id) => (
+            <div key={id}>
+              <span className={styles.line} />
+              <span className={styles.line} />
+            </div>
+          ))}
+        </div>
+      )}
+      {chart && (
+        <div className={styles.chart} aria-hidden="true">
+          <span className={styles.line} />
+          <div className={styles.plot} />
+        </div>
+      )}
+      <div className={styles.table} aria-hidden="true">
+        {[0, 1, 2, 3, 4].map((id) => (
+          <span key={id} className={styles.line} />
+        ))}
+      </div>
+    </section>
+  );
 }

@@ -51,8 +51,10 @@ export class AnalyticsQueryCache {
             entry.value = result.value;
             entry.hasValue = true;
             entry.expires = this.now() + ttl;
-          } else {
+          } else if (result.error.kind === "session_expired" || !entry.hasValue) {
             this.entries.delete(key);
+          } else {
+            entry.expires = 0;
           }
         }
         return result;
@@ -61,7 +63,13 @@ export class AnalyticsQueryCache {
     return pending;
   }
 
-  /** Explicit refresh and account/session changes discard reusable results */
+  /** Revalidate in place so refreshes share pending work and retain the last successful result */
+  expire(key: string): void {
+    const entry = this.entries.get(key);
+    if (entry) entry.expires = 0;
+  }
+
+  /** Account/session changes and explicit cache clearing discard reusable results */
   invalidate(key?: string): void {
     if (key === undefined) this.entries.clear();
     else this.entries.delete(key);

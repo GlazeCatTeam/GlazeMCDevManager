@@ -61,6 +61,11 @@ export function SearchableSelect({ label, value, options, onChange }: InlineSele
       event.preventDefault();
       const option = visible[activeIndex];
       if (option) choose(option.value);
+    } else if (event.key === "Home" || event.key === "End") {
+      // Preserve normal caret navigation while typing; an empty search navigates the list
+      if (search) return;
+      event.preventDefault();
+      setActive(event.key === "Home" ? 0 : Math.max(0, visible.length - 1));
     }
   };
 

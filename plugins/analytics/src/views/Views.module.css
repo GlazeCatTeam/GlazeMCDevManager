@@ -35,7 +35,9 @@
   flex: none;
   gap: 16px;
   padding: 20px 24px;
-  overflow: auto;
+  overflow: visible;
+  position: relative;
+  z-index: 3;
 }
 
 .compactFilters {
@@ -50,6 +52,8 @@
   display: flex;
   align-items: center;
   gap: 14px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .filterLabel {
@@ -79,6 +83,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .tablePanel {
@@ -88,6 +93,23 @@
 }
 
 .resourcePanel {
-  height: 310px;
+  height: 420px;
   flex: none;
+}
+
+@media (max-width: 900px) {
+  .filters {
+    height: auto;
+    min-height: 128px;
+  }
+  .compactFilters {
+    height: auto;
+    min-height: 80px;
+  }
+  .dateRange {
+    white-space: normal;
+  }
+  .trackingFilters {
+    padding: 16px;
+  }
 }

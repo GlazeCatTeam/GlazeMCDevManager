@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type PointerEvent, useId, useState } from "react";
+import { type KeyboardEvent, type PointerEvent, useId, useLayoutEffect, useRef, useState } from "react";
 import { formatValue, type Metric, type TrendSeries } from "../data";
 import { InlineSelect } from "./InlineSelect";
 import { Swatch } from "./Swatch";
@@ -22,8 +22,6 @@ const CHART_WIDTH = 900;
 const CHART_HEIGHT = 250;
 const LEFT = 64;
 const TOP = 16;
-const PLOT_WIDTH = 816;
-const PLOT_HEIGHT = 194;
 const GRID_STEPS = [0, 1, 2, 3, 4];
 
 /** Short axis tick, e.g. "1.2万"; exact values stay in the point tooltips */
@@ -44,39 +42,60 @@ function axisCeiling(series: ChartSeries[], metric: Metric): number {
 }
 
 /** SVG path of one line series, broken where values are missing */
-function linePath(values: (number | null)[], xStep: number, ceiling: number): string {
+function linePath(values: (number | null)[], xStep: number, ceiling: number, plotHeight: number): string {
   return values
     .map((value, index) => {
       if (value === null) {
         return "";
       }
       const command = index === 0 || values[index - 1] === null ? "M" : "L";
-      return `${command}${LEFT + index * xStep},${TOP + PLOT_HEIGHT * (1 - value / ceiling)}`;
+      return `${command}${LEFT + index * xStep},${TOP + plotHeight * (1 - value / ceiling)}`;
     })
     .join(" ");
 }
 
 /** Inspect all series at the nearest date using the pointer, keyboard or date picker */
-export function TrendChart({ labels, series, metric, unit, kind = "line" }: TrendChartProps) {
+export function TrendChart({ labels, series: allSeries, metric, unit, kind = "line" }: TrendChartProps) {
   const titleId = useId();
   const tooltipId = useId();
   const [activeDate, setActiveDate] = useState("");
   const [hover, setHover] = useState<{ date: string; left: number } | null>(null);
+  const [hidden, setHidden] = useState<string[]>([]);
+  const plot = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ width: CHART_WIDTH, height: CHART_HEIGHT });
+  const hasData = allSeries.some((item) => item.values.some((value) => value !== null));
+  useLayoutEffect(() => {
+    if (!plot.current || !hasData) return;
+    // Match SVG units to layout pixels so legends never squeeze or stretch axis text
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry || entry.contentRect.width === 0 || entry.contentRect.height === 0) return;
+      const width = Math.round(entry.contentRect.width);
+      const height = Math.round(entry.contentRect.height);
+      setSize((old) => (old.width === width && old.height === height ? old : { width, height }));
+    });
+    observer.observe(plot.current);
+    return () => observer.disconnect();
+  }, [hasData]);
+  const plotWidth = Math.max(1, size.width - LEFT - 20);
+  const plotHeight = Math.max(1, size.height - TOP - 40);
+  // Keep at least one current series visible when filters replace the previous selection
+  const visible = allSeries.filter((item) => !hidden.includes(item.id));
+  const series = visible.length ? visible : allSeries;
 
   if (series.length === 0) {
-    return <div className={styles.empty}>请选择至少一个资源，再查询数据</div>;
+    return <div className={styles.empty}>选择至少一个资源后自动展示趋势</div>;
   }
-  if (series.every((item) => item.values.every((value) => value === null))) {
+  if (!hasData) {
     return <div className={styles.empty}>平台未返回当前范围的该指标数据</div>;
   }
 
   const ceiling = axisCeiling(series, metric);
   const labelStep = Math.max(1, Math.ceil(labels.length / 7));
   const activeIndex = labels.indexOf(hover?.date ?? activeDate);
-  const xStep = PLOT_WIDTH / Math.max(labels.length - 1, 1);
-  const barGroupWidth = PLOT_WIDTH / Math.max(labels.length, 1);
+  const xStep = plotWidth / Math.max(labels.length - 1, 1);
+  const barGroupWidth = plotWidth / Math.max(labels.length, 1);
   const xOf = (index: number) => (kind === "bar" ? LEFT + barGroupWidth * (index + 0.5) : LEFT + index * xStep);
-  const yOf = (value: number) => TOP + PLOT_HEIGHT * (1 - value / ceiling);
+  const yOf = (value: number) => TOP + plotHeight * (1 - value / ceiling);
 
   /** Convert the pointer through the SVG transform, including responsive letterboxing */
   const inspectPointer = (event: PointerEvent<SVGSVGElement>) => {
@@ -87,7 +106,7 @@ export function TrendChart({ labels, series, metric, unit, kind = "line" }: Tren
     point.x = event.clientX;
     point.y = event.clientY;
     const local = point.matrixTransform(matrix.inverse());
-    if (local.x < LEFT || local.x > LEFT + PLOT_WIDTH || local.y < TOP || local.y > TOP + PLOT_HEIGHT) {
+    if (local.x < LEFT || local.x > LEFT + plotWidth || local.y < TOP || local.y > TOP + plotHeight) {
       setHover(null);
       return;
     }
@@ -105,7 +124,7 @@ export function TrendChart({ labels, series, metric, unit, kind = "line" }: Tren
     const width = Math.min(320, bounds.width - 16);
     const x = event.clientX - bounds.left;
     const left = Math.max(8, Math.min(bounds.width - width - 8, x > bounds.width / 2 ? x - width - 12 : x + 12));
-    setHover({ date, left });
+    setHover((old) => (old?.date === date ? old : { date, left }));
   };
 
   /** Arrow keys inspect adjacent dates; Escape clears the pinned readout */
@@ -132,6 +151,7 @@ export function TrendChart({ labels, series, metric, unit, kind = "line" }: Tren
   return (
     <div className={styles.chart}>
       <div
+        ref={plot}
         className={styles.plot}
         role="slider"
         aria-label="趋势图数据，使用左右方向键查看日期，Esc 关闭提示"
@@ -145,7 +165,7 @@ export function TrendChart({ labels, series, metric, unit, kind = "line" }: Tren
         onPointerLeave={() => setHover(null)}
       >
         <svg
-          viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
+          viewBox={`0 0 ${size.width} ${size.height}`}
           role="img"
           aria-labelledby={titleId}
           onPointerMove={inspectPointer}
@@ -155,10 +175,10 @@ export function TrendChart({ labels, series, metric, unit, kind = "line" }: Tren
             {`${unit}趋势：${labels[0]} 至 ${labels.at(-1)}，${series.map((item) => item.label).join("、")}`}
           </title>
           {GRID_STEPS.map((step) => {
-            const y = TOP + PLOT_HEIGHT - (step / 4) * PLOT_HEIGHT;
+            const y = TOP + plotHeight - (step / 4) * plotHeight;
             return (
               <g key={step}>
-                <line x1={LEFT} x2={LEFT + PLOT_WIDTH} y1={y} y2={y} className={styles.gridLine} />
+                <line x1={LEFT} x2={LEFT + plotWidth} y1={y} y2={y} className={styles.gridLine} />
                 <text x={LEFT - 12} y={y + 4} textAnchor="end" className={styles.axisLabel}>
                   {axisLabel((step / 4) * ceiling)}
                 </text>
@@ -167,8 +187,8 @@ export function TrendChart({ labels, series, metric, unit, kind = "line" }: Tren
           })}
           {labels.map((label, index) =>
             index % labelStep === 0 || index === labels.length - 1 ? (
-              <text key={label} x={xOf(index)} y={CHART_HEIGHT - 12} textAnchor="middle" className={styles.axisLabel}>
-                {label.slice(5).replace("-", "/")}
+              <text key={label} x={xOf(index)} y={size.height - 12} textAnchor="middle" className={styles.axisLabel}>
+                {label.length === 7 ? `${label.slice(2, 4)}/${label.slice(5)}` : label.slice(5).replace("-", "/")}
               </text>
             ) : null,
           )}
@@ -177,7 +197,7 @@ export function TrendChart({ labels, series, metric, unit, kind = "line" }: Tren
               x1={xOf(activeIndex)}
               x2={xOf(activeIndex)}
               y1={TOP}
-              y2={TOP + PLOT_HEIGHT}
+              y2={TOP + plotHeight}
               className={styles.crosshair}
             />
           )}
@@ -189,7 +209,7 @@ export function TrendChart({ labels, series, metric, unit, kind = "line" }: Tren
                   stroke={item.color}
                   strokeWidth={2.5}
                   strokeDasharray={item.dashed ? "6 5" : undefined}
-                  d={linePath(item.values, xStep, ceiling)}
+                  d={linePath(item.values, xStep, ceiling, plotHeight)}
                 />
               )}
               {item.values.map((value, index) => {
@@ -205,7 +225,7 @@ export function TrendChart({ labels, series, metric, unit, kind = "line" }: Tren
                       x={LEFT + index * barGroupWidth + barGroupWidth * 0.1 + barWidth * seriesIndex}
                       y={yOf(value)}
                       width={Math.max(1, barWidth - 1)}
-                      height={TOP + PLOT_HEIGHT - yOf(value)}
+                      height={TOP + plotHeight - yOf(value)}
                       fill={item.color}
                       opacity={selected ? 1 : 0.8}
                     />
@@ -268,18 +288,29 @@ export function TrendChart({ labels, series, metric, unit, kind = "line" }: Tren
           }}
         />
       </div>
-      <div className={styles.legend} aria-live="polite">
-        {series.map((item) => {
+      <fieldset className={styles.legend} aria-label="图表系列，点击切换显示">
+        {allSeries.map((item) => {
           const value = activeIndex >= 0 ? item.values[activeIndex] : undefined;
+          const shown = series.some((entry) => entry.id === item.id);
           return (
-            <span key={item.id} className={styles.legendItem}>
+            <button
+              key={item.id}
+              type="button"
+              className={`${styles.legendItem} ${shown ? "" : styles.hiddenSeries}`}
+              aria-pressed={shown}
+              title={`${shown ? "隐藏" : "显示"}${item.label}`}
+              disabled={shown && series.length === 1}
+              onClick={() =>
+                setHidden(shown ? [...(visible.length ? hidden : []), item.id] : hidden.filter((id) => id !== item.id))
+              }
+            >
               <Swatch color={item.color} dashed={item.dashed} />
               {item.label}
               {value !== undefined && `：${value === null ? "未提供" : formatValue(value, metric)}`}
-            </span>
+            </button>
           );
         })}
-      </div>
+      </fieldset>
     </div>
   );
 }

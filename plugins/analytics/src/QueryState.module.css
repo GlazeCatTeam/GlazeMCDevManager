@@ -1,0 +1,95 @@
+.status {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--g-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.message {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.indicator {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  background: var(--g-tab-indicator);
+}
+
+.busy .indicator {
+  animation: breathe 1.4s ease-in-out infinite;
+}
+
+.failed .indicator {
+  background: var(--g-status-warning);
+}
+
+.placeholder {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.stats,
+.chart,
+.table {
+  border: var(--g-border-width) solid var(--g-panel-borderColor);
+  border-radius: var(--g-radius-panel);
+  background: var(--g-surface-panel);
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.stats {
+  height: 132px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.chart {
+  height: 394px;
+}
+
+.table {
+  height: 280px;
+}
+
+.line {
+  display: block;
+  height: 12px;
+  width: 60%;
+  margin-bottom: 24px;
+  background: var(--g-border-subtle);
+}
+
+.plot {
+  height: 260px;
+  margin-top: 24px;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 63px,
+    var(--g-border-subtle) 64px,
+    transparent 65px
+  );
+}
+
+@keyframes breathe {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .busy .indicator {
+    animation: none;
+  }
+}

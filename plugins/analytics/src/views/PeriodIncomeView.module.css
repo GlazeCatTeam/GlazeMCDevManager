@@ -65,3 +65,13 @@
   white-space: normal;
   overflow-wrap: anywhere;
 }
+.platformContent {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.platformContent[hidden] {
+  display: none;
+}

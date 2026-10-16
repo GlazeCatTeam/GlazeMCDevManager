@@ -907,6 +907,24 @@ test("cache keeps failures out, bounds memory, and realtime always revalidates",
   assert.equal(cache.fresh("realtime"), false);
 });
 
+test("refresh retains successful snapshots through network failure but clears expired sessions", async () => {
+  const cache = new AnalyticsQueryCache();
+  await cache.read("a", 1000, async () => ({ ok: true, value: 42 }));
+  cache.expire("a");
+  assert.equal(cache.peek("a"), 42);
+  assert.equal(cache.fresh("a"), false);
+  const pending = Promise.withResolvers<{ ok: false; error: { kind: string; message: string } }>();
+  const refresh = cache.read("a", 1000, () => pending.promise);
+  cache.expire("a");
+  assert.equal(cache.read("a", 1000, () => pending.promise), refresh);
+  pending.resolve({ ok: false, error: { kind: "network", message: "offline" } });
+  await refresh;
+  assert.equal(cache.peek("a"), 42);
+  assert.equal(cache.fresh("a"), false);
+  await cache.read("a", 1000, async () => ({ ok: false, error: { kind: "session_expired", message: "expired" } }));
+  assert.equal(cache.peek("a"), null);
+});
+
 test("request pool refills free slots without waiting for its slowest neighbor", async () => {
   const gates = Array.from({ length: 7 }, () => Promise.withResolvers<Result<number>>());
   const started: number[] = [];

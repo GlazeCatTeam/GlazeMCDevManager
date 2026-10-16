@@ -1,8 +1,8 @@
 import { Button, PageHeader, useSession } from "@glaze/plugin-sdk";
-import { type KeyboardEvent, type ReactNode, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useMemo, useState } from "react";
 import styles from "./AnalyticsPage.module.css";
 import { workResources } from "./data";
-import { QueryState } from "./QueryState";
+import { QuerySkeleton, QueryState } from "./QueryState";
 import { useAnalyticsQuery } from "./useAnalyticsQuery";
 import { ModuleView } from "./views/ModuleView";
 import { PeriodIncomeView } from "./views/PeriodIncomeView";
@@ -34,7 +34,7 @@ function targetIndex(key: string, index: number): number | undefined {
 export function AnalyticsPage() {
   const { current } = useSession();
   if (!current) return <p>请先登录开发者账号</p>;
-  return <AccountAnalytics key={current.id} />;
+  return <AccountAnalytics key={`${current.id}:${current.lastLoginAt}`} />;
 }
 
 /** Keep resource selections and responses scoped to the current account */
@@ -49,7 +49,7 @@ function AccountAnalytics() {
     realtime: 0,
   });
   const works = useAnalyticsQuery("works.list");
-  const resources = workResources(works.data ?? []);
+  const resources = useMemo(() => workResources(works.data ?? []), [works.data]);
 
   /** Keep visited tabs and their filters; realtime income refreshes whenever revisited */
   const selectTab = (next: Tab) => {
@@ -63,7 +63,7 @@ function AccountAnalytics() {
 
   /** Reload the actual resource list and the active analysis */
   const refresh = () => {
-    works.reload();
+    if (tab !== "period" && tab !== "summary") works.reload();
     setRefreshVersions((current) => ({ ...current, [tab]: current[tab] + 1 }));
   };
 
@@ -75,7 +75,7 @@ function AccountAnalytics() {
     }
     event.preventDefault();
     selectTab(next.id);
-    document.getElementById(`analytics-tab-${next.id}`)?.focus();
+    document.getElementById(`analytics-tab-${next.id}`)?.focus({ preventScroll: true });
   };
 
   // Mount on first visit, then reuse the loaded result until refresh or a filter change
@@ -98,8 +98,12 @@ function AccountAnalytics() {
         }
         actions={<Button onClick={refresh}>刷新</Button>}
       />
-      {tab !== "period" && <QueryState query={works} />}
-      {tab !== "period" && !works.loading && !works.error && resources.length === 0 && (
+      {tab !== "period" && tab !== "summary" && (works.loading || works.error) && (
+        <div className={styles.resourceStatus}>
+          <QueryState query={works} label="资源列表" />
+        </div>
+      )}
+      {tab !== "period" && tab !== "summary" && !works.loading && !works.error && resources.length === 0 && (
         <p>当前账号暂无可分析的手游资源；仅展示曾上架且不是前置模组的作品</p>
       )}
       <div className={styles.tabs} role="tablist" aria-label="分析功能">
@@ -129,6 +133,13 @@ function AccountAnalytics() {
           hidden={tab !== item.id}
           className={styles.workspace}
         >
+          {tab === item.id && item.id !== "summary" && item.id !== "period" && (
+            <QuerySkeleton
+              loading={works.loading && works.data === null}
+              stats={item.id !== "tracking"}
+              chart={item.id !== "realtime"}
+            />
+          )}
           {visited.includes(item.id) &&
             (item.id === "summary" || item.id === "period" || (works.data && resources.length > 0)) &&
             views[item.id]}
