@@ -1,5 +1,6 @@
 {
   "name": "@glaze/storage",
+  "license": "Apache-2.0",
   "version": "0.0.0",
   "private": true,
   "description": "本地存储：SQLite、迁移、凭据加密",

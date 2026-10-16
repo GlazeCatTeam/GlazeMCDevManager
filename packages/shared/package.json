@@ -1,5 +1,6 @@
 {
   "name": "@glaze/shared",
+  "license": "Apache-2.0",
   "version": "0.0.0",
   "private": true,
   "description": "共享基础类型：Result、错误、ID、工具函数，无运行时副作用",

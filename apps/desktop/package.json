@@ -1,5 +1,6 @@
 {
   "name": "@glaze/desktop",
+  "license": "Apache-2.0",
   "version": "0.0.0",
   "private": true,
   "description": "Electron 桌面应用：主进程、preload、渲染进程外壳",

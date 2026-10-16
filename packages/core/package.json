@@ -1,5 +1,6 @@
 {
   "name": "@glaze/core",
+  "license": "Apache-2.0",
   "version": "0.0.0",
   "private": true,
   "description": "宿主内核：插件注册表、插件进程管理、权限代理、事件总线",

@@ -1,5 +1,6 @@
 {
   "name": "@glaze/netease",
+  "license": "Apache-2.0",
   "version": "0.0.0",
   "private": true,
   "description": "网易平台适配：登录协议、端点目录、请求管线、会话管理",
