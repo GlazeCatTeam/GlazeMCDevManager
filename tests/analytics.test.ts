@@ -9,11 +9,11 @@ import {
   readAnalyticsRecords,
   readRealtimeIncome,
 } from "../packages/netease/src/endpoints/analytics";
-import { getAnalyticsPeriodIncome } from "../packages/netease/src/income/period";
 import { runAnalyticsPool } from "../packages/netease/src/endpoints/analytics-pool";
 import { listWorks } from "../packages/netease/src/endpoints/works";
 import { describeError, fail, ok, type Result } from "../packages/netease/src/errors";
 import { getMcDevData } from "../packages/netease/src/http/client";
+import { getAnalyticsPeriodIncome } from "../packages/netease/src/income/period";
 import {
   aggregate,
   daysInRange,
@@ -441,14 +441,20 @@ test("realtime uses Beijing day boundaries and reports failed resources separate
 
 test("blank or missing order currencies preserve all platform totals and order rows", () => {
   const orders = ["", null, undefined, "diamond", "point"].map((price_type, index) => ({
-    app_orderid: `order-${index}`, ship_time: "2026-10-16T02:00:00Z", price: 100, price_type,
+    app_orderid: `order-${index}`,
+    ship_time: "2026-10-16T02:00:00Z",
+    price: 100,
+    price_type,
   }));
   const result = readRealtimeIncome({ count: 5, total_diamonds: 450, total_points: 20, orders }, id);
   assert.ok(result.ok);
   assert.equal(result.value.diamonds, 450);
   assert.equal(result.value.emeralds, 20);
   assert.equal(result.value.purchases, 5);
-  assert.deepEqual(result.value.orders.map((order) => order.currency), ["unknown", "unknown", "unknown", "diamond", "point"]);
+  assert.deepEqual(
+    result.value.orders.map((order) => order.currency),
+    ["unknown", "unknown", "unknown", "diamond", "point"],
+  );
   assert.equal(result.value.ordersIncomplete, false);
 });
 
@@ -472,10 +478,21 @@ test("malformed order details are reported separately from authoritative income 
 
 test("targeted retries replace failures without double counting successful resources", () => {
   const resource = { resourceId: "1", diamonds: 100, emeralds: 20, purchases: 1, orders: [] };
-  const previous = { resources: [resource], failedResourceIds: ["2", "3"], failures: [{ resourceId: "2", kind: "timeout", message: "timeout" }] };
-  const incoming = { resources: [{ ...resource, resourceId: "2", diamonds: 250 }], failedResourceIds: ["3"], failures: [{ resourceId: "3", kind: "business", message: "503" }] };
+  const previous = {
+    resources: [resource],
+    failedResourceIds: ["2", "3"],
+    failures: [{ resourceId: "2", kind: "timeout", message: "timeout" }],
+  };
+  const incoming = {
+    resources: [{ ...resource, resourceId: "2", diamonds: 250 }],
+    failedResourceIds: ["3"],
+    failures: [{ resourceId: "3", kind: "business", message: "503" }],
+  };
   const merged = mergeRealtimeIncome(previous, incoming, ["2", "3"]);
-  assert.equal(merged.resources.reduce((sum, row) => sum + row.diamonds, 0), 350);
+  assert.equal(
+    merged.resources.reduce((sum, row) => sum + row.diamonds, 0),
+    350,
+  );
   assert.deepEqual(merged.failedResourceIds, ["3"]);
   assert.deepEqual(merged.failures, incoming.failures);
   assert.deepEqual(mergeRealtimeIncome(merged, incoming, ["2", "3"]), merged);
@@ -539,7 +556,18 @@ test("period estimate formatting preserves cents and distinguishes unknown from 
 
 /** Minimal paid PE ledger row with an explicit, validated cost reference */
 function costBill(month: string, cost = 340, status = "pay_success") {
-  return { _id: `bill-${month}-${status}`, platform: "pe", data_month: month, status, total_diamond: 1000, channel_ip_cost: cost, income: "10.00", tax: "0.00", tech_service_fee: 0, total_usage_price: 0 };
+  return {
+    _id: `bill-${month}-${status}`,
+    platform: "pe",
+    data_month: month,
+    status,
+    total_diamond: 1000,
+    channel_ip_cost: cost,
+    income: "10.00",
+    tax: "0.00",
+    tech_service_fee: 0,
+    total_usage_price: 0,
+  };
 }
 
 test("PE period estimates use month totals and only earlier paid cost references", async () => {
@@ -554,16 +582,26 @@ test("PE period estimates use month totals and only earlier paid cost references
     if (url.pathname === "/data_analysis/month_detail/") {
       assert.equal(url.searchParams.get("start_date"), "20261001");
       assert.equal(url.searchParams.get("end_date"), "20261031");
-      return response({ data: [
-        { iid: id, monthid: "202610", total_diamond: 200000 },
-        { iid: id, monthid: "202610", total_diamond: 100000 },
-        { iid: "2", monthid: "202610", total_diamond: 100000 },
-        { iid: "3", monthid: "202610", total_diamond: 9000000 },
-      ] });
+      return response({
+        data: [
+          { iid: id, monthid: "202610", total_diamond: 200000 },
+          { iid: id, monthid: "202610", total_diamond: 100000 },
+          { iid: "2", monthid: "202610", total_diamond: 100000 },
+          { iid: "3", monthid: "202610", total_diamond: 9000000 },
+        ],
+      });
     }
     assert.equal(url.pathname, "/incomes");
     assert.equal(url.searchParams.get("platform"), "pe");
-    return response({ count: 4, incomes: [costBill("2026-10", 900), costBill("2026-11", 100), costBill("2026-09", 100, "init"), costBill("2026-09")] });
+    return response({
+      count: 4,
+      incomes: [
+        costBill("2026-10", 900),
+        costBill("2026-11", 100),
+        costBill("2026-09", 100, "init"),
+        costBill("2026-09"),
+      ],
+    });
   };
   const result = await getAnalyticsPeriodIncome(session, { ...range, resourceIds: [id, "2"] });
   assert.ok(result.ok && result.value.estimate);
@@ -585,7 +623,12 @@ test("PC period queries use comp resources and sales without applying PE payout 
     const url = new URL(String(input));
     paths.push(url.pathname);
     if (url.pathname === "/items/categories/comp/") {
-      return new Response(JSON.stringify({ status: 200, data: { item: [{ item_id: id, item_name: "PC work", create_time: "2026-01-01", online_time: "2026-01-02" }] } }));
+      return new Response(
+        JSON.stringify({
+          status: 200,
+          data: { item: [{ item_id: id, item_name: "PC work", create_time: "2026-01-01", online_time: "2026-01-02" }] },
+        }),
+      );
     }
     assert.equal(url.searchParams.get("platform"), "pc");
     assert.equal(url.searchParams.get("category"), "comp");
@@ -602,7 +645,9 @@ test("PC period queries use comp resources and sales without applying PE payout 
 });
 
 test("invalid platforms cannot fall back silently to PE data", async () => {
-  globalThis.fetch = async () => { throw new Error("Invalid platforms must not reach the network"); };
+  globalThis.fetch = async () => {
+    throw new Error("Invalid platforms must not reach the network");
+  };
   const platform = "comp" as "pc";
   assert.equal((await listWorks(session, platform)).ok, false);
   assert.equal((await getAnalyticsPeriodIncome(session, { ...range, resourceIds: [id], platform })).ok, false);
@@ -610,8 +655,13 @@ test("invalid platforms cannot fall back silently to PE data", async () => {
 
 test("missing monthly inputs keep daily charts while zero monthly sales remains zero", async () => {
   for (const data of [[], [{ iid: id, monthid: "202610" }], [{ iid: id, monthid: "202610", total_diamond: -1 }]]) {
-    globalThis.fetch = async (input) => new URL(String(input)).pathname === "/data_analysis/day_detail/" ? response({ data: [row] }) : response({ data });
-    const result = await getAnalyticsPeriodIncome(session, { ...range, resourceIds: [id] }, new Date("2026-11-01T00:00:00+08:00"));
+    globalThis.fetch = async (input) =>
+      new URL(String(input)).pathname === "/data_analysis/day_detail/" ? response({ data: [row] }) : response({ data });
+    const result = await getAnalyticsPeriodIncome(
+      session,
+      { ...range, resourceIds: [id] },
+      new Date("2026-11-01T00:00:00+08:00"),
+    );
     assert.ok(result.ok);
     assert.equal(result.value.records.length, 1);
     assert.equal(result.value.estimate, null);
@@ -620,14 +670,24 @@ test("missing monthly inputs keep daily charts while zero monthly sales remains 
   globalThis.fetch = async (input) => {
     const path = new URL(String(input)).pathname;
     if (path === "/incomes") return response({ count: 0, incomes: [] });
-    return response({ data: path.includes("month_detail") ? [{ iid: id, monthid: "202610", total_diamond: 0 }] : [row] });
+    return response({
+      data: path.includes("month_detail") ? [{ iid: id, monthid: "202610", total_diamond: 0 }] : [row],
+    });
   };
-  const zero = await getAnalyticsPeriodIncome(session, { ...range, resourceIds: [id] }, new Date("2026-11-01T00:00:00+08:00"));
+  const zero = await getAnalyticsPeriodIncome(
+    session,
+    { ...range, resourceIds: [id] },
+    new Date("2026-11-01T00:00:00+08:00"),
+  );
   assert.ok(zero.ok);
   assert.equal(zero.value.estimate?.totalYuan, 0);
   assert.match(zero.value.estimate?.warnings?.[0] ?? "", /30%/);
   globalThis.fetch = async () => response(null, "no_login");
-  const expired = await getAnalyticsPeriodIncome(session, { ...range, resourceIds: [id] }, new Date("2026-11-01T00:00:00+08:00"));
+  const expired = await getAnalyticsPeriodIncome(
+    session,
+    { ...range, resourceIds: [id] },
+    new Date("2026-11-01T00:00:00+08:00"),
+  );
   assert.ok(!expired.ok && expired.error.kind === "session_expired");
 });
 
@@ -635,13 +695,19 @@ test("cycle month labels and account-wide scope include historical resources", a
   globalThis.fetch = async (input) => {
     const url = new URL(String(input));
     if (url.pathname.includes("day_detail")) return response({ data: [row] });
-    if (url.pathname === "/incomes") return response({ count: 1, incomes: [{ ...costBill("2026-09"), channel_ip_cost: undefined }] });
+    if (url.pathname === "/incomes")
+      return response({ count: 1, incomes: [{ ...costBill("2026-09"), channel_ip_cost: undefined }] });
     if (url.pathname.startsWith("/incomes/")) return response(costBill("2026-09"));
     assert.equal(url.searchParams.get("start_date"), "20261101");
     assert.equal(url.searchParams.get("end_date"), "20261130");
     return response({ data: [{ iid: "999", monthid: "202611", total_diamond: 100 }] });
   };
-  const result = await getAnalyticsPeriodIncome(session, { ...range, settlementMonth: "2026-11", allResources: true, resourceIds: [id] });
+  const result = await getAnalyticsPeriodIncome(session, {
+    ...range,
+    settlementMonth: "2026-11",
+    allResources: true,
+    resourceIds: [id],
+  });
   assert.ok(result.ok && result.value.estimate);
   assert.equal(result.value.estimate.month, "2026-11");
   assert.equal(result.value.estimate.diamonds, 100);
@@ -653,7 +719,9 @@ test("cost query expiry propagates and ordinary failures disclose a fallback", a
     globalThis.fetch = async (input) => {
       const path = new URL(String(input)).pathname;
       if (path === "/incomes") return response(null, status);
-      return response({ data: path.includes("month_detail") ? [{ iid: id, monthid: "202610", total_diamond: 100 }] : [row] });
+      return response({
+        data: path.includes("month_detail") ? [{ iid: id, monthid: "202610", total_diamond: 100 }] : [row],
+      });
     };
     const result = await getAnalyticsPeriodIncome(session, { ...range, resourceIds: [id] });
     if (status === "no_login") assert.ok(!result.ok && result.error.kind === "session_expired");
@@ -671,9 +739,18 @@ test("current empty month totals use returned daily sales then yield to availabl
   const paths: string[] = [];
   globalThis.fetch = async (input) => {
     const path = new URL(String(input)).pathname;
-    if (path === "/items/categories/pe/") return response({ item: [{ item_id: id, item_name: "work", create_time: "2026-01-01", online_time: "2026-01-01" }] });
+    if (path === "/items/categories/pe/")
+      return response({
+        item: [{ item_id: id, item_name: "work", create_time: "2026-01-01", online_time: "2026-01-01" }],
+      });
     paths.push(path);
-    if (path.includes("day_detail")) return response({ data: [{ ...row, diamond: 2000, refund_rate: 0.1 }, { ...row, dateid: "20261002", diamond: 1000, refund_rate: 0 }] });
+    if (path.includes("day_detail"))
+      return response({
+        data: [
+          { ...row, diamond: 2000, refund_rate: 0.1 },
+          { ...row, dateid: "20261002", diamond: 1000, refund_rate: 0 },
+        ],
+      });
     if (path === "/incomes") return response({ count: 1, incomes: [costBill("2026-09")] });
     return response(monthlyAvailable ? { data: [{ iid: id, monthid: "202610", total_diamond: 5000 }] } : {});
   };
@@ -695,29 +772,51 @@ test("current empty month totals use returned daily sales then yield to availabl
 });
 
 test("provisional estimates preserve genuine zero and reject missing or invalid daily amounts", async () => {
-  for (const [records, expected] of [[[], null], [[{ ...row, diamond: null }], null], [[{ ...row, refund_rate: 2 }], null], [[{ ...row, diamond: 0 }], 0]] as const) {
+  for (const [records, expected] of [
+    [[], null],
+    [[{ ...row, diamond: null }], null],
+    [[{ ...row, refund_rate: 2 }], null],
+    [[{ ...row, diamond: 0 }], 0],
+  ] as const) {
     globalThis.fetch = async (input) => {
       const path = new URL(String(input)).pathname;
-    if (path === "/items/categories/pe/") return response({ item: [{ item_id: id, item_name: "work", create_time: "2026-01-01", online_time: "2026-01-01" }] });
+      if (path === "/items/categories/pe/")
+        return response({
+          item: [{ item_id: id, item_name: "work", create_time: "2026-01-01", online_time: "2026-01-01" }],
+        });
       if (path.includes("day_detail")) return response({ data: records });
       if (path === "/incomes") return response({ count: 1, incomes: [costBill("2026-09")] });
       return response({});
     };
-    const result = await getAnalyticsPeriodIncome(session, { ...range, resourceIds: [id] }, new Date("2026-10-16T00:00:00+08:00"));
+    const result = await getAnalyticsPeriodIncome(
+      session,
+      { ...range, resourceIds: [id] },
+      new Date("2026-10-16T00:00:00+08:00"),
+    );
     assert.ok(result.ok);
     assert.equal(result.value.estimate?.totalYuan ?? null, expected);
   }
 });
 
 test("historical missing totals and malformed monthly responses never become provisional estimates", async () => {
-  for (const [payload, now] of [[{}, "2026-11-01"], [{ unexpected: "schema" }, "2026-10-16"]] as const) {
+  for (const [payload, now] of [
+    [{}, "2026-11-01"],
+    [{ unexpected: "schema" }, "2026-10-16"],
+  ] as const) {
     globalThis.fetch = async (input) => {
       const path = new URL(String(input)).pathname;
-    if (path === "/items/categories/pe/") return response({ item: [{ item_id: id, item_name: "work", create_time: "2026-01-01", online_time: "2026-01-01" }] });
+      if (path === "/items/categories/pe/")
+        return response({
+          item: [{ item_id: id, item_name: "work", create_time: "2026-01-01", online_time: "2026-01-01" }],
+        });
       assert.notEqual(path, "/incomes");
       return path.includes("day_detail") ? response({ data: [row] }) : response(payload);
     };
-    const result = await getAnalyticsPeriodIncome(session, { ...range, resourceIds: [id] }, new Date(`${now}T00:00:00+08:00`));
+    const result = await getAnalyticsPeriodIncome(
+      session,
+      { ...range, resourceIds: [id] },
+      new Date(`${now}T00:00:00+08:00`),
+    );
     assert.ok(result.ok);
     assert.equal(result.value.estimate, null);
     assert.ok(result.value.estimateError);
@@ -727,12 +826,19 @@ test("historical missing totals and malformed monthly responses never become pro
 test("a cycle starting on the 22nd can provisionally estimate next month's label", async () => {
   globalThis.fetch = async (input) => {
     const path = new URL(String(input)).pathname;
-    if (path === "/items/categories/pe/") return response({ item: [{ item_id: id, item_name: "work", create_time: "2026-01-01", online_time: "2026-01-01" }] });
+    if (path === "/items/categories/pe/")
+      return response({
+        item: [{ item_id: id, item_name: "work", create_time: "2026-01-01", online_time: "2026-01-01" }],
+      });
     if (path.includes("day_detail")) return response({ data: [{ ...row, dateid: "20261023" }] });
     if (path === "/incomes") return response({ count: 1, incomes: [costBill("2026-09")] });
     return response({ data: [] });
   };
-  const result = await getAnalyticsPeriodIncome(session, { startDate: "2026-10-22", endDate: "2026-10-23", settlementMonth: "2026-11", resourceIds: [id] }, new Date("2026-10-24T00:00:00+08:00"));
+  const result = await getAnalyticsPeriodIncome(
+    session,
+    { startDate: "2026-10-22", endDate: "2026-10-23", settlementMonth: "2026-11", resourceIds: [id] },
+    new Date("2026-10-24T00:00:00+08:00"),
+  );
   assert.ok(result.ok && result.value.estimate);
   assert.equal(result.value.estimate.source, "pe-period-daily");
   assert.equal(result.value.estimate.month, "2026-11");
@@ -742,11 +848,19 @@ test("selecting one module still uses the whole PE provisional account and stabl
   const dailyBatches: string[] = [];
   globalThis.fetch = async (input) => {
     const url = new URL(String(input));
-    if (url.pathname === "/items/categories/pe/") return response({ item: [id, "2"].map(item_id => ({ item_id, item_name: item_id, create_time: "2026-01-01", online_time: "2026-01-01" })) });
+    if (url.pathname === "/items/categories/pe/")
+      return response({
+        item: [id, "2"].map((item_id) => ({
+          item_id,
+          item_name: item_id,
+          create_time: "2026-01-01",
+          online_time: "2026-01-01",
+        })),
+      });
     if (url.pathname.includes("day_detail")) {
-      const ids = url.searchParams.get("item_list_str")!.split(",");
+      const ids = (url.searchParams.get("item_list_str") ?? "").split(",");
       dailyBatches.push(ids.join(","));
-      return response({ data: ids.map(iid => ({ ...row, iid, diamond: 50000 })) });
+      return response({ data: ids.map((iid) => ({ ...row, iid, diamond: 50000 })) });
     }
     if (url.pathname === "/incomes") return response({ count: 1, incomes: [costBill("2026-09", 300)] });
     return response({});
@@ -756,7 +870,7 @@ test("selecting one module still uses the whole PE provisional account and stabl
   const all = await getAnalyticsPeriodIncome(session, { ...range, resourceIds: [id, "2"], allResources: true }, now);
   assert.ok(selected.ok && selected.value.estimate && all.ok && all.value.estimate);
   assert.equal(selected.value.estimate.totalYuan, 560);
-  assert.equal(selected.value.estimate.allocations.find(r => r.resourceId === id)?.totalYuan, 280);
+  assert.equal(selected.value.estimate.allocations.find((r) => r.resourceId === id)?.totalYuan, 280);
   assert.deepEqual(selected.value.estimate.allocations, all.value.estimate.allocations);
   assert.deepEqual(dailyBatches, [id, "2", `${id},2`]);
 });
@@ -769,7 +883,11 @@ test("an unavailable account resource list cannot silently price a selected modu
     assert.notEqual(path, "/incomes");
     return response({});
   };
-  const result = await getAnalyticsPeriodIncome(session, { ...range, resourceIds: [id] }, new Date("2026-10-16T00:00:00+08:00"));
+  const result = await getAnalyticsPeriodIncome(
+    session,
+    { ...range, resourceIds: [id] },
+    new Date("2026-10-16T00:00:00+08:00"),
+  );
   assert.ok(result.ok);
   assert.equal(result.value.estimate, null);
   assert.ok(result.value.estimateError);
@@ -830,8 +948,14 @@ test("charts keep missing days as gaps and totals distinguish unknown from zero"
 test("top ten ranks interval totals per metric and excludes unknown or out-of-scope data", () => {
   const parsed = readAnalyticsRecords({ data: [row] });
   assert.ok(parsed.ok);
-  const first = parsed.value[0]!;
-  const resources = Array.from({ length: 14 }, (_, index) => ({ id: String(index), name: String(index), category: "pe", color: "red" }));
+  const first = parsed.value[0];
+  assert.ok(first);
+  const resources = Array.from({ length: 14 }, (_, index) => ({
+    id: String(index),
+    name: String(index),
+    category: "pe",
+    color: "red",
+  }));
   const records = resources.flatMap((resource, index) => [
     { ...first, resourceId: resource.id, purchases: index, downloads: 14 - index },
     { ...first, resourceId: resource.id, date: "2026-10-02", purchases: index, downloads: 14 - index },
@@ -839,8 +963,14 @@ test("top ten ranks interval totals per metric and excludes unknown or out-of-sc
   records.push({ ...first, resourceId: "0", date: "2026-09-01", purchases: 99999 });
   records.push({ ...first, resourceId: "outside", purchases: 99999 });
   const dates = ["2026-10-01", "2026-10-02"];
-  assert.deepEqual(topResources(resources, records, dates, "purchases").map((resource) => resource.id), ["13", "12", "11", "10", "9", "8", "7", "6", "5", "4"]);
-  assert.deepEqual(topResources(resources, records, dates, "downloads").map((resource) => resource.id), ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]);
+  assert.deepEqual(
+    topResources(resources, records, dates, "purchases").map((resource) => resource.id),
+    ["13", "12", "11", "10", "9", "8", "7", "6", "5", "4"],
+  );
+  assert.deepEqual(
+    topResources(resources, records, dates, "downloads").map((resource) => resource.id),
+    ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+  );
   assert.deepEqual(topResources(resources, [], dates, "purchases"), []);
   const sparse = [
     { ...first, resourceId: "0", purchases: 0 },
@@ -849,7 +979,10 @@ test("top ten ranks interval totals per metric and excludes unknown or out-of-sc
     { ...first, resourceId: "2", date: "2026-10-02", purchases: null },
     { ...first, resourceId: "3", purchases: 0 },
   ];
-  assert.deepEqual(topResources(resources, sparse, dates, "purchases").map((resource) => resource.id), ["0", "3"]);
+  assert.deepEqual(
+    topResources(resources, sparse, dates, "purchases").map((resource) => resource.id),
+    ["0", "3"],
+  );
 });
 
 test("analysis uses publication history rather than the current review status", async () => {
@@ -975,7 +1108,10 @@ test("refresh retains successful snapshots through network failure but clears ex
   const pending = Promise.withResolvers<{ ok: false; error: { kind: string; message: string } }>();
   const refresh = cache.read("a", 1000, () => pending.promise);
   cache.expire("a");
-  assert.equal(cache.read("a", 1000, () => pending.promise), refresh);
+  assert.equal(
+    cache.read("a", 1000, () => pending.promise),
+    refresh,
+  );
   pending.resolve({ ok: false, error: { kind: "network", message: "offline" } });
   await refresh;
   assert.equal(cache.peek("a"), 42);

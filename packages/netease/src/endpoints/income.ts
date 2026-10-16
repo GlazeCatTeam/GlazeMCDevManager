@@ -66,8 +66,15 @@ function record(value: unknown): IncomeRecord {
   if (diamonds !== null && !Number.isSafeInteger(diamonds)) throw new Error("收益记录的钻石数量无效");
   const cost = readNumber(row.channel_ip_cost);
   const flow = readNumber(row.sharable_flow);
-  const costRate = diamonds !== null && diamonds > 0 && cost !== null && cost >= 0 && cost <= diamonds && (cost > 0 || flow === diamonds)
-    ? cost / diamonds : null;
+  const costRate =
+    diamonds !== null &&
+    diamonds > 0 &&
+    cost !== null &&
+    cost >= 0 &&
+    cost <= diamonds &&
+    (cost > 0 || flow === diamonds)
+      ? cost / diamonds
+      : null;
   return {
     ...(costRate === null ? {} : { platformCostRate: costRate }),
     id,

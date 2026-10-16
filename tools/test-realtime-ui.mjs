@@ -9,12 +9,17 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const output = `${root}/node_modules/.cache/realtime-tests`;
 mkdirSync(output, { recursive: true });
 const server = await createServer({
-  configFile: false, root, logLevel: "warn", plugins: [react()],
+  configFile: false,
+  root,
+  logLevel: "warn",
+  plugins: [react()],
   server: { host: "127.0.0.1", port: 0 },
-  resolve: { alias: {
-    "react-dom": fileURLToPath(new URL("../apps/desktop/node_modules/react-dom", import.meta.url)),
-    react: fileURLToPath(new URL("../apps/desktop/node_modules/react", import.meta.url)),
-  } },
+  resolve: {
+    alias: {
+      "react-dom": fileURLToPath(new URL("../apps/desktop/node_modules/react-dom", import.meta.url)),
+      react: fileURLToPath(new URL("../apps/desktop/node_modules/react", import.meta.url)),
+    },
+  },
 });
 let browser;
 try {
@@ -33,11 +38,14 @@ try {
   await page.screenshot({ path: `${output}/realtime-failures.png`, fullPage: true });
   await panel.getByRole("button", { name: "仅重试失败资源", exact: true }).click();
   await panel.getByText("110 成功 · 0 失败").waitFor();
-  assert.deepEqual(await page.evaluate(() => globalThis.__realtimeRequests.map((request) => request.resourceIds.length)), [110, 25]);
+  assert.deepEqual(
+    await page.evaluate(() => globalThis.__realtimeRequests.map((request) => request.resourceIds.length)),
+    [110, 25],
+  );
   await panel.getByRole("button", { name: "全部 110", exact: true }).click();
   await panel.getByRole("button", { name: "查看订单", exact: true }).first().click();
   await panel.getByRole("combobox", { name: "标价货币", exact: true }).selectOption("unknown");
-  assert.ok(await panel.getByText(/100 币种未提供/).count() > 0);
+  assert.ok((await panel.getByText(/100 币种未提供/).count()) > 0);
   await panel.getByRole("button", { name: /^资源 测试资源/ }).click();
   await panel.getByRole("combobox", { name: "搜索资源", exact: true }).fill("资源 110");
   assert.equal(await panel.getByRole("dialog", { name: "选择资源" }).getByRole("option").count(), 1);
@@ -49,7 +57,11 @@ try {
   await page.waitForFunction(() => globalThis.__realtimeRequests.length === 3);
   await panel.getByRole("button", { name: "今天", exact: true }).click();
   await panel.getByText("85 成功 · 25 失败").waitFor();
-  assert.equal(await page.evaluate(() => globalThis.__realtimeRequests.at(-1).resourceIds.length), 110, "returning after a retry reloads the entire day");
+  assert.equal(
+    await page.evaluate(() => globalThis.__realtimeRequests.at(-1).resourceIds.length),
+    110,
+    "returning after a retry reloads the entire day",
+  );
   await panel.getByRole("button", { name: "仅重试失败资源", exact: true }).click();
   await panel.getByText("110 成功 · 0 失败").waitFor();
   await page.getByRole("button", { name: "模拟请求失败", exact: true }).click();
@@ -58,7 +70,11 @@ try {
   await panel.getByText("110 成功 · 0 失败").waitFor();
   await page.getByRole("button", { name: "恢复请求", exact: true }).click();
   await panel.getByRole("button", { name: "昨天", exact: true }).click();
-  assert.equal(await panel.getByText("110 成功 · 0 失败").count(), 1, "new dates retain the previous result until ready");
+  assert.equal(
+    await panel.getByText("110 成功 · 0 失败").count(),
+    1,
+    "new dates retain the previous result until ready",
+  );
   await panel.getByText(/暂显示.*实时收益/).waitFor();
   await page.waitForFunction(() => globalThis.__realtimeRequests.length === 6);
   await panel.getByRole("button", { name: "今天", exact: true }).click();
@@ -88,7 +104,10 @@ try {
       window.scrollTo(0, 0);
     }, zoom);
     const before = await page.getByTestId("sidebar").boundingBox();
-    await page.getByRole("button", { name: "查看订单", exact: true }).first().evaluate((button) => button.click());
+    await page
+      .getByRole("button", { name: "查看订单", exact: true })
+      .first()
+      .evaluate((button) => button.click());
     await page.waitForTimeout(800);
     assert.equal(await page.evaluate(() => window.scrollY), 0, "opening orders must not scroll the document");
     const after = await page.getByTestId("sidebar").boundingBox();
@@ -96,16 +115,29 @@ try {
     assert.equal((await page.getByTestId("titlebar").boundingBox()).y, 0, "titlebar stays visible");
     const main = await page.locator("main").boundingBox();
     const orders = await page.getByText("订单明细", { exact: true }).boundingBox();
-    assert.ok(orders.y >= main.y && orders.y < Math.min(main.y + main.height, 802), "order heading is visible inside the content area");
+    assert.ok(
+      orders.y >= main.y && orders.y < Math.min(main.y + main.height, 802),
+      "order heading is visible inside the content area",
+    );
     const contentScroll = await page.locator("main").evaluate((element) => element.scrollTop);
     await page.getByRole("button", { name: /^资源 测试资源/ }).evaluate((button) => button.click());
     await page.getByRole("combobox", { name: "搜索资源", exact: true }).press("ArrowDown");
-    assert.equal(await page.locator("main").evaluate((element) => element.scrollTop), contentScroll, "resource options scroll only their own list");
+    assert.equal(
+      await page.locator("main").evaluate((element) => element.scrollTop),
+      contentScroll,
+      "resource options scroll only their own list",
+    );
     await page.getByRole("combobox", { name: "搜索资源", exact: true }).press("Escape");
-    await page.getByRole("button", { name: "查看订单", exact: true }).last().evaluate((button) => button.click());
+    await page
+      .getByRole("button", { name: "查看订单", exact: true })
+      .last()
+      .evaluate((button) => button.click());
     await page.waitForTimeout(800);
     const emptyOrders = await page.getByText("订单明细", { exact: true }).boundingBox();
-    assert.ok(emptyOrders.y >= main.y && emptyOrders.y < Math.min(main.y + main.height, 802), "shorter or empty order lists are positioned after layout updates");
+    assert.ok(
+      emptyOrders.y >= main.y && emptyOrders.y < Math.min(main.y + main.height, 802),
+      "shorter or empty order lists are positioned after layout updates",
+    );
     assert.equal(await page.evaluate(() => window.scrollY), 0);
     await page.getByRole("button", { name: "查看失败资源", exact: true }).evaluate((button) => button.click());
     await page.waitForTimeout(800);
@@ -114,7 +146,9 @@ try {
   }
   await page.screenshot({ path: `${output}/realtime-shell-scroll.png` });
   assert.deepEqual(errors, []);
-  console.log("PASS: 110 resources, failure recovery, currency/resource filters, date/account isolation, narrow layout, stationary desktop shell and nested scrolling at 100/125/150% zoom");
+  console.log(
+    "PASS: 110 resources, failure recovery, currency/resource filters, date/account isolation, narrow layout, stationary desktop shell and nested scrolling at 100/125/150% zoom",
+  );
 } finally {
   await browser?.close();
   await server.close();

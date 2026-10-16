@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import { estimateIncome } from "../packages/netease/src/income/estimate";
-import { estimateProfit } from "../packages/netease/src/income/rules";
-import { estimatePePeriodProfit } from "../packages/netease/src/income/period-rules";
 import { allocatePePeriodIncome } from "../packages/netease/src/income/period-allocation";
+import { estimatePePeriodProfit } from "../packages/netease/src/income/period-rules";
+import { estimateProfit } from "../packages/netease/src/income/rules";
 
 const originalFetch = globalThis.fetch;
 const session = { sessionCookie: "income-test-session" };
@@ -13,27 +13,46 @@ afterEach(() => {
 });
 
 test("account allocations preserve every cent and apply award caps and taxes only once", () => {
-  const cases = [[50000, 50000], [100000, 100000, 100000, 100000], [0, 0], [1, 1, 1], [12345.67, 88888.88, 123456.78, 0], [1000000, 1000000, 1000000, 1000000], [3000000, 3000000, 3000000, 3000000], [50_000_000]];
-  for (const amounts of cases) for (const cost of [0, .3, .3406915224819656, 1]) {
-    const rows = amounts.map((diamonds, i) => ({ resourceId: String(i), name: `work ${i}`, diamonds }));
-    const result = allocatePePeriodIncome(rows, cost);
-    const money = (n: number) => Math.round(n * 100);
-    for (const key of ["developerShareYuan", "subsidyYuan", "totalYuan", "taxYuan", "afterTaxYuan"] as const)
-      assert.equal(result.allocations.reduce((s, r) => s + money(r[key]), 0), money(result[key]));
-    for (const row of result.allocations) {
-      assert.equal(money(row.developerShareYuan) + money(row.subsidyYuan), money(row.totalYuan));
-      assert.equal(money(row.totalYuan) - money(row.taxYuan), money(row.afterTaxYuan));
-      assert.ok(row.afterTaxYuan >= 0);
-      if (!row.diamonds) assert.equal(row.totalYuan, 0);
+  const cases = [
+    [50000, 50000],
+    [100000, 100000, 100000, 100000],
+    [0, 0],
+    [1, 1, 1],
+    [12345.67, 88888.88, 123456.78, 0],
+    [1000000, 1000000, 1000000, 1000000],
+    [3000000, 3000000, 3000000, 3000000],
+    [50_000_000],
+  ];
+  for (const amounts of cases)
+    for (const cost of [0, 0.3, 0.3406915224819656, 1]) {
+      const rows = amounts.map((diamonds, i) => ({ resourceId: String(i), name: `work ${i}`, diamonds }));
+      const result = allocatePePeriodIncome(rows, cost);
+      const money = (n: number) => Math.round(n * 100);
+      for (const key of ["developerShareYuan", "subsidyYuan", "totalYuan", "taxYuan", "afterTaxYuan"] as const)
+        assert.equal(
+          result.allocations.reduce((s, r) => s + money(r[key]), 0),
+          money(result[key]),
+        );
+      for (const row of result.allocations) {
+        assert.equal(money(row.developerShareYuan) + money(row.subsidyYuan), money(row.totalYuan));
+        assert.equal(money(row.totalYuan) - money(row.taxYuan), money(row.afterTaxYuan));
+        assert.ok(row.afterTaxYuan >= 0);
+        if (!row.diamonds) assert.equal(row.totalYuan, 0);
+      }
+      assert.deepEqual(allocatePePeriodIncome([...rows].reverse(), cost), result);
+      assert.equal(money(result.totalYuan), money(estimatePePeriodProfit(amounts, cost).totalYuan));
     }
-    assert.deepEqual(allocatePePeriodIncome([...rows].reverse(), cost), result);
-    assert.equal(money(result.totalYuan), money(estimatePePeriodProfit(amounts, cost).totalYuan));
-  }
-  const four = allocatePePeriodIncome(["a", "b", "c", "d"].map(resourceId => ({ resourceId, name: resourceId, diamonds: 100000 })), .34);
+  const four = allocatePePeriodIncome(
+    ["a", "b", "c", "d"].map((resourceId) => ({ resourceId, name: resourceId, diamonds: 100000 })),
+    0.34,
+  );
   assert.equal(four.totalYuan, 2148);
   assert.equal(four.afterTaxYuan, 1878.4);
-  assert.deepEqual(four.allocations.map(r => r.subsidyYuan), [232, 232, 232, 132]);
-  assert.equal(estimatePePeriodProfit([100000], .34).afterTaxYuan * 4, 2512);
+  assert.deepEqual(
+    four.allocations.map((r) => r.subsidyYuan),
+    [232, 232, 232, 132],
+  );
+  assert.equal(estimatePePeriodProfit([100000], 0.34).afterTaxYuan * 4, 2512);
 });
 
 test("home estimates query calendar months for ordinary works and lobby goods and display the same dates", async () => {

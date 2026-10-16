@@ -256,7 +256,12 @@ export async function getAnalyticsMonthly(
   );
   if (!result.ok) return result;
   // The platform returns an empty object before a monthly aggregate is available
-  if (result.value !== null && typeof result.value === "object" && !Array.isArray(result.value) && Object.keys(result.value).length === 0)
+  if (
+    result.value !== null &&
+    typeof result.value === "object" &&
+    !Array.isArray(result.value) &&
+    Object.keys(result.value).length === 0
+  )
     return fail({ kind: "business", code: "no_monthly_data", message: "平台暂未提供该月份的月汇总数据" });
   const parsed = readAnalyticsRecords(result.value, true);
   return parsed.ok
@@ -277,7 +282,11 @@ export function readRealtimeIncome(value: unknown, resourceId: string): Result<A
   const rows = readArray(raw.orders);
   const endpoint = "items.pe.incomes";
   if (diamonds === null || emeralds === null || purchases === null) {
-    const invalid = [diamonds === null && "total_diamonds", emeralds === null && "total_points", purchases === null && "count"].filter(Boolean);
+    const invalid = [
+      diamonds === null && "total_diamonds",
+      emeralds === null && "total_points",
+      purchases === null && "count",
+    ].filter(Boolean);
     return fail({ kind: "parse", endpoint, detail: `收益字段缺失或格式异常: ${invalid.join(", ")}` });
   }
   const orders: AnalyticsOrder[] = [];
@@ -293,7 +302,15 @@ export function readRealtimeIncome(value: unknown, resourceId: string): Result<A
     }
     orders.push({ id, resourceId, time, currency, amount, refundStatus: readString(row.refund_status) ?? "" });
   }
-  return ok({ resourceId, diamonds, emeralds, purchases, orders, omittedOrderCount, ordersIncomplete: !rows || omittedOrderCount > 0 || orders.length < purchases });
+  return ok({
+    resourceId,
+    diamonds,
+    emeralds,
+    purchases,
+    orders,
+    omittedOrderCount,
+    ordersIncomplete: !rows || omittedOrderCount > 0 || orders.length < purchases,
+  });
 }
 
 /** Fetch each selected resource's real orders for a Beijing calendar day, with partial failures */
