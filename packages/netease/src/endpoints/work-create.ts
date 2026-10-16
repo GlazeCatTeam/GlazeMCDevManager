@@ -12,7 +12,7 @@ import { normalizeWorkAdvanced, validateWorkAdvanced } from "./work-advanced";
 import { workCreateDefaults } from "./work-create-defaults";
 import { getWorkEditorOptions, validateWorkPatch } from "./work-editor";
 
-/** Validate a new PE work against live platform dictionaries and signed upload receipts */
+/** Validate a new PE work using primary-category detail groups and signed upload receipts */
 export function validateWorkCreate(fields: WorkRecord, options: WorkEditorOptions): string | null {
   const invalid = validateWorkPatch(fields, fields);
   if (invalid) return invalid;
@@ -28,7 +28,7 @@ export function validateWorkCreate(fields: WorkRecord, options: WorkEditorOption
     return "请选择有效的资源类别";
   for (const [key, choices] of [
     ["sub_type", options.peSubTypes[String(fields.pri_type)] ?? []],
-    ["mod_second_type", options.secondTypes[String(fields.sub_type)] ?? []],
+    ["mod_second_type", options.secondTypes[String(fields.pri_type)] ?? []],
   ] as const) {
     if (choices.length && !choices.some((option) => option.id === fields[key])) return "请完整选择资源分类";
     if (!choices.length && fields[key] !== 0) return "资源分类已变化，请刷新平台选项";

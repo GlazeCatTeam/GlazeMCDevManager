@@ -69,7 +69,7 @@ const document: WorkEditorDocument = {
     price_rank: -4,
     info: "<p>探索新的魔法材料，制作独特武器。</p>",
     pri_type: 2,
-    sub_type: 2,
+    sub_type: 6,
     mod_second_type: 1,
     mod_version: "3.9",
     label_type_list: [1, 2],
@@ -102,7 +102,7 @@ const options: WorkEditorOptions = {
   tagLimit: 5,
   peTypes: [{ id: 2, title: "add_ons" }],
   pcTypes: [{ id: 1, title: "基岩版组件" }],
-  peSubTypes: { 2: [{ id: 2, title: "玩法拓展" }] },
+  peSubTypes: { 2: [{ id: 6, title: "玩法拓展" }] },
   pcSubTypes: { 1: [{ id: 1, title: "玩法" }] },
   secondTypes: { 2: [{ id: 1, title: "大型玩法" }] },
   recommendTags: { 1: [{ id: 1, title: "生存" }], 2: [{ id: 2, title: "奇幻" }] },
@@ -125,6 +125,7 @@ const requests: { method: string; params: unknown }[] = [];
 let saveFailure = false;
 const editorFeatures = new URLSearchParams(location.search).has("editorFeatures");
 if (editorFeatures) {
+  options.tags.push(...Array.from({ length: 30 }, (_, index) => `测试标签${index + 1}`));
   Object.assign(document.fields, {
     ...emptyWorkCreateFields(),
     ...document.fields,

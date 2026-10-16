@@ -693,7 +693,7 @@ test("work cache keeps stale rows on failure and retries instead of caching an e
 const createConstants = {
   pri_type: { pe: [{ id: 2, title: "add_ons" }], comp: [] },
   sub_type: { pe: { 2: [{ id: 4, title: "玩法" }] } },
-  mod_second_type: { 4: [{ id: 7, title: "大型玩法" }] },
+  mod_second_type: { 2: [{ id: 7, title: "大型玩法" }] },
   mod_version: ["3.9"],
   label_type: { 1: [{ id: 23, title: "生存" }] },
   item_tag_limit: 3,
@@ -751,6 +751,7 @@ test("create uses its own DTO and accepts a successful response without an id", 
   assert.equal(body.item_name, "新建测试模组");
   assert.equal(body.item_version, "0.1");
   assert.equal(body.is_check_apply, false);
+  assert.equal(body.mod_second_type, 7);
   assert.equal(body.res[0].res_url.sign, "test-sign");
   assert.equal(body.res[0].old_metadata, undefined);
   assert.equal(body.channel[0].version, undefined);
@@ -760,12 +761,69 @@ test("create uses its own DTO and accepts a successful response without an id", 
   assert.equal((buildWorkCreate(newWorkFields()).res as unknown[]).length, 1);
 });
 
+test("create and save resolve detail categories by primary type with live platform ids", async () => {
+  const constants = {
+    ...createConstants,
+    pri_type: {
+      pe: [
+        { id: 1, title: "地图" },
+        { id: 2, title: "add_ons" },
+      ],
+      comp: [],
+    },
+    sub_type: {
+      pe: {
+        1: [{ id: 2, title: "角色扮演" }],
+        2: [
+          { id: 6, title: "玩法拓展" },
+          { id: 8, title: "生物改造" },
+        ],
+      },
+    },
+    mod_second_type: { 2: [{ id: 203, title: "更多生物" }] },
+  };
+  const raw = { ...fixture, pri_type: 2, sub_type: 6, mod_second_type: 203 };
+  const base = { pri_type: raw.pri_type, sub_type: raw.sub_type, mod_second_type: raw.mod_second_type };
+  for (const [patch, accepted] of [
+    [{ pri_type: 2, sub_type: 6, mod_second_type: 203 }, true],
+    [{ pri_type: 2, sub_type: 8, mod_second_type: 203 }, true],
+    [{ pri_type: 1, sub_type: 2, mod_second_type: 203 }, false],
+    [{ pri_type: 1, sub_type: 2, mod_second_type: 0 }, true],
+    [{ pri_type: 2, sub_type: 6, mod_second_type: 999 }, false],
+  ] as const) {
+    for (const action of ["create", "save"] as const) {
+      const calls = mockFetch((url, init) => {
+        if (init.method === "POST") return response();
+        if (url.endsWith("/items/mc_consts/")) return response(constants);
+        if (url.endsWith("/item-tag/")) return response({ tag_list: [] });
+        return response(raw);
+      });
+      const result =
+        action === "create"
+          ? await createWork(session, { account: "a", fields: { ...newWorkFields(), ...patch } })
+          : await saveWorkEditor(session, { itemId, base, patch });
+      const message = `${action}: ${JSON.stringify(patch)}`;
+      assert.equal(result.ok, accepted, message);
+      const writes = calls.filter((call) => call.init.method === "POST");
+      assert.equal(writes.length, accepted ? 1 : 0, message);
+      if (accepted) {
+        const body = JSON.parse(String(writes[0]?.init.body));
+        assert.equal(body.pri_type, patch.pri_type);
+        assert.equal(body.sub_type, patch.sub_type);
+        assert.equal(body.mod_second_type, patch.mod_second_type);
+      }
+    }
+  }
+});
+
 test("create validates missing resources, stale classifications and prices before POST", async () => {
   for (const patch of [
     { item_name: " " },
     { res: [] },
     { pri_type: 999 },
     { sub_type: 99 },
+    { mod_second_type: 999 },
+    { mod_second_type: 0 },
     { mod_version: "obsolete" },
     { label_type_list: [999] },
     { price_type: "diamond", price_rank: 1, price: 300 },
@@ -970,7 +1028,7 @@ test("runtime dictionaries preserve ids, category parents and current image vers
       : response({
           pri_type: { pe: [{ id: 2, title: "add_ons" }], comp: [] },
           sub_type: { pe: { 2: [{ id: 4, title: "玩法" }] } },
-          mod_second_type: { 4: [{ id: 7, title: "大型玩法" }] },
+          mod_second_type: { 2: [{ id: 7, title: "大型玩法" }] },
           mod_version: ["3.9"],
           label_type: { 1: [{ id: 23, title: "生存" }] },
           channel: {
@@ -984,6 +1042,8 @@ test("runtime dictionaries preserve ids, category parents and current image vers
   assert.equal(result.ok, true);
   if (result.ok) {
     assert.equal(result.value.peSubTypes["2"]?.[0]?.id, 4);
+    assert.equal(result.value.secondTypes["2"]?.[0]?.id, 7);
+    assert.equal(result.value.secondTypes["4"], undefined);
     assert.equal(result.value.peImages[0]?.version, 3);
     assert.deepEqual(result.value.tags, ["魔法"]);
   }

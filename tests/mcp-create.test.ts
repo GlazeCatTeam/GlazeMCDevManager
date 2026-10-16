@@ -280,7 +280,7 @@ test("invalid review flags, forged wire flags and deferred configuration cannot 
 const constants = {
   pri_type: { pe: [{ id: 2, title: "add_ons" }], comp: [] },
   sub_type: { pe: { 2: [{ id: 4, title: "玩法" }] } },
-  mod_second_type: { 4: [{ id: 7, title: "大型玩法" }] },
+  mod_second_type: { 2: [{ id: 7, title: "大型玩法" }] },
   mod_version: ["3.9"],
   label_type: {},
   item_tag_limit: 3,
@@ -339,6 +339,7 @@ for (const submitReview of [false, true]) {
     assert.equal(posts.length, 1);
     assert.ok(posts[0]?.url.endsWith("/items/categories/pe/upload"));
     assert.equal(JSON.parse(String(posts[0]?.body)).is_check_apply, submitReview);
+    assert.equal(JSON.parse(String(posts[0]?.body)).mod_second_type, 7);
     assert.equal(guards, 1);
     assert.equal(
       requests.some(

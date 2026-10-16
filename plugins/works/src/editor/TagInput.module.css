@@ -1,0 +1,39 @@
+.row {
+  display: flex;
+  gap: 8px;
+}
+.search {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.list {
+  position: absolute;
+  z-index: 5;
+  top: 100%;
+  left: 0;
+  width: 100%;
+  max-height: min(240px, 40vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: var(--g-border-width) solid var(--g-field-borderColor);
+  background: var(--g-surface-sunken);
+  box-shadow: var(--g-panel-shadow);
+}
+.option {
+  display: block;
+  width: 100%;
+  padding: 9px 12px;
+  text-align: left;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.list[data-above="true"] {
+  top: auto;
+  bottom: 100%;
+}
+.option:hover,
+.option[aria-selected="true"] {
+  color: var(--g-action-primary-text);
+  background: var(--g-nav-active-bg);
+}
