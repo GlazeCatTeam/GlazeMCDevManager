@@ -40,6 +40,7 @@ if (process.argv.includes("--mcp")) {
       services.sessionSettings,
       services.mcp,
       services.update,
+      services.workArchive,
     );
     lifecycle.attach(createMainWindow());
     void services.mcp.start().catch(() => services.logs.write("error", "mcp", "MCP 服务启动失败"));

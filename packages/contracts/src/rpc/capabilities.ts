@@ -191,6 +191,19 @@ export const capabilities: Record<RpcMethod, Capability> = {
   "works.delete": shellOnly("netease:works.write", "dangerous"),
   "works.changePrice": shellOnly("netease:works.write", "write"),
   "works.page": shellOnly("netease:works.read", "read"),
+  "works.archiveMigrate": shellOnly("netease:works.write", "write"),
+  "works.archive": shellOnly("netease:works.write", "write"),
+  "works.restore": shellOnly("netease:works.write", "write"),
+  "works.archiveState": {
+    caller: "any",
+    permission: "netease:works.read",
+    risk: "read",
+    mcp: {
+      title: "查询作品归档状态",
+      description:
+        "返回本账号已归档作品 ID，不读取作品内容。归档仅影响本软件，恢复使用 works_restore；明确需要读取归档内容时，在作品读取和操作工具中逐次传 includeArchived: true。",
+    },
+  },
   "works.search": shellOnly("netease:works.read", "read"),
   "works.editor": shellOnly("netease:works.read", "read"),
   "works.options": shellOnly("netease:works.read", "read"),
@@ -317,7 +330,7 @@ export const capabilities: Record<RpcMethod, Capability> = {
     mcp: {
       title: "列出作品",
       description:
-        "列出账号在手机版（PE）的全部作品：作品 ID、名称、状态（online 已上架、init 待提交审核、reviewing 审核中、reject 未通过、accept 待上架、self_test 自测中、offline 已下架等）、价格与货币、是否原创、是否同步端游、是否前置模组、是否弱下架及原因、创建与提审时间。不含封面和上线时间，需要时用 works_get。参数 account 可选。",
+        "列出账号作品，默认排除本地已归档作品；仅用户明确要求时传 includeArchived: true。返回作品 ID、名称、状态、价格等摘要。不含封面和上线时间，需要时用 works_get。参数 account、platform 可选。",
     },
   },
   "works.get": {
@@ -327,7 +340,7 @@ export const capabilities: Record<RpcMethod, Capability> = {
     mcp: {
       title: "作品详情",
       description:
-        "按作品 ID 返回作品的正方形图标地址、横幅图地址、上线时间、首次上线时间和定时上架时间。只能查询本账号的作品。参数 account 可选。",
+        "按作品 ID 返回封面、上线和定时上架时间。只能查询本账号作品。已归档作品默认不读取，仅用户明确要求时传 includeArchived: true；不得自行绕过归档。account 可选。",
     },
   },
   "works.reviewFeedback": {
@@ -337,7 +350,7 @@ export const capabilities: Record<RpcMethod, Capability> = {
     mcp: {
       title: "审核反馈",
       description:
-        "返回作品最近一次审核的反馈文字和时间；没有反馈时返回 null。只能查询本账号的作品。参数 account 可选。",
+        "返回作品最近一次审核的反馈文字和时间；没有时返回 null。仅本账号作品。默认不读取归档内容，仅用户明确要求时传 includeArchived: true；不得自行绕过归档。account 可选。",
     },
   },
 };

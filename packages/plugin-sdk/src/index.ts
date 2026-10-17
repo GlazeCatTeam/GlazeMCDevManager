@@ -192,4 +192,5 @@ export {
   sessionKeyOf,
 } from "./query/host-query";
 export { clearQueryCaches, QueryCache, type QueryCacheOptions, type QueryKeyMatch } from "./query/query-cache";
+export { archiveStorageKey, initializeWorkArchive, subscribeWorkArchive, workArchiveSnapshot } from "./work-archive";
 export { uploadDroppedResource } from "./work-files";

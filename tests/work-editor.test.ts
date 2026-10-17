@@ -13,6 +13,7 @@ import {
   workOperationMethods,
   workScheduleTime,
 } from "../packages/contracts/src/rpc/work-operations";
+import type { WorkSummary } from "../packages/contracts/src/rpc/works";
 import { buildWorkCreate, createWork } from "../packages/netease/src/endpoints/work-create";
 import {
   buildWorkUpdate,
@@ -31,6 +32,7 @@ import {
 } from "../packages/netease/src/endpoints/work-upload";
 import { getWorksPage, listWorks, readWorkStatus } from "../packages/netease/src/endpoints/works";
 import { getMcDevData, parsePlatformJson, writeMcDevData } from "../packages/netease/src/http/client";
+import { archiveWorkPage } from "../plugins/works/src/archive";
 import { WorkQueryCache } from "../plugins/works/src/query-cache";
 import { actionsFor, statusLabels, statusTones } from "../plugins/works/src/status";
 import {
@@ -50,6 +52,34 @@ import {
 import { startWorksWarmup } from "../plugins/works/src/warmup";
 
 const originalFetch = globalThis.fetch;
+
+test("archive filtering fills pages before slicing and handles empty or stale archives", () => {
+  const works = Array.from({ length: 10 }, (_, i) => ({ itemId: String(i) }) as WorkSummary);
+  const normal = archiveWorkPage(works, ["0", "4", "missing"], false, 0, 9);
+  assert.equal(normal.total, 8);
+  assert.deepEqual(
+    normal.items.map((work) => work.itemId),
+    ["1", "2", "3", "5", "6", "7", "8", "9"],
+  );
+  const archived = archiveWorkPage(works, ["0", "4", "missing"], true, 0, 9);
+  assert.equal(archived.total, 2);
+  assert.deepEqual(
+    archived.items.map((work) => work.itemId),
+    ["0", "4"],
+  );
+  assert.deepEqual(archiveWorkPage(works, [], true, 0, 9), { items: [], total: 0 });
+  assert.deepEqual(
+    archiveWorkPage(
+      works,
+      works.map((work) => work.itemId),
+      false,
+      0,
+      9,
+    ),
+    { items: [], total: 0 },
+  );
+  assert.deepEqual(archiveWorkPage(works, ["9"], false, 1, 9), { items: [], total: 9 });
+});
 
 test("list operation contracts reject unknown fields, invalid states, dates and prices", () => {
   const base = { account: "a", itemId: "4686664860310207622", expectedStatus: "accept" };

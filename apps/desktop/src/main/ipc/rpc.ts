@@ -77,6 +77,7 @@ import type { SessionManager } from "../session/session-manager";
 import type { UpdateService } from "../update/service";
 import { closeLoginWindow, loginWithOfficialWindow } from "../windows/login-window";
 import { appWindows } from "../windows/main-window";
+import type { WorkArchiveService } from "../works/archive";
 import { getAboutInfo, getDependencyLicenses, openProjectLink, openRuntimeNotices } from "./about";
 import { changedModule } from "./data-changes";
 import { CapabilityError, fromNeteaseError } from "./errors";
@@ -163,6 +164,7 @@ function createHandlers(
   sessionSettings: SessionSettingsService,
   mcp: McpHost,
   update: UpdateService,
+  workArchive: WorkArchiveService,
 ): HandlerTable {
   const actions = createApplicationActions(
     { sessions, appearance, general, cache, plugins, sessionSettings },
@@ -506,6 +508,10 @@ function createHandlers(
       const platform = optionalOneOf(params, "platform", ["pe", "pc"] as const) ?? "pe";
       return sessions.request(optionalString(params, "account"), (session) => listWorks(session, platform));
     },
+    "works.archiveState": (params) => workArchive.get(requireString(params, "account")),
+    "works.archiveMigrate": (params) => workArchive.migrate(requireString(params, "account"), params?.itemIds),
+    "works.archive": (params) => workArchive.set(requireString(params, "account"), requireItemId(params), true),
+    "works.restore": (params) => workArchive.set(requireString(params, "account"), requireItemId(params), false),
     "works.page": (params) => {
       const page = optionalInteger(params, "page", 0, 100_000_000);
       const pageSize = optionalInteger(params, "pageSize", 1, 50);
@@ -544,8 +550,20 @@ export function registerRpc(
   sessionSettings: SessionSettingsService,
   mcp: McpHost,
   update: UpdateService,
+  workArchive: WorkArchiveService,
 ): void {
-  const handlers = createHandlers(sessions, appearance, general, cache, plugins, logs, sessionSettings, mcp, update);
+  const handlers = createHandlers(
+    sessions,
+    appearance,
+    general,
+    cache,
+    plugins,
+    logs,
+    sessionSettings,
+    mcp,
+    update,
+    workArchive,
+  );
   const isRpcMethod = (method: unknown): method is RpcMethod =>
     typeof method === "string" && Object.hasOwn(handlers, method);
 

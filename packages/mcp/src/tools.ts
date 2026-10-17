@@ -4,6 +4,7 @@ import { appTools } from "./app-tools";
 import { businessTools } from "./business-tools";
 import { directTools } from "./direct-tools";
 import type { PluginToolTarget } from "./model";
+import { workVisibility } from "./work-visibility";
 
 const id = z.string().min(1).max(128);
 const itemId = z.string().regex(/^\d{1,32}$/);
@@ -16,7 +17,7 @@ const rank = {
   category: z.enum(["mod", "map", "texture", "lobby"]).optional(),
   limit: z.number().int().min(1).max(50).optional(),
 };
-const work = { ...account, itemId };
+const work = { ...account, itemId, ...workVisibility };
 const draft = { draftId: id };
 const revision = { ...draft, revision: z.number().int().positive() };
 const request = { ...revision, idempotencyKey: id };
@@ -54,7 +55,8 @@ export const readSchemas: Partial<Record<RpcMethod, z.ZodObject>> = {
     includeIcons: z.boolean().optional(),
   }),
   "rank.icons": z.strictObject({ ...account, itemIds: z.array(itemId).max(50) }),
-  "works.list": z.strictObject({ ...account, platform: platform.optional() }),
+  "works.list": z.strictObject({ ...account, platform: platform.optional(), ...workVisibility }),
+  "works.archiveState": z.strictObject(account),
   "works.get": z.strictObject(work),
   "works.reviewFeedback": z.strictObject(work),
   "promotion.activities": z.strictObject({ ...account, page: z.number().int().min(0).max(10000).default(0) }),

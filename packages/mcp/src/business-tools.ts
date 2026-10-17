@@ -9,6 +9,7 @@ import {
 } from "@glaze/contracts";
 import { z } from "zod";
 import type { ToolDefinition } from "./tools";
+import { workVisibility, workVisibilityDescription } from "./work-visibility";
 
 const id = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/);
 const itemId = z.string().regex(/^\d{1,24}$/);
@@ -49,10 +50,11 @@ function tool(
   description: string,
   validate?: (value: Record<string, unknown>) => boolean,
 ): ToolDefinition {
-  let schema = z.strictObject({ ...account, ...shape, ...(readOnly ? {} : key) });
+  const scoped = method.startsWith("works.") && !["works.archive", "works.restore"].includes(method);
+  let schema = z.strictObject({ ...account, ...shape, ...(scoped ? workVisibility : {}), ...(readOnly ? {} : key) });
   if (validate)
     schema = schema.refine((value) => {
-      const { idempotencyKey: _key, ...params } = value;
+      const { idempotencyKey: _key, includeArchived: _include, ...params } = value;
       return validate({ ...params, account: params.account ?? "default" });
     }, "业务参数无效");
   return {
@@ -63,7 +65,7 @@ function tool(
     permission,
     schema,
     readOnly,
-    description: `${description} account 未传时使用已授权默认账号。${readOnly ? "" : "直接执行；重复请求复用 idempotencyKey，结果 unknown 禁止自动重试。"}`,
+    description: `${description} account 未传时使用已授权默认账号。${scoped ? workVisibilityDescription : ""}${readOnly ? "" : "直接执行；重复请求复用 idempotencyKey，结果 unknown 禁止自动重试。"}`,
   };
 }
 
@@ -78,6 +80,22 @@ const workActions: [WorkOperationMethod, string][] = [
   ["works.changePrice", "调整作品价格"],
 ];
 export const businessTools: ToolDefinition[] = [
+  tool(
+    "works.archive",
+    "归档作品",
+    "works:save",
+    { itemId },
+    false,
+    "仅在 Glaze 本地归档作品，默认作品查询将跳过它，不改变网易平台状态。",
+  ),
+  tool(
+    "works.restore",
+    "恢复归档作品",
+    "works:save",
+    { itemId },
+    false,
+    "将明确指定的归档作品恢复到普通作品列表，不改变网易平台状态。",
+  ),
   ...workActions.map(([method, title]) =>
     tool(
       method,

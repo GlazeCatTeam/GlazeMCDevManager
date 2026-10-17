@@ -671,6 +671,14 @@ export class McpService {
       /** Recheck the original contribution and grant after every asynchronous phase */
       const guard = () => {
         this.authorize(id, tool.permission, account ?? undefined);
+        const itemId = draft?.itemId ?? (typeof params.itemId === "string" ? params.itemId : null);
+        if (
+          account &&
+          itemId &&
+          name.startsWith("works_") &&
+          !["works_archive", "works_restore", "works_archiveState"].includes(name)
+        )
+          this.ports.assertWorkAccess?.(account, [itemId], params.includeArchived === true);
         if (tool.plugin) {
           this.ports.assertEnabled(`plugin:${tool.plugin.pluginId}`);
           if (!this.definitions.includes(tool)) throw new McpError("forbidden", "插件工具已变更，请重新调用");
@@ -678,6 +686,7 @@ export class McpService {
         if ((this.epochs.get(id) ?? 0) !== epoch) throw new McpError("forbidden", "请求期间授权发生变化");
       };
       let result: unknown;
+      guard();
       if (tool.invoke) result = await this.business(client, tool, { ...params, account }, guard);
       else if (!params.draftId && !name.startsWith("works_draft_") && !tool.method.includes("."))
         result = await this.direct(client, name, { ...params, account }, guard);
@@ -1287,6 +1296,7 @@ export class McpService {
     }
     if (action === "upload") this.asset(draft, params.assetId as string);
     const operation: StoredOperation = {
+      includeArchived: params.includeArchived === true,
       id: randomUUID(),
       clientId: client.id,
       clientName: client.name,
@@ -1428,6 +1438,8 @@ export class McpService {
     const epoch = this.epochs.get(operation.clientId) ?? 0;
     const guard = () => {
       this.checkAction(operation.clientId, draft, operation.action);
+      if (draft.itemId)
+        this.ports.assertWorkAccess?.(draft.account, [draft.itemId], operation.includeArchived === true);
       this.ports.assertEnabled(draft.purpose === "promotion" ? "promotion.upload" : "works.save");
       if (epoch !== (this.epochs.get(operation.clientId) ?? 0) || draft.revision !== revision)
         throw new McpError("conflict", "授权或内容已变化，执行已停止");
