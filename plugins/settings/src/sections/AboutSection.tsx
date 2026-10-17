@@ -81,7 +81,7 @@ export function AboutSection({ onNotice }: AboutSectionProps) {
       )}
       <UpdateGroup onOpenReleases={() => void openLink("releases")} onNotice={onNotice} />
       <SettingGroup title="项目与许可">
-        <SettingRow title="项目主页" description="TheCoffeeCat-A / GlazeMCDevManager · 查看源码与开发进度">
+        <SettingRow title="项目主页" description="GlazeCatTeam / GlazeMCDevManager · 查看源码与开发进度">
           <TextButton disabled={opening} onClick={() => void openLink("homepage")}>
             查看主页
           </TextButton>

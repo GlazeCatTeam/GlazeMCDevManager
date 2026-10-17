@@ -25,7 +25,7 @@ electronLanguages:
 # CI publishes a draft, which stays invisible to the updater until a maintainer publishes it
 publish:
   provider: github
-  owner: TheCoffeeCat-A
+  owner: GlazeCatTeam
   repo: GlazeMCDevManager
   releaseType: draft
 win:

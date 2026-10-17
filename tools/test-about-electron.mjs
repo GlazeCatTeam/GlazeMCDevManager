@@ -124,10 +124,10 @@ try {
     await page.getByText("已在默认浏览器中打开链接。", { exact: true }).waitFor();
   }
   assert.deepEqual(await application.evaluate(() => globalThis.__opened), [
-    "https://github.com/TheCoffeeCat-A/GlazeMCDevManager",
-    "https://github.com/TheCoffeeCat-A/GlazeMCDevManager/issues",
+    "https://github.com/GlazeCatTeam/GlazeMCDevManager",
+    "https://github.com/GlazeCatTeam/GlazeMCDevManager/issues",
     "https://github.com/BitterLemonn/MCDevManager",
-    "https://github.com/TheCoffeeCat-A/GlazeMCDevManager/releases",
+    "https://github.com/GlazeCatTeam/GlazeMCDevManager/releases",
   ]);
   await application.evaluate(() => {
     globalThis.__openFailure = true;
