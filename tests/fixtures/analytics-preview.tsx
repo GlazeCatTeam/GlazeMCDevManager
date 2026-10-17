@@ -100,7 +100,8 @@ const rpc: GlazeBridge["rpc"] = async (method, params) => {
   await new Promise((resolve) => setTimeout(resolve, controls.delay));
   if (shouldFail) return { ok: false, error: { kind: failureKind, message: "离线测试失败" } };
   let value: unknown;
-  if (method === "works.page") {
+  if (method === "works.archiveState") value = [];
+  else if (method === "works.page") {
     const { page, pageSize } = params as { page: number; pageSize: number };
     value = { items: works.slice(page * pageSize, (page + 1) * pageSize), total: works.length };
   } else if (method === "works.get") {

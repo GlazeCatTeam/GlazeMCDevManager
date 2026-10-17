@@ -9,8 +9,9 @@ original code and documentation are licensed under the Apache License,
 Version 2.0. See LICENSE for the full terms.
 
 Third-party dependencies and assets retain their own copyright and license
-notices. Minecraft image assets under plugins/works/src/assets/minecraft
-and plugins/analytics/src/assets/minecraft are copyright Mojang AB and
+notices. Minecraft image assets under plugins/home/src/assets/minecraft,
+plugins/works/src/assets/minecraft and plugins/analytics/src/assets/minecraft
+are copyright Mojang AB and
 are subject to the declarations in their respective LICENSE.md files;
 they are not licensed under this project's Apache License.
 

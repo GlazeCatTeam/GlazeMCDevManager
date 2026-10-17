@@ -12,7 +12,8 @@ const text = readFileSync(join(root, "LICENSE"), "utf8");
 const notice = readFileSync(join(root, "NOTICE"), "utf8");
 const licenses = collectLicenseNotices(join(root, "apps/desktop"));
 const resources = licenses.filter((item) => item.name.startsWith("Minecraft 图标"));
-assert.equal(resources.length, 2);
+assert.equal(resources.length, 3);
+assert.ok(resources.some((resource) => resource.name === "Minecraft 图标（首页）"));
 for (const resource of resources) {
   assert.notEqual(resource.license, "Apache-2.0");
   assert.equal(resource.notices[0].text, readFileSync(join(root, resource.notices[0].file), "utf8"));
@@ -101,7 +102,7 @@ try {
       .locator("summary")
       .filter({ hasText: /Minecraft 图标/ })
       .count(),
-    2,
+    3,
   );
   await dialog.screenshot({ path: join(root, "node_modules/.cache/project-license.png") });
   await page.setViewportSize({ width: 960, height: 600 });

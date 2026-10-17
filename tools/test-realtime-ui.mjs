@@ -127,7 +127,13 @@ try {
   await page.screenshot({ path: `${output}/realtime-period.png`, fullPage: true });
   await panel.getByRole("button", { name: "自定义", exact: true }).click();
   await page.screenshot({ path: `${output}/realtime-calendar.png` });
+  assert.equal(await calendar.getByLabel("开始日期", { exact: true }).inputValue(), "");
+  assert.equal(await calendar.getByLabel("结束日期", { exact: true }).inputValue(), "");
+  const beforeEndChange = await page.evaluate(() => __realtimeRequests.length);
   await calendar.getByLabel("结束日期", { exact: true }).fill("2026-10-16");
+  assert.equal(await calendar.getByRole("button", { name: "应用", exact: true }).isDisabled(), true);
+  assert.equal(await page.evaluate(() => __realtimeRequests.length), beforeEndChange);
+  await calendar.getByLabel("开始日期", { exact: true }).fill("2026-10-01");
   await calendar.getByRole("button", { name: "应用", exact: true }).click();
   await page.waitForFunction(() => __realtimeRequests.at(-1)?.endDate === "2026-10-16");
   await panel.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
