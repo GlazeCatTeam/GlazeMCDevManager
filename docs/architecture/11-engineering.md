@@ -75,7 +75,7 @@ pnpm dev
 验证步骤（2026-10-16 本地已按此执行）：
 
 1. `pnpm dist` 生成安装包（约 100 MB）。
-2. 静默安装到临时目录：`GlazeMCDevManager-<版本>-x64-setup.exe /S /D=<目录>`；确认目录中有 `LICENSE`、`NOTICE`、`LICENSES.chromium.html`、`LICENSE.electron.txt`，开始菜单与桌面快捷方式的 `System.AppUserModel.ID` 都是 `com.glaze.mcdevmanager`，卸载项发布者为 GlazeCatTeam。
+2. 静默安装到临时目录：`GlazeMCDevManager-<版本>-x64-setup.exe /S /D=<目录>`；确认目录中有 `LICENSE`、`NOTICE`、`LICENSES.chromium.html`、`LICENSE.electron.txt`，开始菜单与桌面快捷方式的 `System.AppUserModel.ID` 都是 `com.glaze.mcdevmanager`，卸载项发布者为 TheCoffeeCat-A。
 3. 用 `--user-data-dir=<临时目录>` 启动已安装的程序，避免读到真实账号；确认 `app.isPackaged` 为 true、窗口进入登录页、无页面错误。
 4. 运行 `Uninstall Glaze MC Dev Manager.exe /S /currentuser`，确认安装目录、快捷方式和卸载注册项都已清除。
 
@@ -107,7 +107,7 @@ pnpm dev
 
 | 项 | 行为 |
 |---|---|
-| 来源 | `electron-builder.yml` 的 `publish`（GitHub `GlazeCatTeam/GlazeMCDevManager`），安装时写入 `resources/app-update.yml` |
+| 来源 | `electron-builder.yml` 的 `publish`（GitHub `TheCoffeeCat-A/GlazeMCDevManager`），安装时写入 `resources/app-update.yml` |
 | 检查 | 启动 15 秒后一次，之后每 6 小时一次；设置 → 关于 可关闭自动检查，偏好存在 SQLite `update` 键；也可手动检查 |
 | 下载 | 有新版本就在后台下载，优先差分下载，失败时下载完整安装包；进度按整百分比广播 `update.changed` |
 | 安装 | 下载完成后由用户确认「重启并安装」，静默安装到原目录并自动重启；不重启时，下次正常退出也会安装 |
@@ -116,6 +116,12 @@ pnpm dev
 | MCP | `update_state`、`update_check` 只读开放；安装和开关只能在界面操作 |
 
 验证（2026-10-16 本地已按此执行）：静默安装 0.1.0，用 `--user-data-dir` 启动。连接真实 GitHub 时（当时还没有 Release）显示「暂时没有可用的发布版本」。把安装目录的 `app-update.yml` 临时改为本机 generic 源，提供 `-c.extraMetadata.version=0.1.1` 打出的测试包后，检查发现 0.1.1，下载完成，确认重启后安装目录的版本变为 0.1.1，再启动时 `app.getAbout` 也是 0.1.1。随后静默卸载，并清理更新缓存 `%LOCALAPPDATA%\@glazedesktop-updater`。
+
+仓库迁移（2026-10-17）：已从组织 `GlazeCatTeam/GlazeMCDevManager` 转移到个人账号 `TheCoffeeCat-A/GlazeMCDevManager`，仓库 ID `1421253079`、公开状态、v0.1.0 / v0.1.1 的 Release 和全部附件均保留。后续构建的 `publish.owner`、项目主页、反馈和下载链接使用个人仓库；发布工作流继续使用当前仓库的 `GITHUB_TOKEN`。应用 ID、包名与更新缓存名称保持不变，避免改变现有用户的安装与数据位置。
+
+旧版安装包仍读取 `GlazeCatTeam` 下的更新地址，依靠 GitHub 的仓库转移重定向访问新的公开 Releases。**不要在旧组织地址创建同名仓库或 fork**，否则 GitHub 会永久取消旧地址的重定向，旧版自动更新将失去原入口。也不要把更新仓库改为私有，或删除历史版本的安装包、`.blockmap`、`latest.yml`。后续发布仍需提升版本号，不覆盖已发布的 v0.1.0 / v0.1.1 附件。参见 [GitHub 仓库转移说明](https://docs.github.com/en/repositories/creating-and-managing-repositories/transferring-a-repository)。
+
+迁移验证：隔离 Electron 中运行现有 electron-updater 6.8.9，读取未修改的旧版 `app-update.yml`，以 0.1.0 版本元数据通过原组织地址找到 0.1.1，完整下载安装包并通过更新器 SHA-512 校验，另行计算的 SHA-256 与迁移前 GitHub 附件摘要一致；以 0.1.1 元数据检查返回已是最新版本。实际网络请求覆盖 releases.atom、latest、latest.yml、两个版本的 blockmap 和 exe 的旧址至新址重定向，没有替换网络响应。版本元数据为测试输入，未运行安装程序；新 NSIS 产物中的 `app-update.yml` 已核实为个人仓库，应用 ID、包名和更新缓存名称不变。
 
 ## 代码规范
 

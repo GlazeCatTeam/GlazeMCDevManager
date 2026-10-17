@@ -119,14 +119,15 @@ try {
   await page.getByRole("button", { name: "关于", exact: true }).click();
   await page.getByText(`v${manifest.version} · 开发模式`, { exact: true }).waitFor();
   assert.match(await page.getByLabel("运行环境").innerText(), new RegExp(about.value.electron.replaceAll(".", "\\.")));
-  for (const name of ["查看主页", "提交反馈", "查看项目"]) {
+  for (const name of ["查看主页", "提交反馈", "查看项目", "打开发布页"]) {
     await page.getByRole("button", { name, exact: true }).click();
     await page.getByText("已在默认浏览器中打开链接。", { exact: true }).waitFor();
   }
   assert.deepEqual(await application.evaluate(() => globalThis.__opened), [
-    "https://github.com/GlazeCatTeam/GlazeMCDevManager",
-    "https://github.com/GlazeCatTeam/GlazeMCDevManager/issues",
+    "https://github.com/TheCoffeeCat-A/GlazeMCDevManager",
+    "https://github.com/TheCoffeeCat-A/GlazeMCDevManager/issues",
     "https://github.com/BitterLemonn/MCDevManager",
+    "https://github.com/TheCoffeeCat-A/GlazeMCDevManager/releases",
   ]);
   await application.evaluate(() => {
     globalThis.__openFailure = true;
