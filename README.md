@@ -6,7 +6,7 @@ Glaze MC Dev Manager：网易我的世界开发者管理工具（Windows 桌面�
 
 ## 下载安装
 
-到 [Releases](https://github.com/GlazeCatTeam/GlazeMCDevManager/releases) 下载最新的 `GlazeMCDevManager-<版本>-x64-setup.exe` 并运行，支持 Windows 10/11 x64。
+到 [Releases](https://github.com/TheCoffeeCat-A/GlazeMCDevManager/releases) 下载最新的 `GlazeMCDevManager-<版本>-x64-setup.exe` 并运行，支持 Windows 10/11 x64。
 
 - 安装包暂未做代码签名。如果 Windows 提示「Windows 已保护你的电脑」，点「更多信息」→「仍要运行」。
 - 装好以后，新版本会在后台自动下载，重启应用就会完成安装；也可以在 设置 → 关于 里手动检查。

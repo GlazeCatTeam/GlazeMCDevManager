@@ -4,7 +4,7 @@
 
 设置 → 关于接入真实版本、运行环境、项目主页、问题反馈、第三方许可与参考项目。2026-10-16 起「更新」分组接入真实更新服务（[ADR-0016](../adr/0016-github-releases-auto-update.md)、[11 工程规范](11-engineering.md)「发布与更新」）：显示当前版本与状态，可以检查更新，下载时显示进度，完成后可重启安装，可展开查看更新说明，可开关自动检查；开发版提供发布页链接。
 
-项目仓库为 `https://github.com/GlazeCatTeam/GlazeMCDevManager`，反馈入口为该仓库的 `/issues`。参考项目为 `https://github.com/BitterLemonn/MCDevManager`，只参考行为和接口，不包含其源码。用户授权选用 Apache-2.0，适用于项目原创代码和文档，包括内置插件、主题实现和 SDK；另有声明的第三方材料保留原许可。
+项目仓库为 `https://github.com/TheCoffeeCat-A/GlazeMCDevManager`，反馈入口为该仓库的 `/issues`。参考项目为 `https://github.com/BitterLemonn/MCDevManager`，只参考行为和接口，不包含其源码。用户授权选用 Apache-2.0，适用于项目原创代码和文档，包括内置插件、主题实现和 SDK；另有声明的第三方材料保留原许可。
 
 ## 能力与边界
 
