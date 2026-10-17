@@ -21,6 +21,15 @@ const server = await createServer({
     },
   },
 });
+/** Pending queries expose placeholders without stale values or interactive data */
+async function expectLoading(panel) {
+  await panel.getByText("正在查询平台数据…", { exact: true }).waitFor();
+  await panel.getByRole("region", { name: "正在加载分析内容", exact: true }).waitFor();
+  assert.equal(await panel.getByRole("table").count(), 0, "old tables are hidden during loading");
+  assert.equal(await panel.getByRole("slider").count(), 0, "old charts are hidden during loading");
+  assert.doesNotMatch(await panel.innerText(), /暂显示|当前结果仍可查看/);
+}
+
 let browser;
 try {
   await server.listen();
@@ -42,8 +51,7 @@ try {
   const before = await page.evaluate(() => __analyticsTest.requests.length);
   await tracking.getByRole("button", { name: "近 7 天", exact: true }).click();
   await tracking.getByRole("button", { name: "近 30 天", exact: true }).click();
-  assert.equal(await tracking.getByRole("table").count(), 1, "cold filters keep the previous result visible");
-  await tracking.getByText(/暂显示/).waitFor();
+  await expectLoading(tracking);
   await tracking.getByText(/共 3 个资源 · 30 天/).waitFor();
   assert.equal(await page.evaluate(() => __analyticsTest.requests.length), before + 1);
   await tracking.getByRole("button", { name: "近 14 天", exact: true }).click();
@@ -63,15 +71,12 @@ try {
   await page.keyboard.press("Home");
   const datePicker = tracking.getByRole("combobox", { name: "查看数值", exact: true });
   const pinned = await datePicker.inputValue();
-  const geometry = await chart.boundingBox();
   await page.evaluate(() => {
     __analyticsTest.controls.delay = 900;
   });
   await page.getByRole("button", { name: "模拟请求失败", exact: true }).click();
   await page.getByRole("button", { name: "刷新", exact: true }).click();
-  await tracking.getByText("正在后台更新，当前结果仍可查看", { exact: true }).waitFor();
-  assert.equal(await tracking.getByRole("table").count(), 1);
-  assert.equal((await chart.boundingBox()).height, geometry.height);
+  await expectLoading(tracking);
   await tracking.getByText(/数据加载失败/).waitFor();
   assert.equal(await datePicker.inputValue(), pinned, "refresh failure keeps pinned chart date");
   assert.equal(await tracking.getByRole("table").getByRole("row").count(), 5);
@@ -104,11 +109,11 @@ try {
     __analyticsTest.controls.delay = 600;
   });
   await summary.getByRole("button", { name: "近 3 个月", exact: true }).click();
-  await summary.getByText(/暂显示/).waitFor();
+  await expectLoading(summary);
   assert.equal(
     await summary.getByRole("combobox", { name: "月份", exact: true }).locator("option").count(),
-    1,
-    "old monthly data keeps its original scope",
+    0,
+    "old monthly data and scope are hidden until the new result arrives",
   );
   await summary.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
   assert.equal(await summary.getByRole("combobox", { name: "月份", exact: true }).locator("option").count(), 3);
@@ -268,12 +273,7 @@ try {
   const input = module.getByRole("combobox", { name: "搜索模组", exact: true });
   await input.fill("资源 18");
   await input.press("Enter");
-  await module.getByText(/暂显示/).waitFor();
-  assert.doesNotMatch(
-    await module.getByRole("table").innerText(),
-    /测试资源 18/,
-    "new selector cannot relabel an old resource's values",
-  );
+  await expectLoading(module);
   await module.getByRole("columnheader", { name: /测试资源 18/ }).waitFor();
   assert.match(await module.getByRole("table").innerText(), /测试资源 18/);
   await module.getByRole("button", { name: /^模组 测试资源/ }).click();
@@ -354,7 +354,7 @@ try {
   assert.match(await period.innerText(), /相邻周期不重叠/);
   assert.doesNotMatch(await period.innerText(), /重叠一天|不可直接跨周期累加/);
   await period.getByRole("button", { name: "上一周期", exact: true }).click();
-  await period.getByText(/暂显示/).waitFor();
+  await expectLoading(period);
   await period.getByText("PE · 2026-08-22 — 2026-09-21", { exact: true }).waitFor();
   await period.getByText("已更新 · 筛选自动生效", { exact: true }).last().waitFor();
   const previousParams = await page.evaluate(
@@ -388,24 +388,15 @@ try {
   const realtime = page.getByRole("tabpanel", { name: "实时收益", exact: true });
   await realtime.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
   await realtime.getByRole("button", { name: "昨天", exact: true }).click();
-  await realtime.getByText(/暂显示.*实时收益/).waitFor();
-  assert.equal(await realtime.getByRole("table").count(), 2, "changing dates does not remove realtime tables");
+  await expectLoading(realtime);
   await realtime.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
   await realtime.getByRole("button", { name: "今天", exact: true }).click();
-  assert.equal(
-    await realtime.getByRole("table").count(),
-    2,
-    "returning to today's exact scope immediately reuses its snapshot",
-  );
+  await expectLoading(realtime);
   await realtime.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
   await page.getByRole("button", { name: "离开分析页", exact: true }).click();
   await page.getByRole("button", { name: "返回分析页", exact: true }).click();
   assert.equal(await page.getByRole("tab", { name: "实时收益", exact: true }).getAttribute("aria-selected"), "true");
-  assert.equal(
-    await realtime.getByRole("table").count(),
-    2,
-    "reentering analytics immediately restores the realtime snapshot",
-  );
+  await expectLoading(realtime);
   await realtime.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
   await page.getByRole("tab", { name: "数据汇总", exact: true }).click();
   assert.equal(

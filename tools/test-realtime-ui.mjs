@@ -21,6 +21,16 @@ const server = await createServer({
     },
   },
 });
+/** Loading never presents a previous period's totals, timestamp or order details */
+async function expectLoading(panel) {
+  await panel.getByText("正在查询平台数据…", { exact: true }).waitFor();
+  await panel.getByRole("region", { name: "正在加载分析内容", exact: true }).waitFor();
+  assert.equal(await panel.getByRole("table").count(), 0);
+  assert.equal(await panel.getByText("钻石收益", { exact: true }).isVisible(), false);
+  assert.equal(await panel.getByText("平台订单数", { exact: true }).isVisible(), false);
+  assert.doesNotMatch(await panel.innerText(), /最近更新|成功 ·|暂显示/);
+}
+
 let browser;
 try {
   await server.listen();
@@ -38,6 +48,7 @@ try {
   assert.equal(await panel.getByText("网易平台响应超时，请稍后重试", { exact: true }).count(), 8);
   await page.screenshot({ path: `${output}/realtime-failures.png`, fullPage: true });
   await panel.getByRole("button", { name: "仅重试失败资源", exact: true }).click();
+  await expectLoading(panel);
   await panel.getByText("110 成功 · 0 失败").waitFor();
   assert.deepEqual(
     await page.evaluate(() => globalThis.__realtimeRequests.map((request) => request.resourceIds.length)),
@@ -67,16 +78,13 @@ try {
   await panel.getByText("110 成功 · 0 失败").waitFor();
   await page.getByRole("button", { name: "模拟请求失败", exact: true }).click();
   await panel.getByRole("button", { name: "刷新收益", exact: true }).click();
+  await expectLoading(panel);
   await panel.getByText("本次更新失败，当前显示上次成功查询的数据。").waitFor();
   await panel.getByText("110 成功 · 0 失败").waitFor();
   await page.getByRole("button", { name: "恢复请求", exact: true }).click();
   await panel.getByRole("button", { name: "昨天", exact: true }).click();
-  assert.equal(
-    await panel.getByText("110 成功 · 0 失败").count(),
-    1,
-    "new dates retain the previous result until ready",
-  );
-  await panel.getByText(/暂显示.*实时收益/).waitFor();
+  await expectLoading(panel);
+  await page.screenshot({ path: `${output}/realtime-loading.png`, fullPage: true });
   await page.waitForFunction(() => globalThis.__realtimeRequests.length === 6);
   await panel.getByRole("button", { name: "今天", exact: true }).click();
   await panel.getByText("85 成功 · 25 失败").waitFor();
@@ -101,6 +109,7 @@ try {
     ["2026-10-11", "2026-10-17", 25],
   );
   await panel.getByRole("button", { name: "近 30 天", exact: true }).click();
+  await expectLoading(panel);
   await page.waitForFunction(() => __realtimeRequests.at(-1)?.date === "2026-09-18");
   await panel.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
   const requestCount = await page.evaluate(() => __realtimeRequests.length);

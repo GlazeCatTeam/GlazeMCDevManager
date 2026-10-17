@@ -12,7 +12,7 @@ import {
   topResources,
   trackingSeries,
 } from "../data";
-import { QuerySkeleton, QueryState, useRefresh } from "../QueryState";
+import { QueryContent, QuerySkeleton, QueryState, useRefresh } from "../QueryState";
 import { useAnalysisSnapshot, useAnalyticsQuery } from "../useAnalyticsQuery";
 import { DataTable, TableNote } from "../widgets/DataTable";
 import { ResourceSelector } from "../widgets/ResourceSelector";
@@ -151,14 +151,14 @@ export function TrackingView({ resources, refreshVersion }: { resources: Resourc
         <SegmentedControl label="追踪指标" options={metricOptions} value={metric} onChange={setMetric} />
         <SegmentedControl label="图表类型" options={chartKindOptions} value={chartKind} onChange={setChartKind} />
       </div>
-      <QuerySkeleton loading={result.loading && result.data === null} stats={false} />
+      <QuerySkeleton loading={result.loading} stats={false} />
       {requestedResources.length === 0 && (
         <Panel className={styles.trendPanel}>
           <p>选择资源开始对比，也可以点击 Top 10 查看表现最好的作品。</p>
         </Panel>
       )}
       {result.data !== null && (
-        <>
+        <QueryContent loading={result.loading}>
           {selectedResources.length > 0 && records.length === 0 && (
             <p role="status">
               平台返回了空列表：{rangeText(dates)}，共 {selectedResources.length} 个资源。请尝试其他资源或扩大日期范围。
@@ -202,7 +202,7 @@ export function TrackingView({ resources, refreshVersion }: { resources: Resourc
               {averageMetric && " · 按已返回日期取算术平均，不做跨日去重或加权"}
             </TableNote>
           </Panel>
-        </>
+        </QueryContent>
       )}
     </>
   );

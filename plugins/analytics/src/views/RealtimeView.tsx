@@ -1,7 +1,7 @@
 import { Button, Notice, Pagination, Panel, SearchField, SegmentedControl, TextButton } from "@glaze/plugin-sdk";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { datesBetween, formatValue, type Resource, shiftDay, todayKey } from "../data";
-import { QuerySkeleton, QueryState, useRefresh } from "../QueryState";
+import { QueryContent, QuerySkeleton, QueryState, useRefresh } from "../QueryState";
 import { scrollWithinView } from "../scroll";
 import { useAnalysisPreference } from "../useAnalysisPreference";
 import { useAnalysisSnapshot } from "../useAnalyticsQuery";
@@ -251,14 +251,14 @@ export function RealtimeView({ resources, refreshVersion }: { resources: Resourc
           </Button>
         </div>
         <p className={styles.note}>
-          {result.data?.queriedAt ? `最近更新 ${orderTime(result.data.queriedAt)} · ` : ""}普通手游资源 ·
-          收益按平台返回总额汇总
+          {!result.loading && result.data?.queriedAt ? `最近更新 ${orderTime(result.data.queriedAt)} · ` : ""}
+          普通手游资源 · 收益按平台返回总额汇总
         </p>
       </Panel>
       <QueryState query={result} scopeLabel={`${result.scope.dateLabel} · 实时收益`} />
-      <QuerySkeleton loading={result.loading && result.data === null} chart={false} />
+      <QuerySkeleton loading={result.loading} chart={false} />
       {result.data !== null && (
-        <>
+        <QueryContent loading={result.loading}>
           {result.error && <p className={styles.failed}>本次更新失败，当前显示上次成功查询的数据。</p>}
           {counts.failed > 0 && (
             <Notice
@@ -511,7 +511,7 @@ export function RealtimeView({ resources, refreshVersion }: { resources: Resourc
               </p>
             </Panel>
           </div>
-        </>
+        </QueryContent>
       )}
     </>
   );

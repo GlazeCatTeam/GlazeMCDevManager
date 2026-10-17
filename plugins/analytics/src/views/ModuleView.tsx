@@ -10,7 +10,7 @@ import {
   type Resource,
   trackingSeries,
 } from "../data";
-import { QuerySkeleton, QueryState, useRefresh } from "../QueryState";
+import { QueryContent, QuerySkeleton, QueryState, useRefresh } from "../QueryState";
 import { useAnalysisPreference } from "../useAnalysisPreference";
 import { useAnalysisSnapshot, useAnalyticsQuery } from "../useAnalyticsQuery";
 import { DataTable } from "../widgets/DataTable";
@@ -131,9 +131,9 @@ export function ModuleView({
         <Notice>所选作品暂无可分析的数据，仅支持曾上架且不是前置模组的手游作品。请选择其他模组。</Notice>
       )}
       <QueryState query={result} scopeLabel={`${resource?.name} · ${rangeText(dates)}`} />
-      <QuerySkeleton loading={result.loading && result.data === null} />
+      <QuerySkeleton loading={result.loading} />
       {result.data !== null && (
-        <>
+        <QueryContent loading={result.loading}>
           <StatStrip
             items={moduleMetrics.map((id) => {
               const values = averages(id);
@@ -194,7 +194,7 @@ export function ModuleView({
             />
             <span className={styles.muted}>按有该指标的日期计算日均，缺失值不计为 0；“—”表示未提供或无法比较。</span>
           </Panel>
-        </>
+        </QueryContent>
       )}
     </>
   );

@@ -11,7 +11,7 @@ import {
   topResources,
   trackingSeries,
 } from "../data";
-import { QuerySkeleton, QueryState, useRefresh } from "../QueryState";
+import { QueryContent, QuerySkeleton, QueryState, useRefresh } from "../QueryState";
 import { useAnalysisPreference } from "../useAnalysisPreference";
 import { useAnalysisSnapshot, useAnalyticsQuery } from "../useAnalyticsQuery";
 import { InlineSelect } from "../widgets/InlineSelect";
@@ -137,14 +137,14 @@ export function SummaryView({ refreshVersion }: { refreshVersion: number }) {
       {!rangeError && !hasCompletedDays && (
         <p className={styles.muted}>当月暂无已完成日期的数据，请于明日查看或切换时间范围</p>
       )}
-      <QuerySkeleton loading={result.loading && result.data === null} />
-      {result.data !== null && unavailableMonths.length > 0 && (
+      <QuerySkeleton loading={result.loading} />
+      {!result.loading && result.data !== null && unavailableMonths.length > 0 && (
         <p className={styles.muted} role="status">
           {unavailableMonths.join("、")}：平台暂未提供月汇总数据。合计仅包含已有数据，缺失月份不计为零。
         </p>
       )}
       {result.data !== null && (
-        <>
+        <QueryContent loading={result.loading}>
           <StatStrip
             items={summaryMetrics.map((item) => ({
               label: item.label,
@@ -251,7 +251,7 @@ export function SummaryView({ refreshVersion }: { refreshVersion: number }) {
             )}
             <span className={styles.muted}>“—”表示平台未提供。月汇总未提供购买次数合计。</span>
           </Panel>
-        </>
+        </QueryContent>
       )}
     </>
   );

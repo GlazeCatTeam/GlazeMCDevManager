@@ -35,6 +35,14 @@
   gap: 20px;
 }
 
+.content {
+  display: contents;
+}
+
+.content[hidden] {
+  display: none;
+}
+
 .stats,
 .chart,
 .table {

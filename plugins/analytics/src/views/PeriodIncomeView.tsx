@@ -18,7 +18,7 @@ import {
   sumAllocatedIncome,
   summarizePeriodIncome,
 } from "../period-income";
-import { QuerySkeleton, QueryState, useRefresh } from "../QueryState";
+import { QueryContent, QuerySkeleton, QueryState, useRefresh } from "../QueryState";
 import { useAnalysisPreference } from "../useAnalysisPreference";
 import { AnalysisActivity, useAnalysisSnapshot, useAnalyticsQuery } from "../useAnalyticsQuery";
 import { DataTable, TableNote } from "../widgets/DataTable";
@@ -244,9 +244,9 @@ function PeriodIncomeResults({
         query={result}
         scopeLabel={`${platform.toUpperCase()} · ${cycle.startDate} — ${cycle.endDate} · ${selectedId === "all" ? "全部资源" : (displayedResources[0]?.name ?? "所选资源")}`}
       />
-      <QuerySkeleton loading={result.loading && result.data === null} />
+      <QuerySkeleton loading={result.loading} />
       {result.data !== null && (
-        <>
+        <QueryContent loading={result.loading}>
           <div className={styles.heading}>
             <strong>
               {platform.toUpperCase()} · {cycle.startDate} — {cycle.endDate}
@@ -377,7 +377,7 @@ function PeriodIncomeResults({
             />
             <TableNote>收到 {summary.recordCount} 条日记录 · “—”表示没有记录或指标缺失 · 搜索不影响上方合计</TableNote>
           </Panel>
-        </>
+        </QueryContent>
       )}
     </>
   );

@@ -1,5 +1,5 @@
 import { type HostQuery, TextButton } from "@glaze/plugin-sdk";
-import { useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import styles from "./QueryState.module.css";
 
 /** Refresh the active query without discarding its filters */
@@ -24,11 +24,7 @@ export function QueryState({
   scopeLabel?: string;
 }) {
   const message = query.loading
-    ? query.data !== null
-      ? query.previous
-        ? `正在加载新筛选 · 暂显示 ${scopeLabel ?? "上次结果"}`
-        : "正在后台更新，当前结果仍可查看"
-      : "正在查询平台数据…"
+    ? "正在查询平台数据…"
     : query.error
       ? `${label}加载失败：${query.error.message}${query.data !== null ? ` · 已保留${query.previous ? ` ${scopeLabel ?? "上次成功结果"}` : "上次成功结果"}` : ""}`
       : query.data !== null
@@ -53,7 +49,16 @@ export function QueryState({
   );
 }
 
-/** Hold the content footprint on a cold query without presenting invented zero values */
+/** Hide pending results while preserving mounted chart and table state */
+export function QueryContent({ loading, children }: { loading: boolean; children: ReactNode }) {
+  return (
+    <div className={styles.content} hidden={loading}>
+      {children}
+    </div>
+  );
+}
+
+/** Hold the content footprint during queries without presenting old or invented values */
 export function QuerySkeleton({
   loading,
   stats = true,
