@@ -1,12 +1,13 @@
 import { Button, Notice, Pagination, Panel, SearchField, SegmentedControl, TextButton } from "@glaze/plugin-sdk";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { formatValue, type RealtimeDay, type Resource, shiftDay, todayKey } from "../data";
+import { datesBetween, formatValue, type Resource, shiftDay, todayKey } from "../data";
 import { QuerySkeleton, QueryState, useRefresh } from "../QueryState";
 import { scrollWithinView } from "../scroll";
 import { useAnalysisPreference } from "../useAnalysisPreference";
 import { useAnalysisSnapshot } from "../useAnalyticsQuery";
 import { useRealtimeIncome } from "../useRealtimeIncome";
 import { DataTable, mutedClass } from "../widgets/DataTable";
+import { DateRangePicker } from "../widgets/DateRangePicker";
 import { InlineSelect } from "../widgets/InlineSelect";
 import { MinecraftCurrencyIcon } from "../widgets/MinecraftCurrencyIcon";
 import { SearchableSelect } from "../widgets/SearchableSelect";
@@ -19,7 +20,10 @@ const ORDER_PAGE_SIZE = 20;
 const dayOptions = [
   { value: "today", label: "今天" },
   { value: "yesterday", label: "昨天" },
+  { value: "week", label: "近 7 天" },
+  { value: "month", label: "近 30 天" },
 ] as const;
+type RealtimePeriod = (typeof dayOptions)[number]["value"];
 const currencyOptions = [
   { value: "all", label: "全部" },
   { value: "diamond", label: "钻石" },
@@ -56,7 +60,12 @@ function orderTime(value: string): string {
 
 /** Scan large resource sets without squeezing cards or rendering every order at once */
 export function RealtimeView({ resources, refreshVersion }: { resources: Resource[]; refreshVersion: number }) {
-  const [day, setDay] = useAnalysisPreference<RealtimeDay>("realtime.day", "today", ["today", "yesterday"]);
+  const [day, setDay] = useAnalysisPreference<RealtimePeriod>(
+    "realtime.day",
+    "today",
+    dayOptions.map((option) => option.value),
+  );
+  const [customRange, setCustomRange] = useAnalysisPreference<string>("realtime.range", "");
   const [resourceId, setResourceId] = useAnalysisPreference<string>("realtime.resource", "all");
   const [currency, setCurrency] = useAnalysisPreference<string>(
     "realtime.currency",
@@ -86,12 +95,21 @@ export function RealtimeView({ resources, refreshVersion }: { resources: Resourc
     scrollWithinView(scrollTarget === "orders" ? orderPanel.current : resourcePanel.current, "start", "smooth");
     setScrollTarget(null);
   }, [scrollTarget]);
-  const date = shiftDay(todayKey(), day === "today" ? 0 : -1);
+  const today = todayKey();
+  const [customStart = "", customEnd = ""] = customRange.split(":");
+  const customDates = datesBetween(customStart, customEnd, shiftDay(today, 1));
+  const custom = customDates.length > 0;
+  const date = custom
+    ? customStart
+    : shiftDay(today, day === "yesterday" ? -1 : day === "week" ? -6 : day === "month" ? -29 : 0);
+  const endDate = custom ? customEnd : day === "yesterday" ? date : today;
+  const dateLabel = date === endDate ? date : `${date} — ${endDate}`;
   const query = useRealtimeIncome(
     date,
     resources.map((resource) => resource.id),
+    endDate,
   );
-  const result = { ...query, ...useAnalysisSnapshot(query, { date }) };
+  const result = { ...query, ...useAnalysisSnapshot(query, { dateLabel }) };
   useRefresh(result.reload, refreshVersion);
   const incomes = result.data?.resources;
   const failed = result.data?.failedResourceIds;
@@ -200,19 +218,33 @@ export function RealtimeView({ resources, refreshVersion }: { resources: Resourc
     <>
       <Panel className={styles.datePanel} aria-label="实时收益筛选">
         <div className={styles.dateRow}>
-          <span className={styles.muted}>统计日期</span>
-          <SegmentedControl
-            label="实时收益日期"
-            options={dayOptions}
-            value={day}
-            onChange={(next) => {
-              setDay(next);
-              setResourcePage(0);
-              setOrderPage(0);
-            }}
-          />
+          <span className={styles.muted}>统计周期</span>
+          <div className={styles.periodControls}>
+            <SegmentedControl
+              label="实时收益日期"
+              options={dayOptions}
+              value={custom ? "" : day}
+              onChange={(next) => {
+                if (!next) return;
+                setDay(next);
+                setCustomRange("");
+                setResourcePage(0);
+                setOrderPage(0);
+              }}
+            />
+            <DateRangePicker
+              dates={[date, endDate]}
+              active={custom}
+              includeToday
+              onChange={(start, end) => {
+                setCustomRange(`${start}:${end}`);
+                setResourcePage(0);
+                setOrderPage(0);
+              }}
+            />
+          </div>
           <span className={styles.muted}>
-            {date} · 北京时间{day === "today" ? " · 当日未完结" : " · 全天"}
+            {dateLabel} · 北京时间{endDate === today ? " · 当日未完结" : date === endDate ? " · 全天" : " · 含起止当天"}
           </span>
           <Button size="xs" disabled={result.loading} onClick={result.reload}>
             {result.loading ? "查询中…" : "刷新收益"}
@@ -223,7 +255,7 @@ export function RealtimeView({ resources, refreshVersion }: { resources: Resourc
           收益按平台返回总额汇总
         </p>
       </Panel>
-      <QueryState query={result} scopeLabel={`${result.scope.date} · 实时收益`} />
+      <QueryState query={result} scopeLabel={`${result.scope.dateLabel} · 实时收益`} />
       <QuerySkeleton loading={result.loading && result.data === null} chart={false} />
       {result.data !== null && (
         <>

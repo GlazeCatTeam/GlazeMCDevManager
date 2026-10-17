@@ -1,4 +1,4 @@
-import { avatarColorsFor, Button, remoteImageUrl, Tag, TextButton, type WorkSummary } from "@glaze/plugin-sdk";
+import { avatarColorsFor, Button, Icon, remoteImageUrl, Tag, TextButton, type WorkSummary } from "@glaze/plugin-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatDate, formatDateTime } from "../format";
 import { actionLabels, actionsFor, readActions, statusLabels, statusTones, type WorkAction } from "../status";
@@ -16,6 +16,9 @@ export interface WorkTileProps {
   onOpenAnalytics: (work: WorkSummary) => void;
   onPrepare: (work: WorkSummary) => void;
   canWrite: boolean;
+  archived: boolean;
+  archiveDisabled: boolean;
+  onArchive: (work: WorkSummary) => void;
 }
 
 const toneClass = {
@@ -51,6 +54,9 @@ export function WorkTile({
   onOpenAnalytics,
   onPrepare,
   canWrite,
+  archived,
+  archiveDisabled,
+  onArchive,
 }: WorkTileProps) {
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** A short hover delay avoids fetching every card swept by the pointer */
@@ -72,16 +78,36 @@ export function WorkTile({
   return (
     <li
       className={styles.tile}
-      onPointerEnter={() => {
+      onPointerEnter={(event) => {
         cancelHover();
+        if (event.target instanceof Element && event.target.closest("[data-work-archive]")) return;
         hoverTimer.current = setTimeout(() => onPrepare(work), 120);
       }}
       onPointerLeave={cancelHover}
-      onFocusCapture={() => {
+      onFocusCapture={(event) => {
         cancelHover();
+        if (event.target instanceof Element && event.target.closest("[data-work-archive]")) return;
         onPrepare(work);
       }}
     >
+      <Button
+        data-work-archive
+        variant="secondary"
+        size="xs"
+        className={`${styles.archive} ${archived ? "" : styles.archiveMuted}`}
+        disabled={archiveDisabled}
+        title={
+          archiveDisabled
+            ? "归档操作暂不可用，请稍后重试"
+            : archived
+              ? "恢复到作品列表"
+              : "归档作品：仅在本软件中隐藏，可在归档管理中恢复"
+        }
+        aria-label={`${archived ? "恢复" : "归档"} ${work.name}`}
+        onClick={() => onArchive(work)}
+      >
+        <Icon name={archived ? "action.unarchive" : "action.archive"} size={12} />
+      </Button>
       <div className={styles.head}>
         <Cover key={detail.data?.iconUrl ?? "none"} iconUrl={detail.data?.iconUrl ?? null} seed={work.itemId} />
         <span className={styles.titles}>

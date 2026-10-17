@@ -101,6 +101,28 @@ try {
   const accounts = await client.callTool({ name: "account_list", arguments: {} });
   assert.equal(accounts.structuredContent.result[0].nickname, "MCP 测试账号");
   assert.ok(!JSON.stringify(accounts).includes("TEST_ONLY"));
+  // Local archives use the same host state in both directions and require no platform access
+  const archivedId = "1000000000000000001";
+  const archive = await client.callTool({
+    name: "works_archive",
+    arguments: { itemId: archivedId, idempotencyKey: "archive-local" },
+  });
+  assert.equal(archive.structuredContent.result.state, "succeeded");
+  const archiveState = await page.evaluate(() =>
+    window.glaze.rpc("works.archiveState", { account: "mcp-test-account" }),
+  );
+  assert.deepEqual(archiveState.value, [archivedId]);
+  const blockedWork = await client.callTool({ name: "works_get", arguments: { itemId: archivedId } });
+  assert.equal(blockedWork.isError, true);
+  assert.equal(JSON.parse(blockedWork.content[0].text).kind, "archived");
+  await client.callTool({ name: "works_restore", arguments: { itemId: archivedId, idempotencyKey: "restore-local" } });
+  await page.evaluate(
+    (itemId) => window.glaze.rpc("works.archive", { account: "mcp-test-account", itemId }),
+    archivedId,
+  );
+  const aiArchiveState = await client.callTool({ name: "works_archiveState", arguments: {} });
+  assert.deepEqual(aiArchiveState.structuredContent.result, [archivedId]);
+  await client.callTool({ name: "works_restore", arguments: { itemId: archivedId, idempotencyKey: "restore-ui" } });
   await page.getByText("其他 AI 工具", { exact: true }).first().waitFor();
   await page.getByText("使用中", { exact: true }).waitFor();
   await page.getByText("AI 已连接", { exact: false }).waitFor();

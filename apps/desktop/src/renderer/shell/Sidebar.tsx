@@ -3,6 +3,7 @@ import { callHost, onHostEvent, usePrefetchHostQuery } from "@glaze/plugin-sdk";
 import { Avatar, avatarColorsFor, Icon } from "@glaze/ui";
 import { useEffect, useState } from "react";
 import { preloadRoute } from "../routes/pages";
+import { MessageUnreadDot } from "./MessageUnreadDot";
 import type { NavEntry } from "./nav";
 import styles from "./Sidebar.module.css";
 
@@ -81,6 +82,9 @@ export function Sidebar({ entries, activeRoute, account, onNavigate }: SidebarPr
       >
         {entry.icon && <Icon name={entry.icon} size={20} />}
         {entry.title}
+        {entry.route === "glaze.messages/messages" && account && account.status !== "expired" && (
+          <MessageUnreadDot account={account.id} />
+        )}
       </button>
     );
   };

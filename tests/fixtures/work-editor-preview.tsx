@@ -122,6 +122,9 @@ const options: WorkEditorOptions = {
   ],
 };
 const requests: { method: string; params: unknown }[] = [];
+const archiveListeners = new Set<(payload: unknown) => void>();
+let archiveFailure = false;
+let archiveReadFailure = new URLSearchParams(location.search).has("archiveReadFailure");
 let saveFailure = false;
 const editorFeatures = new URLSearchParams(location.search).has("editorFeatures");
 if (editorFeatures) {
@@ -222,6 +225,29 @@ if (performancePreview) {
 /** Model the preload contract locally; this fixture has no network implementation */
 const rpc = async (method: string, params?: unknown) => {
   requests.push({ method, params: structuredClone(params) });
+  if (["works.archiveState", "works.archiveMigrate", "works.archive", "works.restore"].includes(method)) {
+    if (method === "works.archiveState" && archiveReadFailure)
+      return { ok: false, error: { kind: "network", message: "模拟归档记录读取失败" } };
+    const input = params as { account: string; itemId?: string; itemIds?: string[] };
+    const key = `fixture:host-archives:${input.account}`;
+    const stored = localStorage.getItem(key);
+    if (method === "works.archiveState" && stored === null)
+      return { ok: false, error: { kind: "archive_not_ready", message: "等待迁移" } };
+    const ids: string[] = JSON.parse(stored ?? "[]");
+    if (method === "works.archiveState") return { ok: true, value: ids };
+    if (archiveFailure) return { ok: false, error: { kind: "storage", message: "模拟存储失败" } };
+    const next =
+      method === "works.archiveMigrate"
+        ? stored === null
+          ? (input.itemIds ?? [])
+          : ids
+        : method === "works.archive"
+          ? [...new Set([...ids, input.itemId as string])]
+          : ids.filter((id) => id !== input.itemId);
+    localStorage.setItem(key, JSON.stringify(next));
+    for (const notify of archiveListeners) notify({ account: input.account, itemIds: next });
+    return { ok: true, value: next };
+  }
   if (method === "works.searchReferences") {
     const p = params as { kind: string; query: string };
     if (p.query === "失败") return { ok: false, error: { kind: "business", message: "模拟搜索失败" } };
@@ -421,9 +447,18 @@ const rpc = async (method: string, params?: unknown) => {
     : { ok: false, error: { kind: "fixture", message: `未模拟接口 ${method}` } };
 };
 Object.assign(globalThis, {
+  workNavigationFixture: {
+    failArchiveRead: (value: boolean) => {
+      archiveReadFailure = value;
+    },
+  },
   glaze: {
     rpc,
-    on: () => () => {},
+    on: (event, listener) => {
+      if (event !== "works.archiveChanged") return () => {};
+      archiveListeners.add(listener as (payload: unknown) => void);
+      return () => archiveListeners.delete(listener as (payload: unknown) => void);
+    },
     uploadDroppedResource: async (file, params) => {
       requests.push({ method: "works.uploadDroppedResource", params });
       return {
@@ -456,6 +491,11 @@ if (actionsPreview)
     workActionFixture: {
       requests,
       workList,
+      failArchive: (value: boolean) => {
+        archiveFailure = value;
+      },
+      archiveExternally: (itemId: string, archived: boolean) =>
+        rpc(archived ? "works.archive" : "works.restore", { account: account.id, itemId }),
       fail: (value: string | null) => {
         actionFailure = value;
       },

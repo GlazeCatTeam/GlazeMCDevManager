@@ -175,6 +175,10 @@ export interface RpcMethods {
   "rank.icons": { params: RankIconsParams; result: Record<string, string> };
   "works.list": { params: (AccountParams & { platform?: IncomePlatform }) | undefined; result: WorkSummary[] };
   "works.page": { params: WorkPageParams; result: WorkPage };
+  "works.archiveState": { params: { account: string }; result: string[] };
+  "works.archiveMigrate": { params: { account: string; itemIds: string[] }; result: string[] };
+  "works.archive": { params: WorkParams; result: string[] };
+  "works.restore": { params: WorkParams; result: string[] };
   "works.search": { params: WorkSearchPageParams; result: WorkSearchPage };
   "works.create": { params: WorkCreateParams; result: undefined };
   "works.searchReferences": { params: WorkSearchParams; result: WorkReference[] };
@@ -200,6 +204,7 @@ export interface RpcMethods {
 }
 
 export interface EventPayloads {
+  "works.archiveChanged": { account: string; itemIds: string[] };
   "app.navigate": { route: string; params: Record<string, string> };
   /** Platform data of these modules may have changed, from the app or an AI tool */
   "data.changed": { modules: string[] };

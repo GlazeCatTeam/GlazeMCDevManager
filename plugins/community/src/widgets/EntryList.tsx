@@ -1,4 +1,5 @@
 import { EmptyState, type PlayerFeedback, Tag } from "@glaze/plugin-sdk";
+import { useLayoutEffect, useRef } from "react";
 import type { CommentEntry } from "../types";
 import { CommentRating } from "./CommentRating";
 import styles from "./EntryList.module.css";
@@ -11,10 +12,26 @@ export interface EntryListProps {
   selectedId: string | undefined;
   onSelect: (id: string) => void;
   showReplyStatus?: boolean;
+  resetKey?: string;
+  emptyTitle?: string;
+  emptyHint?: string;
 }
 
 /** Fixed-height list; omit reply badges when the data source does not report reply state */
-export function EntryList({ title, entries, selectedId, onSelect, showReplyStatus = true }: EntryListProps) {
+export function EntryList({
+  title,
+  entries,
+  selectedId,
+  onSelect,
+  showReplyStatus = true,
+  resetKey,
+  emptyTitle,
+  emptyHint,
+}: EntryListProps) {
+  const list = useRef<HTMLUListElement>(null);
+  useLayoutEffect(() => {
+    if (resetKey !== undefined && list.current) list.current.scrollTop = 0;
+  }, [resetKey]);
   return (
     <section className={styles.panel} aria-label={title}>
       <div className={styles.heading}>
@@ -22,7 +39,7 @@ export function EntryList({ title, entries, selectedId, onSelect, showReplyStatu
         <span>{entries.length} 条</span>
       </div>
       {entries.length > 0 ? (
-        <ul className={styles.list}>
+        <ul className={styles.list} ref={list}>
           {entries.map((entry) => (
             <li key={entry.id}>
               <button
@@ -52,7 +69,7 @@ export function EntryList({ title, entries, selectedId, onSelect, showReplyStatu
           ))}
         </ul>
       ) : (
-        <EmptyState title="没有符合条件的记录" hint="试试其他关键词或调整筛选条件" />
+        <EmptyState title={emptyTitle ?? "没有符合条件的记录"} hint={emptyHint ?? "试试其他关键词或调整筛选条件"} />
       )}
     </section>
   );

@@ -13,7 +13,7 @@ const server = await createServer({
   root,
   logLevel: "warn",
   plugins: [react()],
-  server: { host: "127.0.0.1", port: 0 },
+  server: { host: "127.0.0.1", port: 0, hmr: false },
   resolve: {
     alias: {
       "react-dom": fileURLToPath(new URL("../apps/desktop/node_modules/react-dom", import.meta.url)),
@@ -31,7 +31,14 @@ try {
   await page.goto(`${server.resolvedUrls.local[0]}tests/fixtures/analytics.html?dense`);
   const panel = page.getByRole("tabpanel", { name: "数据追踪" });
   const top10 = panel.getByRole("button", { name: "Top 10", exact: true });
-  await panel.getByRole("table").waitFor();
+  // Include the fixture state when the first query fails instead of reporting only a locator timeout
+  await panel
+    .getByRole("table")
+    .waitFor()
+    .catch(async (error) => {
+      console.error("Tracking fixture diagnostics:", { errors, body: await panel.innerText() });
+      throw error;
+    });
   await panel.getByRole("button", { name: "清空", exact: true }).click();
   await top10.click();
   await panel.getByText(/按新增购买区间合计降序展示 10/).waitFor();

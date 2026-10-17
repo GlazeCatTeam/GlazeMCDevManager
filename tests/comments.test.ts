@@ -110,24 +110,47 @@ test("failed later source pages preserve explicit partial progress and can be re
   const cache = new CommentPageCache();
   const items = ratingRows(130);
   const progress: number[] = [];
+  const starts: number[] = [];
   const failed = await loadCommentPage(
     cache,
     params,
     [1],
-    async (input) =>
-      input.start === 0
+    async (input) => {
+      starts.push(input.start);
+      return input.start === 0
         ? { ok: true, value: { total: 130, items: items.slice(0, 100) } }
-        : { ok: false, error: { kind: "network", message: "offline" } },
+        : { ok: false, error: { kind: "network", message: "offline" } };
+    },
     (value) => progress.push(value.scanned),
   );
   assert.equal(failed.ok, false);
   assert.deepEqual(progress, [100]);
-  const retry = await loadCommentPage(cache, params, [1], async (input) => ({
-    ok: true,
-    value: { total: 130, items: items.slice(input.start, input.start + input.span) },
-  }));
+  const retry = await loadCommentPage(cache, params, [1], async (input) => {
+    starts.push(input.start);
+    return { ok: true, value: { total: 130, items: items.slice(input.start, input.start + input.span) } };
+  });
   assert.ok(retry.ok);
   assert.equal(retry.value.total, 2);
+  assert.deepEqual(starts, [0, 100, 100]);
+});
+
+test("many source batches do not evict the complete snapshot needed by other filters", async () => {
+  const cache = new CommentPageCache(Date.now, 30_000, 3);
+  const items = ratingRows(430);
+  let calls = 0;
+  const load = async (input: typeof params): Promise<RpcResult<CommentPage>> => {
+    calls++;
+    return { ok: true, value: { total: items.length, items: items.slice(input.start, input.start + input.span) } };
+  };
+  const first = await loadCommentPage(cache, params, [1], load);
+  const second = await loadCommentPage(cache, params, [5], load);
+  assert.ok(first.ok && second.ok);
+  assert.equal(first.value.total, 2);
+  assert.equal(second.value.total, 428);
+  assert.equal(calls, 5);
+  cache.expire();
+  await loadCommentPage(cache, params, [1], load);
+  assert.equal(calls, 10);
 });
 
 test("rating matches publish before a slow later batch and new subscribers receive progress", async () => {
@@ -239,6 +262,85 @@ test("without ratings only the requested server page is loaded", async () => {
     return { ok: true, value: { total: 30, items: ratingRows().slice(20) } };
   });
   assert.equal(calls, 1);
+});
+
+test("text filtering scans all source pages, removes whitespace and paginates before display", async () => {
+  const cache = new CommentPageCache();
+  const items = ratingRows(130).map((item, index) => ({
+    ...item,
+    content: index % 3 === 0 ? "" : index % 3 === 1 ? " \n\t　" : index === 2 ? "👍" : item.content,
+  }));
+  const starts: number[] = [];
+  const load = async (input: typeof params): Promise<RpcResult<CommentPage>> => {
+    starts.push(input.start);
+    assert.equal("hideEmpty" in input, false);
+    return { ok: true, value: { total: items.length, items: items.slice(input.start, input.start + input.span) } };
+  };
+  const progress: number[] = [];
+  const first = await loadCommentPage(
+    cache,
+    params,
+    [],
+    load,
+    (value) => progress.push(value.data.total),
+    undefined,
+    true,
+  );
+  const second = await loadCommentPage(cache, { ...params, start: 20 }, [], load, undefined, undefined, true);
+  const third = await loadCommentPage(cache, { ...params, start: 40 }, [], load, undefined, undefined, true);
+  assert.ok(first.ok && second.ok && third.ok);
+  assert.deepEqual(starts, [0, 100]);
+  assert.deepEqual(progress, [33, 43]);
+  assert.equal(first.value.total, 43);
+  assert.equal(first.value.items[0]?.content, "👍");
+  assert.equal(second.value.items.length, 20);
+  assert.equal(third.value.items.length, 3);
+  assert.deepEqual(
+    [...first.value.items, ...second.value.items, ...third.value.items],
+    items.filter((item) => item.content.trim()),
+  );
+});
+
+test("text and rating filters share scans while keeping their cached results isolated", async () => {
+  const cache = new CommentPageCache();
+  const items = ratingRows().map((item, index) => ({ ...item, content: index === 0 ? "" : item.content }));
+  let calls = 0;
+  const load = async (input: typeof params): Promise<RpcResult<CommentPage>> => {
+    calls++;
+    return { ok: true, value: { total: items.length, items: items.slice(input.start, input.start + input.span) } };
+  };
+  const rating = await loadCommentPage(cache, params, [1], load);
+  const combined = await loadCommentPage(cache, params, [1], load, undefined, undefined, true);
+  const text = await loadCommentPage(cache, params, [], load, undefined, undefined, true);
+  const restored = await loadCommentPage(cache, params, [1], load);
+  assert.ok(rating.ok && combined.ok && text.ok && restored.ok);
+  assert.equal(calls, 1);
+  assert.equal(rating.value.total, 2);
+  assert.equal(combined.value.total, 1);
+  assert.equal(combined.value.items[0]?.id, "comment-21");
+  assert.equal(text.value.total, 29);
+  assert.deepEqual(restored.value, rating.value);
+  assert.notEqual(commentQueryKey(params, [1]), commentQueryKey(params, [1], true));
+  assert.notEqual(commentQueryKey(params, [], true), commentQueryKey(params, []));
+  assert.equal(commentQueryKey(params, [5, 1], true), commentQueryKey(params, [1, 5], true));
+});
+
+test("all blank comments produce an empty filtered page", async () => {
+  const first = ratingRows()[0];
+  assert.ok(first);
+  const result = await loadCommentPage(
+    new CommentPageCache(),
+    params,
+    [],
+    async () => ({
+      ok: true,
+      value: { total: 1, items: [{ ...first, content: " \n　" }] },
+    }),
+    undefined,
+    undefined,
+    true,
+  );
+  assert.deepEqual(result, { ok: true, value: { total: 0, items: [] } });
 });
 
 afterEach(() => {

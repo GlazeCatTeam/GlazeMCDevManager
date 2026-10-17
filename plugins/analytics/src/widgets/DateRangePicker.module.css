@@ -1,0 +1,116 @@
+.root {
+  position: relative;
+  flex: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  border: 0;
+}
+
+.popup {
+  position: fixed;
+  inset: auto;
+  z-index: 30;
+  margin: 0;
+  width: min(340px, calc(100vw - 64px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: 14px;
+  background: var(--g-surface-panel);
+  border: var(--g-border-width) solid var(--g-field-borderColor);
+  border-radius: var(--g-radius-control);
+  box-shadow: 0 8px 24px #0006;
+  color: var(--g-text-primary);
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--g-text-muted);
+  font-size: 12px;
+}
+
+.fields input {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 4px 6px;
+  background: var(--g-surface-sunken);
+  border: var(--g-border-width) solid var(--g-field-borderColor);
+  border-radius: var(--g-radius-control);
+  color: var(--g-text-primary);
+  font: inherit;
+  user-select: text;
+}
+
+.navigation,
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.navigation strong {
+  flex: 1;
+  text-align: center;
+  font-size: 14px;
+}
+
+.days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  margin: 12px 0 0;
+  padding: 0;
+  min-width: 0;
+  border: 0;
+}
+
+.weekday {
+  text-align: center;
+  color: var(--g-text-muted);
+  font-size: 12px;
+}
+
+.day {
+  min-width: 0;
+  width: 100%;
+  height: 30px;
+  padding-inline: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.outside:not([aria-pressed="true"]) {
+  color: var(--g-text-muted);
+  background: var(--g-surface-sunken);
+}
+
+.inRange {
+  border-color: var(--g-action-primary-bg);
+  background: var(--g-surface-sunken);
+  box-shadow: none;
+}
+
+.hint {
+  min-height: 36px;
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.note {
+  color: var(--g-text-muted);
+  font-size: 12px;
+}
+
+.actions {
+  justify-content: flex-end;
+}

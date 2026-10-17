@@ -2,6 +2,7 @@ import { Notice, Panel, SegmentedControl } from "@glaze/plugin-sdk";
 import {
   aggregate,
   type DayRange,
+  datesBetween,
   daysInRange,
   formatValue,
   type Metric,
@@ -13,6 +14,7 @@ import { QuerySkeleton, QueryState, useRefresh } from "../QueryState";
 import { useAnalysisPreference } from "../useAnalysisPreference";
 import { useAnalysisSnapshot, useAnalyticsQuery } from "../useAnalyticsQuery";
 import { DataTable } from "../widgets/DataTable";
+import { DateRangePicker } from "../widgets/DateRangePicker";
 import { SearchableSelect } from "../widgets/SearchableSelect";
 import { StatStrip } from "../widgets/StatStrip";
 import { TrendChart } from "../widgets/TrendChart";
@@ -53,10 +55,14 @@ export function ModuleView({
     initialResourceId,
   );
   const [days, setDays] = useAnalysisPreference<DayRange>("module.days", 14, [7, 14, 30]);
+  const [customRange, setCustomRange] = useAnalysisPreference<string>("module.range", "");
   const [metric, setMetric] = useAnalysisPreference<Metric>("module.metric", "purchases", moduleMetrics);
   const requestedResource =
     resources.find((item) => item.id === resourceId) ?? (initialResourceId === resourceId ? undefined : resources[0]);
-  const requestedDates = daysInRange(days);
+  const [customStart = "", customEnd = ""] = customRange.split(":");
+  const customDates = datesBetween(customStart, customEnd);
+  const custom = customDates.length > 0;
+  const requestedDates = custom ? customDates : daysInRange(days);
   const query = useAnalyticsQuery(
     "analytics.daily",
     {
@@ -103,7 +109,21 @@ export function ModuleView({
         </div>
         <div className={styles.filterRow}>
           <span className={styles.filterLabel}>时间</span>
-          <SegmentedControl label="模组分析日期范围" options={dayRangeOptions} value={days} onChange={setDays} />
+          <SegmentedControl<DayRange | "custom">
+            label="模组分析日期范围"
+            options={dayRangeOptions}
+            value={custom ? "custom" : days}
+            onChange={(next) => {
+              if (next === "custom") return;
+              setDays(next);
+              setCustomRange("");
+            }}
+          />
+          <DateRangePicker
+            dates={requestedDates}
+            active={custom}
+            onChange={(start, end) => setCustomRange(`${start}:${end}`)}
+          />
           <span className={styles.dateRange}>{rangeText(requestedDates)}</span>
         </div>
       </Panel>

@@ -1,4 +1,4 @@
-import { type AccountSummary, callHost, onHostEvent } from "@glaze/plugin-sdk";
+import { type AccountSummary, callHost, onHostEvent, workArchiveSnapshot } from "@glaze/plugin-sdk";
 import { clearWorkReads, preloadWorksPage } from "./useWorkQuery";
 
 /** Warm one first page during idle time, entirely within the works plugin lifecycle */
@@ -26,7 +26,8 @@ export function startWorksWarmup(): () => void {
     cancelScheduled?.();
     const id = account.id;
     const preload = () => {
-      if (!disposed && current?.id === id && current.status === "active") void preloadWorksPage(id);
+      if (!disposed && current?.id === id && current.status === "active")
+        void preloadWorksPage(id, workArchiveSnapshot(id).ids);
     };
     if (typeof window.requestIdleCallback === "function") {
       const handle = window.requestIdleCallback(preload, { timeout: 1000 });

@@ -19,6 +19,7 @@ import { SessionManager } from "../session/session-manager";
 import { createUpdater } from "../update/electron";
 import { UpdateService } from "../update/service";
 import { appWindows } from "../windows/main-window";
+import { WorkArchiveService } from "../works/archive";
 
 /** Windows DPAPI through Electron safeStorage; refuses to store anything when it is unavailable */
 const dpapiCipher: Cipher = {
@@ -63,6 +64,11 @@ export function createServices(ensureTray: () => void, showWindow: () => void) {
     () => sessionSettings.get(),
   );
   app.on("will-quit", () => db.close());
+  const workArchive = new WorkArchiveService(
+    preferences,
+    (account) => sessions.list().some((entry) => entry.id === account),
+    (account, itemIds) => broadcast("works.archiveChanged", { account, itemIds }),
+  );
   const plugins = new PluginRegistry(
     preferences,
     join(app.getPath("userData"), "plugins"),
@@ -103,9 +109,11 @@ export function createServices(ensureTray: () => void, showWindow: () => void) {
     logs,
     broadcast,
     update,
+    workArchive,
   );
   return {
     mcp,
+    workArchive,
     update,
     sessions,
     logs,

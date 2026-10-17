@@ -121,6 +121,146 @@ try {
   await summary.getByRole("searchbox", { name: "搜索月度资源", exact: true }).fill("");
   await page.screenshot({ path: `${output}/summary.png`, fullPage: true });
 
+  // A missing month leaves the other totals, chart points and month selection usable
+  await page.evaluate(() => {
+    __analyticsTest.controls.unavailableMonths = ["2026-10"];
+  });
+  await page.getByRole("button", { name: "刷新", exact: true }).click();
+  await summary.getByText(/2026-10：平台暂未提供月汇总数据。合计仅包含已有数据/).waitFor();
+  assert.equal(await summary.getByText(/数据加载失败/).count(), 0);
+  assert.equal(await summary.getByRole("slider").count(), 1);
+  assert.equal(await summary.getByText("44,424", { exact: true }).count(), 1);
+  const summaryMonth = summary.getByRole("combobox", { name: "月份", exact: true });
+  assert.match(await summaryMonth.locator('option[value="2026-10"]').innerText(), /暂未提供/);
+  await summary.getByText("2026-10：平台暂未提供月汇总数据", { exact: true }).waitFor();
+  assert.equal(await summary.getByRole("searchbox", { name: "搜索月度资源", exact: true }).count(), 0);
+  await summaryMonth.selectOption("2026-09");
+  await summary.getByRole("searchbox", { name: "搜索月度资源", exact: true }).waitFor();
+  await summary.getByText("1,234", { exact: true }).first().waitFor();
+  await summary.getByRole("combobox", { name: "查看数值", exact: true }).selectOption("2026-10");
+  await page.screenshot({ path: `${output}/summary-missing-month.png`, fullPage: true });
+  await page.evaluate(() => {
+    __analyticsTest.controls.unavailableMonths = ["2026-08", "2026-09", "2026-10"];
+  });
+  await page.getByRole("button", { name: "刷新", exact: true }).click();
+  await summary.getByText("当前日期范围的月汇总数据暂未提供", { exact: true }).waitFor();
+  assert.equal(await summary.getByText(/数据加载失败/).count(), 0);
+  assert.equal(await summary.getByRole("slider").count(), 0);
+  assert.equal(await summary.getByText("—", { exact: true }).count(), 3);
+  await page.screenshot({ path: `${output}/summary-all-missing.png`, fullPage: true });
+  await page.evaluate(() => {
+    __analyticsTest.controls.unavailableMonths = [];
+  });
+  await page.getByRole("button", { name: "刷新", exact: true }).click();
+  await summary.getByRole("slider").waitFor();
+  assert.equal(await summary.getByText(/合计仅包含已有数据，缺失月份不计为零/).count(), 0);
+
+  // Month grids stage single months and cross-year ranges, with no query before Apply
+  const monthEntry = summary.getByRole("button", { name: "自选月份", exact: true });
+  const monthPicker = summary.getByRole("dialog", { name: "选择统计月份", exact: true });
+  const monthYear = monthPicker.getByRole("combobox", { name: "选择年份", exact: true });
+  const beforeMonthDraft = await page.evaluate(() => __analyticsTest.requests.length);
+  await monthEntry.click();
+  assert.equal(await monthEntry.getAttribute("aria-pressed"), "false");
+  assert.equal(await monthPicker.getByRole("button", { name: "2026年11月", exact: true }).isDisabled(), true);
+  await monthYear.selectOption("2024");
+  await monthPicker.getByRole("button", { name: "2024年2月", exact: true }).click();
+  assert.equal(await page.evaluate(() => __analyticsTest.requests.length), beforeMonthDraft);
+  await monthPicker.getByRole("button", { name: "取消", exact: true }).click();
+  assert.equal(await monthPicker.count(), 0);
+  assert.equal(await page.evaluate(() => __analyticsTest.requests.length), beforeMonthDraft);
+  await monthEntry.click();
+  await monthYear.selectOption("2024");
+  await monthPicker.getByRole("button", { name: "2024年2月", exact: true }).click();
+  await monthPicker.getByRole("button", { name: "应用", exact: true }).click();
+  await summaryMonth.locator('option[value="2024-02"]').waitFor({ state: "attached" });
+  assert.equal(await summaryMonth.inputValue(), "2024-02");
+  const historicalRequest = await page.evaluate(
+    () => __analyticsTest.requests.filter((request) => request.method === "analytics.monthly").at(-1).params,
+  );
+  assert.equal(historicalRequest.startDate, "2024-02-01");
+  assert.equal(historicalRequest.endDate, "2024-02-29");
+  await page.getByRole("button", { name: "离开分析页", exact: true }).click();
+  await page.getByRole("button", { name: "返回分析页", exact: true }).click();
+  await monthEntry.waitFor();
+  assert.equal(await monthEntry.getAttribute("aria-pressed"), "true");
+  await monthEntry.click();
+  assert.equal(await monthYear.inputValue(), "2024");
+  await monthPicker.getByText("尚未选择", { exact: true }).waitFor();
+  assert.equal(await monthPicker.getByRole("button", { name: "应用", exact: true }).isDisabled(), true);
+  assert.equal(
+    await monthPicker.getByRole("button", { name: "2024年2月", exact: true }).getAttribute("aria-pressed"),
+    "false",
+  );
+  await monthPicker.getByRole("button", { name: "连续月份", exact: true }).click();
+  await monthPicker.getByRole("button", { name: "2024年1月", exact: true }).click();
+  assert.equal(await monthPicker.getByRole("button", { name: "应用", exact: true }).isDisabled(), true);
+  await monthYear.selectOption("2025");
+  await monthPicker.getByRole("button", { name: "2025年2月", exact: true }).click();
+  await monthPicker.getByText("一次最多选择 12 个月（含起止月份）", { exact: true }).waitFor();
+  assert.equal(await monthPicker.getByRole("button", { name: "应用", exact: true }).isDisabled(), true);
+  await monthPicker.getByRole("button", { name: "2025年12月", exact: true }).click();
+  await monthYear.selectOption("2026");
+  await monthPicker.getByRole("button", { name: "2026年2月", exact: true }).click();
+  await monthPicker.getByText("已选 3 个月 · 含起止月份", { exact: true }).waitFor();
+  const beforeRangeApply = await page.evaluate(() => __analyticsTest.requests.length);
+  await page.setViewportSize({ width: 900, height: 1000 });
+  for (const theme of ["dark", "light", "fluent"]) {
+    await page.evaluate((name) => __analyticsTest.theme(name), theme);
+    await page.screenshot({ path: `${output}/summary-month-picker-${theme}.png` });
+  }
+  await page.evaluate(() => __analyticsTest.theme("dark"));
+  const monthBounds = await monthPicker.boundingBox();
+  assert.ok(monthBounds.x >= 0 && monthBounds.x + monthBounds.width <= 900);
+  for (const zoom of [1.25, 1.5]) {
+    await page.evaluate((value) => {
+      document.documentElement.style.zoom = String(value);
+    }, zoom);
+    await page.waitForTimeout(80);
+    const bounds = await monthPicker.boundingBox();
+    assert.ok(
+      bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= 900 && bounds.y + bounds.height <= 1000,
+      `month picker fits at ${zoom * 100}%`,
+    );
+  }
+  await page.screenshot({ path: `${output}/summary-month-picker-150.png` });
+  await page.evaluate(() => {
+    document.documentElement.style.zoom = "1";
+  });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  assert.equal(await page.evaluate(() => __analyticsTest.requests.length), beforeRangeApply);
+  await monthPicker.getByRole("button", { name: "应用", exact: true }).click();
+  await summaryMonth.locator('option[value="2026-02"]').waitFor({ state: "attached" });
+  assert.equal(await summaryMonth.locator("option").count(), 3);
+  const rangeRequest = await page.evaluate(
+    () => __analyticsTest.requests.filter((r) => r.method === "analytics.monthly").at(-1).params,
+  );
+  assert.equal(rangeRequest.startDate, "2025-12-01");
+  assert.equal(rangeRequest.endDate, "2026-02-28");
+  await monthEntry.click();
+  assert.equal(await monthPicker.locator('[data-month][aria-pressed="true"]').count(), 0);
+  assert.equal(await monthPicker.getByRole("button", { name: "应用", exact: true }).isDisabled(), true);
+  await monthPicker.getByRole("button", { name: "2026年2月", exact: true }).focus();
+  await page.keyboard.press("Home");
+  await page.keyboard.press("ArrowLeft");
+  assert.equal(await monthYear.inputValue(), "2025");
+  assert.equal(
+    await monthPicker
+      .getByRole("button", { name: "2025年12月", exact: true })
+      .evaluate((element) => element === document.activeElement),
+    true,
+  );
+  await page.keyboard.press("Escape");
+  assert.equal(await monthPicker.count(), 0);
+  assert.equal(await monthEntry.evaluate((element) => element === document.activeElement), true);
+  await monthEntry.click();
+  await summary.getByText("时间", { exact: true }).click();
+  assert.equal(await monthPicker.count(), 0);
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await summary.getByRole("button", { name: "近 3 个月", exact: true }).click();
+  await summaryMonth.locator('option[value="2026-10"]').waitFor({ state: "attached" });
+  assert.equal(await monthEntry.getAttribute("aria-pressed"), "false");
+
   await page.getByRole("tab", { name: "模组分析", exact: true }).click();
   const module = page.getByRole("tabpanel", { name: "模组分析", exact: true });
   await module.getByRole("table").waitFor();
@@ -141,6 +281,70 @@ try {
   assert.equal(await module.getByRole("dialog").count(), 0);
   await module.getByRole("button", { name: "近 7 天", exact: true }).click();
   await module.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
+  // Custom dates remain a draft until confirmed and use the existing daily query
+  const custom = module.getByRole("button", { name: "自定义", exact: true });
+  const calendar = module.getByRole("dialog", { name: "自定义日期范围", exact: true });
+  const customCalls = await page.evaluate(() => __analyticsTest.requests.length);
+  await custom.click();
+  assert.equal(await calendar.getByLabel("开始日期", { exact: true }).inputValue(), "");
+  assert.equal(await calendar.getByLabel("结束日期", { exact: true }).inputValue(), "");
+  assert.equal(await calendar.getByRole("button", { pressed: true }).count(), 0);
+  assert.equal(await calendar.getByRole("button", { name: "应用", exact: true }).isEnabled(), false);
+  await calendar.getByRole("button", { name: "2026-10-02", exact: true }).click();
+  assert.equal(await calendar.getByRole("button", { name: "应用", exact: true }).isEnabled(), false);
+  await calendar.getByRole("button", { name: "2026-10-05", exact: true }).click();
+  assert.equal(await page.evaluate(() => __analyticsTest.requests.length), customCalls);
+  await calendar.getByRole("button", { name: "取消", exact: true }).click();
+  assert.equal(await calendar.count(), 0);
+  assert.equal(await page.evaluate(() => __analyticsTest.requests.length), customCalls);
+  await custom.click();
+  assert.equal(await calendar.getByLabel("开始日期", { exact: true }).inputValue(), "");
+  assert.equal(await calendar.getByLabel("结束日期", { exact: true }).inputValue(), "");
+  assert.equal(await calendar.getByRole("button", { name: "2026-10-16", exact: true }).isEnabled(), false);
+  await calendar.getByRole("button", { name: "2026-10-02", exact: true }).click();
+  await calendar.getByRole("button", { name: "2026-10-05", exact: true }).click();
+  await calendar.getByRole("button", { name: "应用", exact: true }).click();
+  await module.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
+  const customParams = await page.evaluate(() => __analyticsTest.requests.at(-1).params);
+  assert.equal(customParams.startDate, "2026-10-02");
+  assert.equal(customParams.endDate, "2026-10-05");
+  assert.equal(await module.getByRole("combobox", { name: "查看数值", exact: true }).locator("option").count(), 4);
+  assert.equal(await custom.getAttribute("aria-pressed"), "true");
+  assert.equal(
+    await module.getByRole("button", { name: "近 7 天", exact: true }).getAttribute("aria-pressed"),
+    "false",
+  );
+  await page.reload();
+  await module.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
+  assert.equal(await custom.getAttribute("aria-pressed"), "true");
+  await custom.click();
+  assert.equal(await calendar.getByLabel("开始日期", { exact: true }).inputValue(), "");
+  assert.equal(await calendar.getByLabel("结束日期", { exact: true }).inputValue(), "");
+  assert.equal(await calendar.getByRole("button", { pressed: true }).count(), 0);
+  await calendar.getByLabel("结束日期", { exact: true }).fill("2026-10-05");
+  await calendar.getByLabel("开始日期", { exact: true }).fill("2026-10-10");
+  await calendar.getByText("开始日期不能晚于结束日期", { exact: true }).waitFor();
+  await calendar.getByLabel("开始日期", { exact: true }).fill("2024-01-01");
+  await calendar.getByText("一次最多选择 366 天（含起止日期）", { exact: true }).waitFor();
+  await calendar.getByLabel("结束日期", { exact: true }).fill("2026-10-16");
+  await calendar.getByText("只能选择昨天及以前的完整日数据", { exact: true }).waitFor();
+  await page.keyboard.press("Escape");
+  assert.equal(await calendar.count(), 0);
+  assert.equal(await custom.evaluate((element) => element === document.activeElement), true);
+  await module.getByRole("button", { name: "近 7 天", exact: true }).click();
+  await module.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
+  assert.equal(await custom.getAttribute("aria-pressed"), "false");
+  await custom.click();
+  await calendar.getByRole("button", { name: "2026-10-01", exact: true }).focus();
+  await page.keyboard.press("ArrowLeft");
+  await page.waitForFunction(() => document.activeElement?.getAttribute("data-date") === "2026-09-30");
+  await page.keyboard.press("Enter");
+  await calendar.getByRole("button", { name: "下个月", exact: true }).click();
+  await calendar.getByRole("button", { name: "2026-10-02", exact: true }).click();
+  assert.equal(await calendar.getByLabel("开始日期", { exact: true }).inputValue(), "2026-09-30");
+  assert.equal(await calendar.getByLabel("结束日期", { exact: true }).inputValue(), "2026-10-02");
+  await module.getByText("时间", { exact: true }).click();
+  assert.equal(await calendar.count(), 0, "clicking outside discards the cross-month draft");
   await page.screenshot({ path: `${output}/module.png`, fullPage: true });
 
   await page.getByRole("tab", { name: "周期收益", exact: true }).click();
@@ -243,6 +447,35 @@ try {
         `${name}/${theme} has no page overflow`,
       );
       await page.screenshot({ path: `${output}/${theme}-${name}.png`, fullPage: true });
+      if (name === "模组分析") {
+        await custom.click();
+        const bounds = await calendar.boundingBox();
+        assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 900, `${theme} calendar stays inside the viewport`);
+        await page.screenshot({ path: `${output}/${theme}-module-calendar.png`, fullPage: true });
+        await page.setViewportSize({ width: 720, height: 600 });
+        // The popup follows resize events, so measure after the browser has completed the resize frame
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+        const smallBounds = await calendar.boundingBox();
+        assert.ok(smallBounds.x >= 0 && smallBounds.x + smallBounds.width <= 720, `${theme} narrow calendar fits`);
+        assert.ok(
+          smallBounds.y >= 0 && smallBounds.y + smallBounds.height <= 600,
+          `${theme} short calendar fits: ${JSON.stringify(smallBounds)}`,
+        );
+        assert.equal(
+          await calendar.evaluate((element) => {
+            const input = element.querySelector("input");
+            const bounds = input.getBoundingClientRect();
+            return element.contains(
+              document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2),
+            );
+          }),
+          true,
+          `${theme} calendar fields stay above the sticky tab bar`,
+        );
+        await page.screenshot({ path: `${output}/${theme}-module-calendar-narrow.png`, fullPage: true });
+        await calendar.getByRole("button", { name: "取消", exact: true }).click();
+        await page.setViewportSize({ width: 900, height: 1000 });
+      }
     }
   }
   // A failed new scope keeps the old chart explicitly labelled and its controls remain usable

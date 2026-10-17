@@ -7,6 +7,7 @@ const STAGING = /upload|image|prepare|discard/i;
 
 /** Module whose platform data a successful call may have changed, or null for reads and app-only methods */
 export function changedModule(method: string): string | null {
+  if (["works.archive", "works.restore", "works.archiveMigrate"].includes(method)) return null;
   const module = method.split(".")[0] ?? "";
   if (!DATA_MODULES.has(module) || STAGING.test(method.slice(module.length + 1))) return null;
   return capabilities[method as RpcMethod]?.risk === "read" ? null : module;

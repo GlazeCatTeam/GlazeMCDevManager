@@ -33,7 +33,6 @@ import {
   getReviewFeedback,
   getWork,
   getWorkEditorOptions,
-  listWorks,
   monthOf,
   parseMonth,
   type Result,
@@ -57,12 +56,14 @@ import { type ApplicationServices, type Broadcast, createApplicationActions } fr
 import type { SessionManager } from "../session/session-manager";
 import type { UpdateService } from "../update/service";
 import { appWindows } from "../windows/main-window";
+import type { WorkArchiveService } from "../works/archive";
 import { createMcpApplication } from "./application";
 import { createMcpBusiness } from "./business";
 import { connectClient, migrateConnections } from "./connections";
 import { checkTool, connectPrompt, installTool, listInstallers, uninstallTool } from "./installers";
 import { PluginToolCalls } from "./plugin-calls";
 import { loadMcpData, saveMcpData } from "./store";
+import { createMcpWorkReads } from "./work-visibility";
 
 /** Keep ambiguous platform responses distinguishable from an explicit business rejection */
 function writeResult<T>(result: Result<T>): Result<T> {
@@ -79,6 +80,7 @@ export function createMcpHost(
   logs: LogService,
   broadcast: Broadcast,
   update: Pick<UpdateService, "state" | "check">,
+  workArchive: WorkArchiveService,
 ) {
   const root = join(app.getPath("userData"), "mcp");
   const file = join(root, "state.bin");
@@ -102,6 +104,7 @@ export function createMcpHost(
     },
     (id, permission) => service.allowed(id, permission),
   );
+  const workReads = createMcpWorkReads(sessions, workArchive);
   const reads: Record<string, (params: Record<string, unknown>) => Promise<unknown>> = {
     "app.getAbout": async () => getAboutInfo(),
     "app.getLicenses": async () => getDependencyLicenses(),
@@ -116,8 +119,8 @@ export function createMcpHost(
         getAnalyticsDaily(session, p as unknown as AnalyticsDailyParams),
       );
     },
-    "works.list": (p) =>
-      sessions.request(p.account as string, (session) => listWorks(session, (p.platform as "pe" | "pc") ?? "pe")),
+    "works.list": (p) => workReads("works.list", p),
+    "works.archiveState": (p) => workReads("works.archiveState", p),
     "works.get": (p) => sessions.request(p.account as string, (session) => getWork(session, p.itemId as string)),
     "works.reviewFeedback": (p) =>
       sessions.request(p.account as string, (session) => getReviewFeedback(session, p.itemId as string)),
@@ -205,8 +208,10 @@ export function createMcpHost(
     plugins.assertMethodEnabled(promotion ? "promotion.upload" : "works.save");
   };
   const ports: McpPorts = {
+    assertWorkAccess: (account, itemIds, includeArchived) =>
+      workArchive.assertAccess(account, itemIds, includeArchived),
     invokePlugin: (id, tool, params, guard, beforeWrite) => pluginCalls.invoke(id, tool, params, guard, beforeWrite),
-    invoke: createMcpBusiness(sessions, application),
+    invoke: createMcpBusiness(sessions, application, workArchive),
     save: (state) => {
       if (persistenceError) return;
       saveMcpData(file, state);

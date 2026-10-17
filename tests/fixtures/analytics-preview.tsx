@@ -54,9 +54,9 @@ if (worksPreview && works[0])
 let activeAccount = account.id;
 let failure = false;
 let calls = 0;
-const realtimeRequests: { date: string; resourceIds: string[] }[] = [];
+const realtimeRequests: { date: string; endDate?: string; resourceIds: string[] }[] = [];
 const requests: { method: string; params: unknown }[] = [];
-const controls = { delay: 400, failureKind: "network" };
+const controls = { delay: 400, failureKind: "network", unavailableMonths: [] as string[] };
 Object.assign(globalThis, { __realtimeRequests: realtimeRequests });
 
 /** Sparse fixture rows expose missing-day and missing-peer rendering */
@@ -100,7 +100,8 @@ const rpc: GlazeBridge["rpc"] = async (method, params) => {
   await new Promise((resolve) => setTimeout(resolve, controls.delay));
   if (shouldFail) return { ok: false, error: { kind: failureKind, message: "离线测试失败" } };
   let value: unknown;
-  if (method === "works.page") {
+  if (method === "works.archiveState") value = [];
+  else if (method === "works.page") {
     const { page, pageSize } = params as { page: number; pageSize: number };
     value = { items: works.slice(page * pageSize, (page + 1) * pageSize), total: works.length };
   } else if (method === "works.get") {
@@ -188,10 +189,21 @@ const rpc: GlazeBridge["rpc"] = async (method, params) => {
       };
     }
   } else if (method === "analytics.monthly") {
-    const query = params as { startDate: string };
-    value = callAccount === account.id ? works.map((work) => record(work.itemId, query.startDate.slice(0, 7))) : [];
+    const query = params as { startDate: string; endDate: string };
+    const dates: string[] = [];
+    const cursor = new Date(`${query.startDate.slice(0, 7)}-01T00:00:00Z`);
+    while (cursor.toISOString().slice(0, 10) <= query.endDate) {
+      dates.push(cursor.toISOString().slice(0, 7));
+      cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+    }
+    value =
+      callAccount === account.id
+        ? dates
+            .filter((month) => !controls.unavailableMonths.includes(month))
+            .flatMap((month) => works.map((work) => record(work.itemId, month)))
+        : [];
   } else if (method === "analytics.realtime") {
-    const query = params as { date: string; resourceIds: string[] };
+    const query = params as { date: string; endDate?: string; resourceIds: string[] };
     realtimeRequests.push(query);
     if (
       new URLSearchParams(location.search).has("slow-yesterday") &&
