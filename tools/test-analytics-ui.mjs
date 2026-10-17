@@ -453,9 +453,14 @@ try {
         assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 900, `${theme} calendar stays inside the viewport`);
         await page.screenshot({ path: `${output}/${theme}-module-calendar.png`, fullPage: true });
         await page.setViewportSize({ width: 720, height: 600 });
+        // The popup follows resize events, so measure after the browser has completed the resize frame
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
         const smallBounds = await calendar.boundingBox();
         assert.ok(smallBounds.x >= 0 && smallBounds.x + smallBounds.width <= 720, `${theme} narrow calendar fits`);
-        assert.ok(smallBounds.y >= 0 && smallBounds.y + smallBounds.height <= 600, `${theme} short calendar fits`);
+        assert.ok(
+          smallBounds.y >= 0 && smallBounds.y + smallBounds.height <= 600,
+          `${theme} short calendar fits: ${JSON.stringify(smallBounds)}`,
+        );
         assert.equal(
           await calendar.evaluate((element) => {
             const input = element.querySelector("input");
