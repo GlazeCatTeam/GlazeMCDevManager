@@ -26,6 +26,7 @@ export interface StoredAsset extends McpAsset {
   receipt?: WorkUpload;
 }
 export interface StoredOperation extends McpOperation {
+  includeArchived?: boolean;
   draftId: string;
   revision: number;
   target?: string;
@@ -55,6 +56,7 @@ export interface McpPorts {
   notify?(request: McpAccessRequest): void;
   accounts(): AccountSummary[];
   assertEnabled(method: string): void;
+  assertWorkAccess?(account: string, itemIds: string[], includeArchived: boolean): void;
   read(method: string, params: Record<string, unknown>): Promise<unknown>;
   editor(account: string, itemId: string): Promise<WorkEditorDocument>;
   options(account: string): Promise<WorkEditorOptions>;

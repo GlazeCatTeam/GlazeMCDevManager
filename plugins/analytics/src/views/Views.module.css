@@ -56,6 +56,19 @@
   min-width: 0;
 }
 
+.summaryFilters {
+  height: auto;
+  min-height: 80px;
+  gap: 12px;
+  overflow: visible;
+}
+
+.rangeHint {
+  color: var(--g-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .filterLabel {
   width: 34px;
   flex: none;

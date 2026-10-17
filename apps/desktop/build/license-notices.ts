@@ -98,6 +98,7 @@ export function collectLicenseNotices(desktop: string): DependencyLicense[] {
   visit(resolve(desktop));
   visit(packageDirectory("electron", desktop), true);
   for (const [plugin, label] of [
+    ["home", "首页"],
     ["works", "作品管理"],
     ["analytics", "数据分析"],
   ] as const) {

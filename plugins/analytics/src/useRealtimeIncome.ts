@@ -31,8 +31,8 @@ function readRealtime(key: string, load: () => Promise<RpcResult<AnalyticsRealti
   return promise;
 }
 
-/** Query one account and day, retaining successful resources during targeted retries */
-export function useRealtimeIncome(date: string, resourceIds: string[]) {
+/** Query one account and date interval, retaining successful resources during targeted retries */
+export function useRealtimeIncome(date: string, resourceIds: string[], endDate = date) {
   const { current } = useSession();
   const visible = useContext(AnalysisActivity);
   const account = current?.id;
@@ -40,7 +40,7 @@ export function useRealtimeIncome(date: string, resourceIds: string[]) {
   const snapshots = useRef(retainedSnapshots);
   const busy = useRef(false);
   const idsKey = JSON.stringify(resourceIds);
-  const key = JSON.stringify([account, current?.lastLoginAt, epoch, date, idsKey]);
+  const key = JSON.stringify([account, current?.lastLoginAt, epoch, date, endDate, idsKey]);
   const [request, setRequest] = useState({ version: 0, key, ids: null as string[] | null });
   const [state, setState] = useState<QueryState>({
     key,
@@ -93,7 +93,12 @@ export function useRealtimeIncome(date: string, resourceIds: string[]) {
                   ok: false as const,
                   error: { kind: "not_found", message: "请先登录开发者账号" },
                 });
-              return callHost("analytics.realtime", { account, date, resourceIds: requestedIds });
+              return callHost("analytics.realtime", {
+                account,
+                date,
+                ...(endDate !== date ? { endDate } : {}),
+                resourceIds: requestedIds,
+              });
             }),
           };
         }
@@ -127,7 +132,7 @@ export function useRealtimeIncome(date: string, resourceIds: string[]) {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [key, idsKey, account, date, request, visible]);
+  }, [key, idsKey, account, date, endDate, request, visible]);
 
   /** Ignore repeat refreshes while a request is pending and keep the current day visible */
   const reload = useCallback(() => {

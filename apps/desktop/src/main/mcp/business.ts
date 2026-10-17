@@ -26,7 +26,9 @@ import {
   searchWorks,
 } from "@glaze/netease";
 import type { SessionManager } from "../session/session-manager";
+import type { WorkArchiveService } from "../works/archive";
 import type { createMcpApplication } from "./application";
+import { createMcpWorkReads } from "./work-visibility";
 
 type Handler = (session: NeteaseSession, params: Record<string, unknown>) => Promise<Result<unknown>>;
 
@@ -64,7 +66,9 @@ const handlers = new Map<string, Handler>([
 export function createMcpBusiness(
   sessions: Pick<SessionManager, "request">,
   application?: ReturnType<typeof createMcpApplication>,
+  archives?: WorkArchiveService,
 ) {
+  const workReads = archives ? createMcpWorkReads(sessions, archives) : null;
   return async (
     method: string,
     params: Record<string, unknown>,
@@ -72,6 +76,13 @@ export function createMcpBusiness(
     beforeWrite: () => void,
   ): Promise<unknown> => {
     if (method.startsWith("app.") && application) return application(method, params, guard, beforeWrite);
+    if (archives && ["works.archive", "works.restore"].includes(method)) {
+      guard();
+      beforeWrite();
+      return archives.set(params.account as string, params.itemId as string, method === "works.archive");
+    }
+    if (workReads && ["works.page", "works.search", "works.searchReferences"].includes(method))
+      return workReads(method, params, guard);
     const handler = handlers.get(method);
     if (!handler) throw new McpError("unknown_tool", "业务方法未注册");
     guard();
@@ -84,7 +95,7 @@ export function createMcpBusiness(
             if (httpMethod !== "GET" || method === "messages.get") beforeWrite();
           },
         },
-        params,
+        Object.fromEntries(Object.entries(params).filter(([key]) => key !== "includeArchived")),
       );
       if (!result.ok && result.error.kind === "parse") throw new McpError("parse", "平台响应无法确认");
       return result;

@@ -9,17 +9,26 @@ interface CommentReplyFormProps {
   sending: string | null;
   onChange: (content: string) => void;
   onSend: () => void;
+  pending?: boolean;
 }
 
 /** Show the account's reply state or a full-width composer with an aligned action footer */
-export function CommentReplyForm({ entry, draft, status, sending, onChange, onSend }: CommentReplyFormProps) {
+export function CommentReplyForm({
+  entry,
+  draft,
+  status,
+  sending,
+  onChange,
+  onSend,
+  pending = false,
+}: CommentReplyFormProps) {
   if (!entry.canReply || entry.reply)
     return (
       <div className={styles.disabled}>
         <span role="status">{status || (entry.reply ? "当前账号已回复" : "当前账号已回复，平台未返回回复内容")}</span>
       </div>
     );
-  const disabled = sending !== null || !draft.trim() || draft.length > MAX_COMMENT_REPLY_LENGTH;
+  const disabled = pending || sending !== null || !draft.trim() || draft.length > MAX_COMMENT_REPLY_LENGTH;
   return (
     <form
       className={styles.form}
@@ -41,7 +50,7 @@ export function CommentReplyForm({ entry, draft, status, sending, onChange, onSe
       </div>
       <div className={styles.footer}>
         <div className={styles.hint}>
-          <span>发送后将通知玩家</span>
+          <span>{pending ? "等待筛选结果更新后可发送" : "发送后将通知玩家"}</span>
           <span>
             {draft.length} / {MAX_COMMENT_REPLY_LENGTH}
           </span>

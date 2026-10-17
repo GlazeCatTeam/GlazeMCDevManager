@@ -35,6 +35,9 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable;
+  overflow-anchor: none;
+  overscroll-behavior: contain;
   margin: 0;
   padding: 0 8px 10px;
   list-style: none;

@@ -75,7 +75,7 @@ try {
   }
   assert.ok(!JSON.stringify(licenses.value).includes(root));
   const resources = licenses.value.filter((item) => item.name.startsWith("Minecraft 图标"));
-  assert.equal(resources.length, 2);
+  assert.equal(resources.length, 3);
   for (const resource of resources) {
     assert.notEqual(resource.license, "Apache-2.0");
     assert.match(resource.notices[0].text, /Mojang AB/);

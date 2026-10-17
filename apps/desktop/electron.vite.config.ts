@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "electron-vite";
+import type { Plugin } from "vite";
 import { collectLicenseNotices } from "./build/license-notices";
 import pkg from "./package.json";
 
@@ -33,7 +34,7 @@ export default defineConfig({
             }
           }
         },
-      },
+      } satisfies Plugin,
       {
         name: "project-license-files",
         /** Preserve readable license files beside the bundled main process for redistribution */
@@ -41,7 +42,7 @@ export default defineConfig({
           this.emitFile({ type: "asset", fileName: "LICENSE", source: projectLicense });
           this.emitFile({ type: "asset", fileName: "NOTICE", source: projectNotice });
         },
-      },
+      } satisfies Plugin,
     ],
     build: {
       // electron-updater is bundled too: the installer ships out/ without node_modules
@@ -77,7 +78,7 @@ export default defineConfig({
             ["plugins", "packages", "themes"].map((directory) => resolve(import.meta.dirname, "../..", directory)),
           );
         },
-      },
+      } satisfies Plugin,
     ],
   },
 });

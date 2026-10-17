@@ -26,6 +26,7 @@ try {
   await server.listen();
   browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { channel: process.argv[3] } : {}) });
   const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
+  await page.clock.setFixedTime(new Date("2026-10-17T12:00:00+08:00"));
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(`${server.resolvedUrls.local[0]}tests/fixtures/analytics.html?realtime&slow-yesterday`);
@@ -84,6 +85,67 @@ try {
   assert.equal(dates.at(-1), dates[0]);
   assert.notEqual(dates.at(-2), dates[0]);
   await panel.getByText(`${dates[0]} · 北京时间 · 当日未完结`).waitFor();
+  // Periods include today, preserve failed-resource retry bounds and stage custom edits until Apply
+  await panel.getByRole("button", { name: "近 7 天", exact: true }).click();
+  await panel.getByText("85 成功 · 25 失败").waitFor();
+  await panel.getByText("2026-10-11 — 2026-10-17 · 北京时间 · 当日未完结").waitFor();
+  await page.waitForFunction(() => __realtimeRequests.at(-1)?.endDate === "2026-10-17");
+  assert.equal(await page.evaluate(() => __realtimeRequests.at(-1).date), "2026-10-11");
+  await panel.getByRole("button", { name: "仅重试失败资源", exact: true }).click();
+  await panel.getByText("110 成功 · 0 失败").waitFor();
+  assert.deepEqual(
+    await page.evaluate(() => {
+      const { date, endDate, resourceIds } = __realtimeRequests.at(-1);
+      return [date, endDate, resourceIds.length];
+    }),
+    ["2026-10-11", "2026-10-17", 25],
+  );
+  await panel.getByRole("button", { name: "近 30 天", exact: true }).click();
+  await page.waitForFunction(() => __realtimeRequests.at(-1)?.date === "2026-09-18");
+  await panel.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
+  const requestCount = await page.evaluate(() => __realtimeRequests.length);
+  await panel.getByRole("button", { name: "自定义", exact: true }).click();
+  const calendar = panel.getByRole("dialog", { name: "自定义日期范围" });
+  await calendar.getByLabel("开始日期", { exact: true }).fill("2026-10-01");
+  await calendar.getByLabel("结束日期", { exact: true }).fill("2026-10-05");
+  await calendar.getByRole("button", { name: "取消", exact: true }).click();
+  assert.equal(await page.evaluate(() => __realtimeRequests.length), requestCount);
+  await panel.getByRole("button", { name: "自定义", exact: true }).click();
+  await calendar.getByLabel("开始日期", { exact: true }).fill("2026-10-18");
+  await calendar.getByLabel("结束日期", { exact: true }).fill("2026-10-19");
+  assert.equal(await calendar.getByRole("button", { name: "应用", exact: true }).isDisabled(), true);
+  await calendar.getByLabel("开始日期", { exact: true }).fill("2026-10-01");
+  await calendar.getByLabel("结束日期", { exact: true }).fill("2026-10-17");
+  assert.equal(await calendar.getByRole("button", { name: "应用", exact: true }).isEnabled(), true);
+  await calendar.getByRole("button", { name: "应用", exact: true }).click();
+  await page.waitForFunction(() => __realtimeRequests.at(-1)?.date === "2026-10-01");
+  await panel.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
+  assert.equal(await panel.getByRole("button", { name: "自定义", exact: true }).getAttribute("aria-pressed"), "true");
+  await page.reload();
+  await panel.getByText("2026-10-01 — 2026-10-17 · 北京时间 · 当日未完结").waitFor();
+  await panel.getByText("85 成功 · 25 失败").waitFor();
+  await page.screenshot({ path: `${output}/realtime-period.png`, fullPage: true });
+  await panel.getByRole("button", { name: "自定义", exact: true }).click();
+  await page.screenshot({ path: `${output}/realtime-calendar.png` });
+  assert.equal(await calendar.getByLabel("开始日期", { exact: true }).inputValue(), "");
+  assert.equal(await calendar.getByLabel("结束日期", { exact: true }).inputValue(), "");
+  const beforeEndChange = await page.evaluate(() => __realtimeRequests.length);
+  await calendar.getByLabel("结束日期", { exact: true }).fill("2026-10-16");
+  assert.equal(await calendar.getByRole("button", { name: "应用", exact: true }).isDisabled(), true);
+  assert.equal(await page.evaluate(() => __realtimeRequests.length), beforeEndChange);
+  await calendar.getByLabel("开始日期", { exact: true }).fill("2026-10-01");
+  await calendar.getByRole("button", { name: "应用", exact: true }).click();
+  await page.waitForFunction(() => __realtimeRequests.at(-1)?.endDate === "2026-10-16");
+  await panel.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
+  assert.equal(
+    await page.evaluate(() => __realtimeRequests.at(-1).date),
+    "2026-10-01",
+    "changing only the end date issues a separate interval query",
+  );
+  await panel.getByRole("button", { name: "今天", exact: true }).click();
+  await panel.getByText("已更新 · 筛选自动生效", { exact: true }).waitFor();
+  assert.equal(await panel.getByRole("button", { name: "自定义", exact: true }).getAttribute("aria-pressed"), "false");
+  assert.equal(await page.evaluate(() => __realtimeRequests.at(-1).endDate), undefined);
   await page.setViewportSize({ width: 900, height: 1000 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.screenshot({ path: `${output}/realtime-narrow.png`, fullPage: true });
@@ -152,7 +214,7 @@ try {
   await page.screenshot({ path: `${output}/realtime-shell-scroll.png` });
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: 110 resources, failure recovery, currency/resource filters, date/account isolation, narrow layout, stationary desktop shell and nested scrolling at 100/125/150% zoom",
+    "PASS: 110 resources, failure recovery, currency/resource filters, 7/30-day periods, staged custom calendar, persisted scope, end-date isolation, date/account isolation, narrow layout, stationary desktop shell and nested scrolling at 100/125/150% zoom",
   );
 } finally {
   await browser?.close();

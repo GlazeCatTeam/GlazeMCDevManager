@@ -24,15 +24,30 @@
 }
 
 .value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 26px;
   font-weight: 900;
   line-height: 1.1;
 }
 
 .sub {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 13px;
 }
 
 .subValue {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-weight: 700;
+}
+
+.icon {
+  flex: none;
+  image-rendering: pixelated;
+  object-fit: contain;
 }

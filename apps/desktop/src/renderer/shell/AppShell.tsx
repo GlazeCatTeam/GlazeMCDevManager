@@ -1,6 +1,7 @@
 import {
   Button,
   callHost,
+  initializeWorkArchive,
   isRestorableRoute,
   type Navigation,
   NavigationProvider,
@@ -40,6 +41,10 @@ export function AppShell() {
   const pages = useMemo(loadPages, []);
   const [location, setLocation] = useState<Location | null>(null);
   const [session, setSession] = useState<Session>({ current: null, accounts: [] });
+
+  useEffect(() => {
+    void Promise.allSettled(session.accounts.map((account) => initializeWorkArchive(account.id)));
+  }, [session.accounts]);
 
   // First page and accounts come from the main process; account changes are pushed afterwards
   useEffect(() => {

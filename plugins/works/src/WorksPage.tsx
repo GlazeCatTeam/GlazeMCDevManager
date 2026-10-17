@@ -1,6 +1,7 @@
 import {
   type AccountSummary,
   Button,
+  callHost,
   Icon,
   Notice,
   PageHeader,
@@ -11,10 +12,11 @@ import {
   type WorkStatus,
   type WorkSummary,
 } from "@glaze/plugin-sdk";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { EditorRoute } from "./EditorRoute";
 import { loadWorkEditor } from "./editor-loader";
 import type { WorkAction } from "./status";
+import { useWorkArchive } from "./useWorkArchive";
 import {
   invalidateWorks,
   preloadNextWorksPage,
@@ -22,7 +24,13 @@ import {
   preloadWorkOptions,
   useWorksPage,
 } from "./useWorkQuery";
-import { rememberWorkListPosition, selectWorkListView, type WorkListView, workListPosition } from "./view-state";
+import {
+  rememberWorkListPosition,
+  selectWorkListView,
+  type WorkListView,
+  workListMode,
+  workListPosition,
+} from "./view-state";
 import styles from "./WorksPage.module.css";
 import { ReviewFeedbackDialog } from "./widgets/ReviewFeedbackDialog";
 import { type ListWriteAction, WorkActionDialog } from "./widgets/WorkActionDialog";
@@ -49,8 +57,12 @@ export function WorksPage() {
 /** Account changes remount pagination and selection before any old rows can be painted */
 function WorksForAccount({ account }: { account: AccountSummary }) {
   const { navigate } = useNavigation();
-  const [page, setPage] = useState(() => workListPosition(account.id).page);
-  const works = useWorksPage(account.id, page, PER_PAGE);
+  const [archived, setArchived] = useState(() => workListMode(account.id));
+  const [page, setPage] = useState(() => workListPosition(account.id, archived).page);
+  const archiveState = useWorkArchive(account.id);
+  const [archiveBusy, setArchiveBusy] = useState(false);
+  const archiveInFlight = useRef(false);
+  const works = useWorksPage(account.id, page, PER_PAGE, archiveState.ids, archived, archiveState.ready);
   const [lastView, setLastView] = useState<WorkListView | null>(null);
   const [slowLoad, setSlowLoad] = useState(false);
   const pageRef = useRef<HTMLDivElement>(null);
@@ -66,6 +78,25 @@ function WorksForAccount({ account }: { account: AccountSummary }) {
   const closeFeedback = useCallback(() => setFeedbackFor(null), []);
   const closeView = useCallback(() => setViewing(null), []);
   const closeCreate = useCallback(() => setCreatingFor(null), []);
+
+  const toggleArchive = async (work: WorkSummary) => {
+    if (archiveInFlight.current) return;
+    archiveInFlight.current = true;
+    setArchiveBusy(true);
+    try {
+      const result = await callHost(archived ? "works.restore" : "works.archive", {
+        account: account.id,
+        itemId: work.itemId,
+      });
+      if (!result.ok) throw new Error(result.error.message);
+      setActionMessage(`「${work.name}」${archived ? "已恢复到作品列表" : "已归档，可在“归档管理”中恢复"}`);
+    } catch {
+      setActionMessage("归档记录保存失败，作品未作更改。请检查本地存储后重试。");
+    } finally {
+      archiveInFlight.current = false;
+      setArchiveBusy(false);
+    }
+  };
 
   /** Intent-driven preparation shares its request with the eventual detail page */
   const prepare = useCallback(
@@ -91,7 +122,10 @@ function WorksForAccount({ account }: { account: AccountSummary }) {
 
   const shown = selectWorkListView(page, works.data, lastView);
   const displayedPage = shown?.page ?? page;
-  const list = shown?.data.items ?? [];
+  const list = useMemo(() => {
+    const ids = new Set(archiveState.ids);
+    return (shown?.data.items ?? []).filter((work) => ids.has(work.itemId) === archived);
+  }, [shown?.data.items, archiveState.ids, archived]);
   const pageCount = Math.max(1, Math.ceil((shown?.data.total ?? 0) / PER_PAGE));
   const showingEditor = !!viewing || !!creatingFor;
 
@@ -117,7 +151,7 @@ function WorksForAccount({ account }: { account: AccountSummary }) {
     let cancelled = false;
     let idle: number | undefined;
     const prepareNext = () => {
-      void preloadNextWorksPage(account.id, page, PER_PAGE, total, () => cancelled);
+      void preloadNextWorksPage(account.id, page, PER_PAGE, total, () => cancelled, archiveState.ids, archived);
     };
     const timer = setTimeout(() => {
       if (typeof window.requestIdleCallback === "function")
@@ -129,7 +163,17 @@ function WorksForAccount({ account }: { account: AccountSummary }) {
       clearTimeout(timer);
       if (idle !== undefined) window.cancelIdleCallback(idle);
     };
-  }, [account.id, account.status, page, works.data, works.loading, works.error, showingEditor]);
+  }, [
+    account.id,
+    account.status,
+    page,
+    works.data,
+    works.loading,
+    works.error,
+    showingEditor,
+    archived,
+    archiveState.ids,
+  ]);
 
   useLayoutEffect(() => {
     const main = pageRef.current?.closest("main") ?? scrollContainer.current;
@@ -139,15 +183,16 @@ function WorksForAccount({ account }: { account: AccountSummary }) {
       main.scrollTop = 0;
       return;
     }
-    main.scrollTop = workListPosition(account.id).scrollTop;
-    const remember = () => rememberWorkListPosition(account.id, displayedPage, main.scrollTop);
+    main.scrollTop = workListPosition(account.id, archived).scrollTop;
+    const remember = () => rememberWorkListPosition(account.id, displayedPage, main.scrollTop, archived);
     remember();
     main.addEventListener("scroll", remember, { passive: true });
     return () => main.removeEventListener("scroll", remember);
-  }, [account.id, displayedPage, showingEditor]);
+  }, [account.id, displayedPage, showingEditor, archived]);
 
   /** Explicit refresh and successful writes bypass both list and cover caches */
   const refresh = () => {
+    void archiveState.reload().catch(() => {});
     invalidateWorks(account.id);
     setCoverRevision((v) => v + 1);
     works.reload();
@@ -176,6 +221,7 @@ function WorksForAccount({ account }: { account: AccountSummary }) {
           rememberWorkListPosition(account.id, 0, 0);
           setCreatingFor(null);
           setCreatedFor(creatingFor);
+          setArchived(false);
           setPage(0);
           refresh();
         }}
@@ -197,11 +243,27 @@ function WorksForAccount({ account }: { account: AccountSummary }) {
   return (
     <div className={styles.page} ref={pageRef}>
       <PageHeader
-        title="作品管理"
+        title={archived ? "归档管理" : "作品管理"}
         subtitle={shown ? summary(list, shown.data.total) : "正在加载作品…"}
         actions={
           <>
-            <Button onClick={refresh} disabled={works.loading} aria-busy={works.loading}>
+            <Button
+              aria-pressed={archived}
+              onClick={() => {
+                const next = !archived;
+                setArchived(next);
+                setPage(workListPosition(account.id, next).page);
+                setLastView(null);
+                setActionMessage(null);
+              }}
+            >
+              {archived ? "返回作品列表" : "归档管理"}
+            </Button>
+            <Button
+              onClick={refresh}
+              disabled={archiveState.loading || (archiveState.ready && works.loading)}
+              aria-busy={works.loading}
+            >
               刷新
             </Button>
             <Button
@@ -223,6 +285,21 @@ function WorksForAccount({ account }: { account: AccountSummary }) {
 
       {createdFor === account?.id && (
         <Notice>作品已创建，尚未提交审核。请在刷新后的列表中打开作品继续编辑或提审。</Notice>
+      )}
+      {archiveState.error && (
+        <Notice
+          action={
+            <Button
+              size="xs"
+              disabled={archiveState.loading}
+              onClick={() => void archiveState.reload().catch(() => {})}
+            >
+              重试归档记录
+            </Button>
+          }
+        >
+          {archiveState.error}
+        </Notice>
       )}
       {actionMessage && (
         <div role="status">
@@ -247,7 +324,9 @@ function WorksForAccount({ account }: { account: AccountSummary }) {
         <span className={styles.loadStatus} role="status">
           {slowLoad && works.loading ? (page !== displayedPage ? `正在打开第 ${page + 1} 页…` : "正在更新作品…") : ""}
         </span>
-        {list.length > 0 ? (
+        {!archiveState.ready && archiveState.error ? (
+          <Notice>归档记录读取失败，作品列表暂未显示。请重新打开页面后重试。</Notice>
+        ) : list.length > 0 ? (
           <ul className={styles.grid} aria-label="作品" aria-busy={works.loading}>
             {list.map((work) => (
               <WorkTile
@@ -258,6 +337,9 @@ function WorksForAccount({ account }: { account: AccountSummary }) {
                 onAction={onAction}
                 onPrepare={prepare}
                 canWrite={account.status === "active"}
+                archived={archived}
+                archiveDisabled={!!archiveState.error || archiveBusy}
+                onArchive={toggleArchive}
                 onOpenDetail={openDetail}
                 onOpenAnalytics={(work) =>
                   navigate("glaze.analytics/analytics", { account: account.id, resourceId: work.itemId })
@@ -282,9 +364,17 @@ function WorksForAccount({ account }: { account: AccountSummary }) {
               <span className={styles.emptyTitle}>正在加载作品…</span>
             ) : (
               <>
-                <span className={styles.emptyTitle}>{works.error ? "作品加载失败" : "暂无作品"}</span>
+                <span className={styles.emptyTitle}>
+                  {works.error ? "作品加载失败" : archived ? "暂无已归档作品" : "暂无作品"}
+                </span>
                 <span className={styles.emptyHint}>
-                  {works.error ? "检查网络后点「重试」" : "点击「新增作品」，创建你的第一个作品"}
+                  {works.error
+                    ? "检查网络后点「重试」"
+                    : archived
+                      ? "归档的作品会显示在这里，可随时恢复"
+                      : archiveState.ids.length > 0
+                        ? "可在“归档管理”中查看和恢复作品，或新增作品"
+                        : "点击「新增作品」，创建你的第一个作品"}
                 </span>
               </>
             )}

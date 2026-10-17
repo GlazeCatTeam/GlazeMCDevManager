@@ -2,6 +2,16 @@
 
 更新日期：2026-10-17。当前实现按用户要求移除了 AI 草稿工作流与逐次确认。AI 在授权范围内直接查询、编辑和执行业务操作。连接与授权体验按 [ADR-0013](../adr/0013-ai-first-mcp-experience.md) 重新设计，以 AI 为主。
 
+## 本地作品归档
+
+归档记录由主进程 `WorkArchiveService` 按账号保存在应用数据库的 `works.archive.v1:<account>` 设置中，界面和 MCP 共用。应用外壳启动时导入旧 `localStorage` 记录一次，旧记录保留为恢复副本；已迁移账号不会再次导入，防止恢复后的作品被旧窗口重新归档。未同步或记录损坏时阻止相关读取，避免默认暴露旧归档内容。
+
+`works_list`、`works_page`、`works_search` 和 `works_searchReferences` 默认排除归档作品；分页先过滤再计算总数。`works_get`、`works_reviewFeedback`、`works_editor` 以及已有作品的保存、提审、素材和状态操作默认拒绝已归档目标。用户明确要求包含或操作归档作品时，每次调用单独传 `includeArchived: true`；它不会恢复作品，也不会影响后续调用的默认值。操作过程中再次检查归档状态，避免后台读取期间发生归档后继续写入。
+
+`works_archiveState` 仅返回本账号已归档作品 ID；`works_archive`、`works_restore` 使用现有 `works:save` 授权及 `idempotencyKey` 管理本地归档，不改变网易平台状态。变更通过 `works.archiveChanged` 推送给所有窗口，界面立即更新。平台收益、评论等独立业务模块不因作品列表归档改变其原始统计口径。
+
+界面的归档状态由 `WorkArchiveStore` 跨路由共享并合并并发初始化；页面离开后继续接收变更通知，返回列表无需等待重复查询。晚到的读取或失败不会覆盖更新的推送。首次读取失败提供原位重试，未核验记录前不显示作品；显式刷新时保留已核验快照。归档后的分页从同一份列表快照同步计算，缓存到期时后台重新核验；本地归档变更不使平台列表和封面缓存失效。普通列表、归档列表分别记住页码和滚动位置。
+
 ## AI 助手页
 
 侧边栏「AI 助手」（`plugins/assistant`，插件 `glaze.assistant`）取代原「设置 → AI 接入」；带 `category: "ai"` 的旧设置链接会跳转到这里。页面内容：

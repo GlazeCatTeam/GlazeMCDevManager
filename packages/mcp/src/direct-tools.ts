@@ -1,6 +1,7 @@
 import { deferredWorkCreatePatch, isWorkRecord } from "@glaze/contracts";
 import { z } from "zod";
 import type { ToolDefinition } from "./tools";
+import { workVisibility, workVisibilityDescription } from "./work-visibility";
 
 const id = z.string().min(1).max(128);
 const itemId = z.string().regex(/^\d{1,32}$/);
@@ -27,7 +28,9 @@ function tool(
   description: string,
   readOnly = false,
 ): ToolDefinition {
-  let schema = z.strictObject(shape);
+  const scoped = name.startsWith("works_") && "itemId" in shape;
+  const scopedShape: z.ZodRawShape = { ...shape, ...(scoped ? workVisibility : {}) };
+  let schema = z.strictObject(scopedShape);
   if (name === "works_create")
     schema = schema.superRefine((params, ctx) => {
       if (isWorkRecord(params.fields) && Object.keys(deferredWorkCreatePatch(params.fields)).length)
@@ -48,7 +51,15 @@ function tool(
           message: "请选择一种素材来源: filePath、directoryId + relativePath 或 interactive: true",
         });
     });
-  return { name, method: name, title, permission, schema, description, readOnly };
+  return {
+    name,
+    method: name,
+    title,
+    permission,
+    schema,
+    description: description + (scoped ? workVisibilityDescription : ""),
+    readOnly,
+  };
 }
 
 export const directTools = [

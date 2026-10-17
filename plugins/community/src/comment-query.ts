@@ -2,14 +2,20 @@ import type { CommentListParams, CommentPage, PlayerComment, RpcResult } from "@
 import type { CommentPageCache, CommentScanProgress } from "./comment-cache";
 
 /** Filter only received comments, keeping partial counts separate from final totals */
-function ratingPage(data: CommentPage, params: CommentListParams, stars: number[]): CommentPage {
-  const matching = data.items.filter((item) => stars.includes(item.stars));
+function filteredPage(data: CommentPage, params: CommentListParams, stars: number[], hideEmpty: boolean): CommentPage {
+  const matching = data.items.filter(
+    (item) => (!stars.length || stars.includes(item.stars)) && (!hideEmpty || item.content.trim().length > 0),
+  );
   return { total: matching.length, items: matching.slice(params.start, params.start + params.span) };
 }
 
-/** Include rating selections in display-page keys while preserving ordinary server-page keys */
-export function commentQueryKey(params: CommentListParams, stars: number[]): string {
-  return JSON.stringify(stars.length ? { ...params, stars: [...stars].sort() } : params);
+/** Include local filters in display-page keys while preserving ordinary server-page keys */
+export function commentQueryKey(params: CommentListParams, stars: number[], hideEmpty = false): string {
+  return JSON.stringify({
+    ...params,
+    ...(stars.length ? { stars: [...stars].sort() } : {}),
+    ...(hideEmpty ? { hideEmpty } : {}),
+  });
 }
 
 /** Publish matching comments after each batch while sharing the complete source scan */
@@ -20,8 +26,9 @@ export async function loadCommentPage(
   load: (params: CommentListParams) => Promise<RpcResult<CommentPage>>,
   onProgress: (progress: CommentScanProgress) => void = () => {},
   signal?: AbortSignal,
+  hideEmpty = false,
 ): Promise<RpcResult<CommentPage>> {
-  if (!stars.length) return load(params);
+  if (!stars.length && !hideEmpty) return load(params);
   const first = { ...params, start: 0, span: 100 };
   const all = await cache.readScan(
     JSON.stringify({ ...first, scope: "all-ratings" }),
@@ -35,8 +42,7 @@ export async function loadCommentPage(
         if (!isCurrent()) return { ok: false, error: { kind: "business", message: "评论查询已失效，请重试" } };
         const source = { ...first, start };
         const key = JSON.stringify(source);
-        const cached = cache.fresh(key) ? cache.peek(key) : null;
-        const result = cached ? { ok: true as const, value: cached } : await load(source);
+        const result = await cache.readBatch(key, () => load(source));
         if (!isCurrent()) return { ok: false, error: { kind: "business", message: "评论查询已失效，请重试" } };
         if (!result.ok) return result;
         total = result.value.total;
@@ -53,12 +59,12 @@ export async function loadCommentPage(
       }
       return { ok: true, value: { total: items.size, items: [...items.values()] } };
     },
-    (progress) => onProgress({ ...progress, data: ratingPage(progress.data, params, stars) }),
+    (progress) => onProgress({ ...progress, data: filteredPage(progress.data, params, stars, hideEmpty) }),
     signal,
   );
   if (!all.ok) return all;
-  return cache.read(commentQueryKey(params, stars), async () => ({
+  return cache.read(commentQueryKey(params, stars, hideEmpty), async () => ({
     ok: true,
-    value: ratingPage(all.value, params, stars),
+    value: filteredPage(all.value, params, stars, hideEmpty),
   }));
 }

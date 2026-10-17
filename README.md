@@ -13,7 +13,7 @@ Glaze MC Dev Manager：网易我的世界开发者管理工具（Windows 桌面�
 
 ## 状态
 
-首个公开测试版 v0.1.0。功能进度与已知限制见 [项目文档](docs/PROJECT.md)「当前进度」和各版本的 [更新说明](docs/releases)。
+公开测试版 v0.1.2。功能进度与已知限制见 [项目文档](docs/PROJECT.md)「当前进度」和各版本的 [更新说明](docs/releases)。
 
 ## 目录
 
@@ -55,7 +55,7 @@ pnpm dev
 
 以上为阅读提示，以 [LICENSE](LICENSE) 英文原文为准。独立第三方插件可自行选择许可证；复用本项目代码时仍需遵守对应许可义务。
 
-第三方依赖、图片、参考截图及其他另有归属的材料不因此改为 Apache-2.0。Minecraft 图标保留 Mojang 声明，见 [作品管理资源声明](plugins/works/src/assets/minecraft/LICENSE.md) 和 [数据分析资源声明](plugins/analytics/src/assets/minecraft/LICENSE.md)。应用“关于 → 查看许可”提供项目原文、NOTICE、第三方依赖与内置资源声明的离线查看。
+第三方依赖、图片、参考截图及其他另有归属的材料不因此改为 Apache-2.0。Minecraft 图标保留 Mojang 声明，见 [首页资源声明](plugins/home/src/assets/minecraft/LICENSE.md)、[作品管理资源声明](plugins/works/src/assets/minecraft/LICENSE.md) 和 [数据分析资源声明](plugins/analytics/src/assets/minecraft/LICENSE.md)。应用“关于 → 查看许可”提供项目原文、NOTICE、第三方依赖与内置资源声明的离线查看。
 
 本项目不包含 MCDevManager 的源码，只参考其功能与接口行为。MCDevManager 采用 BNCL-1.0 许可证，复用其代码前请阅读其条款。
 

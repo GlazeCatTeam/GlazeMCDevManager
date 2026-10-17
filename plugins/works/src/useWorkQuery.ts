@@ -7,12 +7,15 @@ import {
   type WorkEditorDocument,
   type WorkEditorOptions,
   type WorkPage,
+  type WorkSummary,
 } from "@glaze/plugin-sdk";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { archiveWorkPage } from "./archive";
 import { WorkQueryCache } from "./query-cache";
 import { clearWorkListPositions } from "./view-state";
 
 const pages = new WorkQueryCache<WorkPage>(30_000, 50);
+const lists = new WorkQueryCache<WorkSummary[]>(30_000, 5);
 const covers = new WorkQueryCache<WorkDetail>(5 * 60_000, 200);
 const editors = new WorkQueryCache<WorkEditorDocument>(15_000, 30);
 const options = new WorkQueryCache<WorkEditorOptions>(5 * 60_000, 5);
@@ -27,6 +30,7 @@ function listenForChanges(): void {
     onHostEvent("data.changed", ({ modules }) => {
       if (!modules.includes("works") && !modules.includes("promotion")) return;
       pages.expire();
+      lists.expire();
       covers.expire();
       // Open editors keep their document; the next visit revalidates instead of replacing it mid-edit
       editors.expire();
@@ -39,7 +43,14 @@ function listenForChanges(): void {
 }
 
 /** Share the same read between idle warmup and the mounted first page */
-export function preloadWorksPage(account: string): Promise<RpcResult<WorkPage>> {
+export async function preloadWorksPage(
+  account: string,
+  archivedIds: readonly string[] = [],
+): Promise<RpcResult<WorkPage>> {
+  if (archivedIds.length > 0) {
+    const result = await lists.read(JSON.stringify([account]), () => callHost("works.list", { account }));
+    return result.ok ? { ok: true, value: archiveWorkPage(result.value, archivedIds, false, 0, 9) } : result;
+  }
   return pages.read(JSON.stringify([account, 0, 9]), () => callHost("works.page", { account, page: 0, pageSize: 9 }));
 }
 
@@ -50,14 +61,26 @@ export async function preloadNextWorksPage(
   pageSize: number,
   total: number,
   cancelled: () => boolean = () => false,
+  archivedIds: readonly string[] = [],
+  archived = false,
 ): Promise<void> {
   const next = page + 1;
   if (cancelled() || next * pageSize >= total) return;
   const epoch = generation;
   const stale = () => cancelled() || epoch !== generation;
-  const result = await pages.read(JSON.stringify([account, next, pageSize]), () =>
-    callHost("works.page", { account, page: next, pageSize }),
-  );
+  const filtered = archived || archivedIds.length > 0;
+  const result = filtered
+    ? await lists
+        .read(JSON.stringify([account]), () => callHost("works.list", { account }))
+        .then(
+          (result): RpcResult<WorkPage> =>
+            result.ok
+              ? { ok: true, value: archiveWorkPage(result.value, archivedIds, archived, next, pageSize) }
+              : result,
+        )
+    : await pages.read(JSON.stringify([account, next, pageSize]), () =>
+        callHost("works.page", { account, page: next, pageSize }),
+      );
   if (!result.ok || stale()) return;
   let index = 0;
   const worker = async () => {
@@ -90,6 +113,7 @@ export function clearWorkReads(): void {
   generation++;
   clearWorkListPositions();
   pages.invalidate();
+  lists.invalidate();
   covers.invalidate();
   editors.invalidate();
   options.invalidate();
@@ -100,6 +124,7 @@ export function invalidateWorks(account: string): void {
   generation++;
   const prefix = `${JSON.stringify([account]).slice(0, -1)},`;
   pages.invalidate(prefix);
+  lists.invalidate(JSON.stringify([account]));
   covers.invalidate(prefix);
   editors.invalidate(prefix);
 }
@@ -111,6 +136,7 @@ function useCachedWork<T>(
   load: () => Promise<RpcResult<T>>,
   refreshToken = 0,
   followChanges = true,
+  enabled = true,
 ): HostQuery<T> {
   const [version, setVersion] = useState(0);
   useEffect(() => {
@@ -129,6 +155,7 @@ function useCachedWork<T>(
     loading: !cache.fresh(key),
   }));
   useEffect(() => {
+    if (!enabled) return;
     let active = true;
     void version;
     void refreshToken;
@@ -150,21 +177,59 @@ function useCachedWork<T>(
     return () => {
       active = false;
     };
-  }, [cache, key, load, version, refreshToken]);
+  }, [cache, key, load, version, refreshToken, enabled]);
   const reload = useCallback(() => {
     cache.invalidate(key);
     setVersion((v) => v + 1);
   }, [cache, key]);
   return {
-    ...(state.key === key ? state : { data: cache.peek(key), error: null, loading: !cache.fresh(key) }),
+    ...(!enabled
+      ? { data: null, error: null, loading: true }
+      : state.key === key
+        ? state
+        : { data: cache.peek(key), error: null, loading: !cache.fresh(key) }),
     reload,
   };
 }
 
 /** Page requests are account-specific and reuse recent rows on route re-entry */
-export function useWorksPage(account: string, page: number, pageSize: number): HostQuery<WorkPage> {
-  const load = useCallback(() => callHost("works.page", { account, page, pageSize }), [account, page, pageSize]);
-  return useCachedWork(pages, JSON.stringify([account, page, pageSize]), load);
+export function useWorksPage(
+  account: string,
+  page: number,
+  pageSize: number,
+  archivedIds: readonly string[] = [],
+  archived = false,
+  enabled = true,
+): HostQuery<WorkPage> {
+  const filtered = archived || archivedIds.length > 0;
+  const loadPage = useCallback(() => callHost("works.page", { account, page, pageSize }), [account, page, pageSize]);
+  const loadList = useCallback(() => callHost("works.list", { account }), [account]);
+  const paged = useCachedWork(
+    pages,
+    JSON.stringify([account, page, pageSize]),
+    loadPage,
+    0,
+    true,
+    enabled && !filtered,
+  );
+  const emptyArchive = archived && archivedIds.length === 0;
+  // Navigation revalidates expired source data in the background without blocking cached pages
+  const whole = useCachedWork(
+    lists,
+    JSON.stringify([account]),
+    loadList,
+    page * 2 + Number(archived),
+    true,
+    enabled && filtered && !emptyArchive,
+  );
+  const data = useMemo(
+    () => (whole.data ? archiveWorkPage(whole.data, archivedIds, archived, page, pageSize) : null),
+    [whole.data, archivedIds, archived, page, pageSize],
+  );
+  const empty = useMemo((): WorkPage => ({ items: [], total: 0 }), []);
+  if (!filtered) return paged;
+  if (emptyArchive && enabled) return { data: empty, loading: false, error: null, reload: whole.reload };
+  return { ...whole, data };
 }
 
 /** Reuse a recent or intent-prefetched detail; expired documents revalidate before editing */
