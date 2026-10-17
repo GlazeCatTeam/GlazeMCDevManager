@@ -10,10 +10,10 @@ declare const __GLAZE_PROJECT_LICENSE_TEXT__: string;
 declare const __GLAZE_PROJECT_NOTICE__: string;
 
 const projectLinks = {
-  homepage: "https://github.com/GlazeCatTeam/GlazeMCDevManager",
-  feedback: "https://github.com/GlazeCatTeam/GlazeMCDevManager/issues",
+  homepage: "https://github.com/TheCoffeeCat-A/GlazeMCDevManager",
+  feedback: "https://github.com/TheCoffeeCat-A/GlazeMCDevManager/issues",
   reference: "https://github.com/BitterLemonn/MCDevManager",
-  releases: "https://github.com/GlazeCatTeam/GlazeMCDevManager/releases",
+  releases: "https://github.com/TheCoffeeCat-A/GlazeMCDevManager/releases",
 } as const;
 
 /** Read the packaged app version or the desktop manifest in development, never Electron's app version */

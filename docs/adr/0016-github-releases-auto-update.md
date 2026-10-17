@@ -2,6 +2,7 @@
 
 - 状态：已接受
 - 日期：2026-10-16
+- 补充（2026-10-17）：仓库已转移为 `TheCoffeeCat-A/GlazeMCDevManager`；原组织地址保留重定向供旧版更新使用，维护约束见 [11 工程规范](../architecture/11-engineering.md)「发布与更新」。下文背景保留当时的仓库归属。
 - 取代：[11 工程规范](../architecture/11-engineering.md) 原发布计划中「签名后上传、同时提供便携版」的部分
 
 ## 背景
