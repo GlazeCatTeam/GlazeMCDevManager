@@ -66,6 +66,7 @@ export function WorkTile({
   }, []);
   useEffect(() => cancelHover, [cancelHover]);
   const detail = useWorkCover(account, work.itemId, refreshToken);
+  const weakOffline = detail.data?.weakOffline ?? work.weakOffline;
   const actions = actionsFor(work.status);
   const onlineTime = detail.data?.onlineTime ?? null;
   const appointOnlineTime = detail.data?.appointOnlineTime;
@@ -130,7 +131,7 @@ export function WorkTile({
         </span>
         {work.isOriginal && <Tag>原创</Tag>}
         <Tag>{work.syncPc ? "PE + PC" : work.platform === "pc" ? "PC" : "PE"}</Tag>
-        {work.weakOffline && <Tag tone="warning">弱下架</Tag>}
+        {weakOffline && <Tag tone="warning">弱下架</Tag>}
       </div>
 
       <div className={styles.dates}>

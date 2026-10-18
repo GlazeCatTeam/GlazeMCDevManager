@@ -125,14 +125,14 @@ export function MediaSections({
     const file = await upload("video");
     if (file)
       change("video_info_list", [
-        { ...video, url: file.url, size: file.size, cover: text(video?.cover) },
+        { ...video, url: file.receipt, size: file.size, cover: video?.cover ?? "" },
         ...videos.slice(1),
       ]);
   };
   /** Replace the cover separately from the video data */
   const replaceCover = async () => {
     const file = await upload("videoCover");
-    if (file && video) change("video_info_list", [{ ...video, cover: file.url }, ...videos.slice(1)]);
+    if (file && video) change("video_info_list", [{ ...video, cover: file.receipt }, ...videos.slice(1)]);
   };
   return (
     <>
@@ -182,7 +182,7 @@ export function MediaSections({
           <div className={styles.stack}>
             <strong>作品视频</strong>
             <span className={styles.fileName}>
-              {video ? text(video.url).split("/").pop() || "已上传视频" : "暂无视频"}
+              {video ? mediaUrl(video.url).split("/").pop() || "已上传视频" : "暂无视频"}
             </span>
             <span className={styles.hint}>
               MP4 · H.264 / AAC · 16:9
@@ -204,7 +204,7 @@ export function MediaSections({
           </div>
           <div className={styles.imageSlot}>
             {video?.cover && (
-              <img className={styles.videoCover} src={remoteImageUrl(text(video.cover)) ?? ""} alt="视频封面" />
+              <img className={styles.videoCover} src={remoteImageUrl(mediaUrl(video.cover)) ?? ""} alt="视频封面" />
             )}
             <strong>视频封面</strong>
             <span className={styles.hint}>992 × 558 · PNG/JPG ≤10M</span>

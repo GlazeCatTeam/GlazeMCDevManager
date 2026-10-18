@@ -73,6 +73,13 @@ export function validateWorkCreate(fields: WorkRecord, options: WorkEditorOption
     )
   )
     return "新作品图片必须使用有效图片位和上传回执";
+  if (
+    Array.isArray(fields.video_info_list) &&
+    fields.video_info_list.some(
+      (row) => !isWorkRecord(row) || !isWorkRecord(row.url) || (row.cover !== "" && !isWorkRecord(row.cover)),
+    )
+  )
+    return "新作品视频和封面必须使用上传回执";
   return null;
 }
 
@@ -84,6 +91,8 @@ export function buildWorkCreate(fields: WorkRecord, submitReview = false): WorkR
     ...Object.fromEntries(Object.entries(fields).filter(([key]) => Object.hasOwn(workCreateDefaults, key))),
     item_name: String(fields.item_name).trim(),
     item_version: "0.1",
+    multi_tags: "0",
+    tags: fields.tag ?? [],
     is_check_apply: submitReview,
     sync_pc_flag: false,
     dlc_info: { dlc_switch: false, dlc_type: "off", master: {}, slave_list: [] },

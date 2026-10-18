@@ -103,7 +103,7 @@ export function sanitizeWorkHtml(html: string, display = false): string {
       }
       el.setAttribute("src", display ? (remoteImageUrl(src) ?? "") : src);
       if (display) el.setAttribute("data-work-source", src);
-      el.setAttribute("alt", "作品图片");
+      if (display) el.setAttribute("alt", "作品图片");
     }
   }
   return doc.body.innerHTML;

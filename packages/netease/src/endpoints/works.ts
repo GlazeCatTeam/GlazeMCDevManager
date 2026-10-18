@@ -193,7 +193,7 @@ export async function searchWorks(
   return ok({ items, total });
 }
 
-/** Icon, banner and go-live times of one of the account's works, from GET /items/categories/pe/{id} */
+/** Cover, shelf state and go-live times of one of the account's works, from GET /items/categories/pe/{id} */
 export async function getWork(session: NeteaseSession, itemId: string): Promise<Result<WorkDetail>> {
   const result = await getMcDevData("items.pe.detail", `/items/categories/pe/${encodeURIComponent(itemId)}`, session);
   if (!result.ok) {
@@ -207,6 +207,8 @@ export async function getWork(session: NeteaseSession, itemId: string): Promise<
   return ok({
     itemId,
     name,
+    ...(typeof raw.weak_offline === "boolean" ? { weakOffline: raw.weak_offline } : {}),
+    weakOfflineReason: readString(raw.weak_offline_reason),
     iconUrl: readString(readArray(raw.channel)?.find((c) => readNumber(c.channel_id) === ICON_CHANNEL_ID)?.channel_url),
     bannerUrl: readString(raw.banner_pic),
     onlineTime: readString(raw.online_time),

@@ -45,6 +45,9 @@ export interface WorkSummary {
 export interface WorkDetail {
   itemId: string;
   name: string;
+  /** Authoritative shelf state from detail; older clients may omit it */
+  weakOffline?: boolean;
+  weakOfflineReason?: string | null;
   /** Square work icon on the platform's CDN; load it through remoteImageUrl */
   iconUrl: string | null;
   /** Wide banner picture */

@@ -260,16 +260,26 @@ export function validateWorkPatch(patch: WorkRecord, original: WorkRecord): stri
     patch.video_info_list.some(
       (v) =>
         !isWorkRecord(v) ||
-        typeof v.url !== "string" ||
-        !isNeteaseImageUrl(v.url) ||
+        !(typeof v.url === "string" ? isNeteaseImageUrl(v.url) : isWorkRecord(v.url) && validReceipt(v.url, "video")) ||
         typeof v.size !== "number" ||
         v.size < 0 ||
         v.size > 50 * 1024 * 1024 ||
-        typeof v.cover !== "string" ||
-        (v.cover !== "" && !isNeteaseImageUrl(v.cover)),
+        !(typeof v.cover === "string"
+          ? v.cover === "" || isNeteaseImageUrl(v.cover)
+          : isWorkRecord(v.cover) && validReceipt(v.cover, "image")),
     )
   )
     return "视频数据无效";
+  if (
+    Array.isArray(patch.video_info_list) &&
+    patch.video_info_list.some(
+      (v) =>
+        isWorkRecord(v) &&
+        typeof v.url === "string" &&
+        !records(original.video_info_list).some((old) => old.url === v.url),
+    )
+  )
+    return "替换视频需要上传回执，请重新上传后保存";
   if (
     isWorkRecord(patch.dlc_info) &&
     (typeof patch.dlc_info.dlc_switch !== "boolean" ||
@@ -319,6 +329,19 @@ function validReceipt(value: WorkRecord, type: string): boolean {
   }
 }
 
+/** Compare uploaded video receipts with the public URLs returned after saving */
+function videoSnapshot(value: WorkValue | undefined): WorkRecord[] {
+  return records(value).map((video) => {
+    const uploaded = record(structured(record(video.url).body, {}));
+    const cover = record(structured(record(video.cover).body, {}));
+    return {
+      cover: typeof video.cover === "string" ? video.cover : (cover.url ?? cover.filename ?? ""),
+      size: video.size ?? 0,
+      url: typeof video.url === "string" ? video.url : (uploaded.url ?? uploaded.filename ?? ""),
+    };
+  });
+}
+
 /** Validate every edited image row and reject duplicate channel ids */
 function validChannels(value: WorkValue[]): boolean {
   const ids = new Set<number>();
@@ -357,6 +380,8 @@ export function buildWorkUpdate(raw: WorkRecord, patch: WorkRecord): WorkRecord 
   };
   result.claim_item_enabled = Boolean(raw.claim_item_enabled);
   Object.assign(result, patch);
+  // The editor's tag field is stored by the platform under tags
+  if ("tag" in patch) result.tags = patch.tag;
   normalizeWorkUpdateDefaults(result);
   result.is_check_apply = false;
   result.pre_review_video = raw.pre_review_video || "{}";
@@ -507,7 +532,21 @@ export async function saveWorkEditor(
     "POST",
     serializeUpdate(body),
   );
-  return saved.ok ? ok(undefined) : saved;
+  if (!saved.ok) return saved;
+  if ("video_info_list" in params.patch) {
+    const verified = await readWorkEditor(session, params.itemId);
+    if (!verified.ok) return verified;
+    if (
+      canonical(videoSnapshot(verified.value.fields.video_info_list)) !==
+      canonical(videoSnapshot(params.patch.video_info_list))
+    )
+      return fail({
+        kind: "business",
+        code: "save_not_applied",
+        message: "平台已响应保存，但视频未按修改更新，请核对作品后再操作",
+      });
+  }
+  return ok(undefined);
 }
 /** Submit separately from saving and surface the platform's extra-review requirement */
 export async function submitWorkReview(

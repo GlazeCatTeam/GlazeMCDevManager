@@ -406,6 +406,13 @@ const rpc = async (method: string, params?: unknown) => {
     const target = documents.get(input.itemId);
     if (!target) return { ok: false, error: { kind: "fixture", message: "作品不存在" } };
     Object.assign(target.fields, input.patch);
+    if (Array.isArray(input.patch.video_info_list))
+      target.fields.video_info_list = input.patch.video_info_list.map((entry) => {
+        const video = entry as WorkRecord;
+        if (typeof video.url === "string") return video;
+        const receipt = video.url as WorkRecord;
+        return { ...video, url: JSON.parse(String(receipt.body)).url };
+      });
     const summary = workList.find((entry) => entry.itemId === input.itemId);
     if (summary) summary.name = String(target.fields.item_name);
     return { ok: true, value: undefined };
@@ -423,6 +430,20 @@ const rpc = async (method: string, params?: unknown) => {
         size: 128,
         url: "https://x19.fp.ps.netease.com/fixture.zip",
         receipt: { body: "{}", sign: "fixture-signature", file_type: "zip_package" },
+      },
+    };
+  if (method === "works.upload" && (params as { kind: string }).kind === "video")
+    return {
+      ok: true,
+      value: {
+        name: "fixture.mp4",
+        size: 128,
+        url: "https://x19.fp.ps.netease.com/fixture.mp4",
+        receipt: {
+          body: '{"url":"https://x19.fp.ps.netease.com/fixture.mp4"}',
+          sign: "fixture-signature",
+          file_type: "video",
+        },
       },
     };
   if (method === "works.upload")
@@ -512,6 +533,8 @@ if (/onclick|onerror|<script|javascript:|evil\.example|<svg/.test(cleaned) || !c
 const proxied = sanitizeWorkHtml('<img src="https://x19.fp.ps.netease.com/example.png">', true);
 if (!proxied.includes("glaze-image:") || sanitizeWorkHtml(proxied).includes("glaze-image:"))
   throw new Error("富文本图片代理往返验证失败");
+if (!proxied.includes('alt="作品图片"') || /\balt=/.test(sanitizeWorkHtml(proxied)))
+  throw new Error("图片说明仅用于本地展示，不提交到平台");
 console.info("富文本清理与图片代理往返检查通过");
 const container = window.document.getElementById("root");
 if (!container) throw new Error("Missing preview root");

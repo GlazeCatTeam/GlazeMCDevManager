@@ -25,6 +25,23 @@ interface ResponseEnvelope {
   status?: unknown;
   data?: unknown;
   msg?: unknown;
+  errors?: unknown;
+}
+
+/** Surface short platform validation messages without echoing upload receipts or credentials */
+function validationMessage(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  return Object.entries(value)
+    .filter(([key]) => !/sign|token|cookie|password|authorization|secret/i.test(key))
+    .flatMap(([, messages]) => (Array.isArray(messages) ? messages : []))
+    .filter(
+      (message): message is string =>
+        typeof message === "string" &&
+        message.length <= 300 &&
+        !/https?:|sign|token|cookie|password|authorization|secret|[A-Za-z0-9+/=_-]{48,}/i.test(message),
+    )
+    .slice(0, 8)
+    .join("；");
 }
 
 export interface McDevResponse<T> {
@@ -160,7 +177,7 @@ export async function getMcDev<T>(
     return fail({
       kind: "business",
       code: status,
-      message: typeof body.msg === "string" ? body.msg : "",
+      message: (typeof body.msg === "string" ? body.msg : "") || validationMessage(body.errors),
       httpStatus: response.status,
     });
   }

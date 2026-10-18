@@ -32,6 +32,8 @@ function Banner({ url }: { url: string | null }) {
 export function WorkDetailDialog({ work, onClose }: WorkDetailDialogProps) {
   const detail = useHostQuery("works.get", { itemId: work.itemId });
   const data = detail.data;
+  const weakOffline = data?.weakOffline ?? work.weakOffline;
+  const weakOfflineReason = data?.weakOffline === undefined ? work.weakOfflineReason : data.weakOfflineReason;
   const rows: [string, string | null][] = [
     ["状态", statusLabels[work.status]],
     ["价格", priceText(work)],
@@ -41,7 +43,7 @@ export function WorkDetailDialog({ work, onClose }: WorkDetailDialogProps) {
     ["首次上线", data?.firstOnlineTime ? formatDateTime(data.firstOnlineTime) : null],
     ["最近上线", data?.onlineTime ? formatDateTime(data.onlineTime) : null],
     ["定时上架", data?.appointOnlineTime ? formatDateTime(data.appointOnlineTime) : null],
-    ["弱下架原因", work.weakOffline ? (work.weakOfflineReason ?? "未说明") : null],
+    ["弱下架原因", weakOffline ? (weakOfflineReason ?? "未说明") : null],
   ];
 
   return (
@@ -58,11 +60,11 @@ export function WorkDetailDialog({ work, onClose }: WorkDetailDialogProps) {
         </Notice>
       )}
       <Banner key={data?.bannerUrl ?? "none"} url={data?.bannerUrl ?? null} />
-      {(work.isOriginal || work.syncPc || work.weakOffline) && (
+      {(work.isOriginal || work.syncPc || weakOffline) && (
         <div className={styles.tags}>
           {work.isOriginal && <Tag>原创</Tag>}
           {work.syncPc && <Tag>PE + PC</Tag>}
-          {work.weakOffline && <Tag tone="warning">弱下架</Tag>}
+          {weakOffline && <Tag tone="warning">弱下架</Tag>}
         </div>
       )}
       <dl className={styles.rows}>

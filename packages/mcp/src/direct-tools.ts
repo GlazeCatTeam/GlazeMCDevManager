@@ -84,14 +84,14 @@ export const directTools = [
     "直接修改并保存作品",
     "works:save",
     { ...account, itemId, patch: fields, base: fields.optional(), submitReview: z.boolean().default(false), ...key },
-    "直接按 itemId 和 patch 保存作品。patch 支持编辑器全部可写分区字段，如 item_name、info、price、res、channel、sync_item_info。可提供 base（所改字段的原值）防止覆盖其他修改。无需草稿和二次确认。普通保存不提审；submitReview=true 需独立提审权限。新媒体使用 works_upload 返回的 {$asset:id,as:'receipt'|'url'|'name'|'size'}。重试复用 idempotencyKey，unknown 不得自动重试。",
+    "直接按 itemId 和 patch 保存作品。patch 支持编辑器全部可写分区字段，如 item_name、info、price、res、channel、sync_item_info。可提供 base（所改字段的原值）防止覆盖其他修改。无需草稿和二次确认。普通保存不提审；submitReview=true 需独立提审权限。新媒体使用 works_upload 返回的 {$asset:id,as:'receipt'|'url'|'name'|'size'}。视频的 url 和新封面 cover 使用 as:'receipt'，size 使用 as:'size'，已有视频和封面可保留原字符串；保存后会重新读取并核对视频。重试复用 idempotencyKey，unknown 不得自动重试。",
   ),
   tool(
     "works_create",
     "直接创建作品",
     "works:save",
     { ...account, fields, submitReview: z.boolean().default(false), ...key },
-    "直接创建作品，成功即返回 succeeded，不要求因缺少 ID 人工核对。先读取 works_options；上传新作品材料时省略 itemId，再引用材料 ID。submitReview 默认 false；仅用户明确要求新增并提审时设为 true，额外需要提审权限，在同一次创建请求中完成。结果包含 created、submittedReview 和 itemId（平台未返回时为 null），不猜测 ID；后续修改或补充 PC 同步等配置仍须准确 ID。unknown 禁止自动重试，重试复用 idempotencyKey。",
+    "直接创建作品，成功即返回 succeeded，不要求因缺少 ID 人工核对。先读取 works_options；上传新作品材料时省略 itemId，再引用材料 ID。视频的 url 和非空 cover 使用 as:'receipt'，size 使用 as:'size'；钻石付费模组需完整视频及封面。submitReview 默认 false；仅用户明确要求新增并提审时设为 true，额外需要提审权限，在同一次创建请求中完成。结果包含 created、submittedReview 和 itemId（平台未返回时为 null），不猜测 ID；后续修改或补充 PC 同步等配置仍须准确 ID。unknown 禁止自动重试，重试复用 idempotencyKey。",
   ),
   tool(
     "works_submit_review",

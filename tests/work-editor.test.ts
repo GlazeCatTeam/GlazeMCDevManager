@@ -742,6 +742,7 @@ function newWorkFields() {
     sub_type: 4,
     mod_second_type: 7,
     mod_version: "3.9",
+    tag: [{ name: "生存", source: 0 }],
     res: [
       {
         res_name: "new.zip",
@@ -751,6 +752,13 @@ function newWorkFields() {
       },
     ],
     channel: [{ channel_id: 5, channel_url: { body: "{}", sign: "test-sign", file_type: "image" }, version: 3 }],
+    video_info_list: [
+      {
+        cover: "",
+        size: 128,
+        url: { body: '{"url":"https://x19.fp.ps.netease.com/new.mp4"}', sign: "test-sign", file_type: "video" },
+      },
+    ],
   };
 }
 
@@ -780,11 +788,14 @@ test("create uses its own DTO and accepts a successful response without an id", 
   const body = JSON.parse(String(writes[0]?.init.body));
   assert.equal(body.item_name, "新建测试模组");
   assert.equal(body.item_version, "0.1");
+  assert.equal(body.multi_tags, "0");
   assert.equal(body.is_check_apply, false);
   assert.equal(body.mod_second_type, 7);
   assert.equal(body.res[0].res_url.sign, "test-sign");
   assert.equal(body.res[0].old_metadata, undefined);
   assert.equal(body.channel[0].version, undefined);
+  assert.deepEqual(body.tags, newWorkFields().tag);
+  assert.equal(body.video_info_list[0].url.file_type, "video");
   assert.deepEqual(body.mc_version, []);
   assert.equal(body.sync_item_info, undefined);
   body.res.push({});
@@ -859,6 +870,7 @@ test("create validates missing resources, stale classifications and prices befor
     { price_type: "diamond", price_rank: 1, price: 300 },
     { res: [{ res_name: "old.zip", res_url: "existing-url", add_version: true }] },
     { channel: [{ channel_id: 5, channel_url: "https://x19.fp.ps.netease.com/old.png" }] },
+    { video_info_list: [{ cover: "", size: 128, url: "https://x19.fp.ps.netease.com/new.mp4" }] },
   ]) {
     const calls = mockFetch((url) => response(url.endsWith("/item-tag/") ? { tag_list: [] } : createConstants));
     const result = await createWork(session, { account: "a", fields: { ...newWorkFields(), ...patch } });
@@ -946,6 +958,7 @@ test("partial update preserves resource metadata, guides, discount and play-plan
   assert.deepEqual(body.discount, fixture.discount);
   assert.equal(body.pe_is_add_play_plan, true);
   assert.deepEqual(body.tag, fixture.tags);
+  assert.equal("tags" in body, false);
   assert.deepEqual(body.white_list, ["player-1"]);
   assert.deepEqual(body.mc_version, ["1.21"]);
   assert.equal(body.is_check_apply, false);
@@ -1038,6 +1051,142 @@ test("preserved image URLs and signed upload receipts use distinct wire shapes",
     validateWorkPatch({ channel: [{ channel_id: 5, channel_url: { body: "{}" } }] }, {}),
     "图片位或上传回执无效",
   );
+});
+
+test("edited tags use the platform tags field without changing the editor contract", () => {
+  const tag = [{ name: "植物大战僵尸", source: 0 }];
+  assert.deepEqual(buildWorkUpdate(fixture, { tag }).tags, tag);
+  assert.deepEqual(buildWorkCreate({ ...newWorkFields(), tag }).tags, tag);
+});
+
+test("platform validation details remain readable without exposing material signatures", async () => {
+  for (const [body, expected] of [
+    [
+      { status: "params error", errors: { info: ["提交内容中含有非法字符: bad attr: alt"] } },
+      "提交内容中含有非法字符: bad attr: alt",
+    ],
+    [{ status: "params error", errors: { _schema: ["钻石模组必须上传完整视频信息"] } }, "钻石模组必须上传完整视频信息"],
+    [
+      { status: "param error", msg: "视频格式错误，请重新上传", errors: { info: ["其他错误"] } },
+      "视频格式错误，请重新上传",
+    ],
+    [
+      {
+        status: "params error",
+        errors: { sign: ["fixture-private-value"], info: ["https://example.invalid/material", "a".repeat(100)] },
+      },
+      "",
+    ],
+  ] as const) {
+    const calls = mockFetch(() => new Response(JSON.stringify(body)));
+    const result = await writeMcDevData("items.pe.create", "/items/categories/pe/upload", session, "POST", "{}");
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error.kind === "business" && result.error.message, expected);
+    assert.equal(calls.length, 1);
+  }
+});
+
+test("new videos require signed video receipts while existing URLs remain editable", () => {
+  const url = "https://x19.fp.ps.netease.com/new.mp4";
+  const old = { url: "https://x19.fp.ps.netease.com/old.mp4", size: 200, cover: "" };
+  const receipt = { body: JSON.stringify({ url }), sign: "test-sign", file_type: "video" };
+  const original = { video_info_list: [old] };
+  assert.equal(validateWorkPatch({ video_info_list: [{ ...old, url: receipt }] }, original), null);
+  assert.equal(validateWorkPatch({ video_info_list: [old] }, original), null);
+  assert.equal(validateWorkPatch({ video_info_list: [] }, original), null);
+  assert.equal(
+    validateWorkPatch(
+      { video_info_list: [{ ...old, url: receipt, cover: { ...receipt, file_type: "image" } }] },
+      original,
+    ),
+    null,
+  );
+  assert.match(validateWorkPatch({ video_info_list: [{ ...old, url }] }, original) ?? "", /上传回执/);
+  for (const invalid of [
+    { ...receipt, file_type: "image" },
+    { ...receipt, sign: "" },
+    { ...receipt, body: "bad" },
+  ])
+    assert.equal(validateWorkPatch({ video_info_list: [{ ...old, url: invalid }] }, original), "视频数据无效");
+});
+
+test("video replacement sends the upload receipt and verifies the saved URL, size and cover", async () => {
+  const old = { url: "https://x19.fp.ps.netease.com/old.mp4", size: 200, cover: "" };
+  const url = "https://x19.fp.ps.netease.com/new.mp4";
+  const receipt = { body: JSON.stringify({ filename: url }), sign: "test-sign", file_type: "video" };
+  const video = { url: receipt, size: 100, cover: old.cover };
+  const coverUrl = "https://x19.fp.ps.netease.com/new-cover.png";
+  const coverReceipt = { body: JSON.stringify({ filename: coverUrl }), sign: "test-sign", file_type: "image" };
+  for (const scenario of [
+    "success",
+    "cover-receipt",
+    "ignored",
+    "size",
+    "cover",
+    "network",
+    "parse",
+    "rejected",
+    "remove",
+  ]) {
+    const calls = mockFetch((_url, init, index) => {
+      if (index === 0) return response({ ...fixture, video_info_list: [old] });
+      if (init.method === "POST") return response(undefined, scenario === "rejected" ? "rejected" : "ok");
+      if (scenario === "network") throw new Error("verification disconnected");
+      if (scenario === "parse") return new Response("bad response");
+      return response({
+        ...fixture,
+        video_info_list:
+          scenario === "remove"
+            ? []
+            : [
+                scenario === "ignored"
+                  ? old
+                  : {
+                      url,
+                      size: scenario === "size" ? 101 : 100,
+                      cover:
+                        scenario === "cover"
+                          ? "https://x19.fp.ps.netease.com/cover.png"
+                          : scenario === "cover-receipt"
+                            ? coverUrl
+                            : "",
+                    },
+              ],
+      });
+    });
+    const result = await saveWorkEditor(session, {
+      itemId,
+      base: { video_info_list: [old] },
+      patch: {
+        video_info_list:
+          scenario === "remove" ? [] : [{ ...video, cover: scenario === "cover-receipt" ? coverReceipt : "" }],
+      },
+    });
+    assert.equal(result.ok, ["success", "cover-receipt", "remove"].includes(scenario), scenario);
+    assert.equal(calls.filter((call) => call.init.method === "POST").length, 1, scenario);
+    assert.equal(calls.length, scenario === "rejected" ? 2 : 3, scenario);
+    assert.deepEqual(
+      JSON.parse(String(calls[1]?.init.body)).video_info_list,
+      scenario === "remove" ? [] : [{ ...video, cover: scenario === "cover-receipt" ? coverReceipt : "" }],
+    );
+    if (!result.ok) {
+      const kind = ["network", "parse"].includes(scenario) ? scenario : "business";
+      assert.equal(result.error.kind, kind, scenario);
+      if (["ignored", "size", "cover"].includes(scenario))
+        assert.equal(result.error.kind === "business" && result.error.code, "save_not_applied");
+    }
+  }
+});
+
+test("new video URL strings are rejected before any platform write", async () => {
+  const calls = mockFetch(() => response({ ...fixture, video_info_list: [] }));
+  const result = await saveWorkEditor(session, {
+    itemId,
+    base: { video_info_list: [] },
+    patch: { video_info_list: [{ cover: "", size: 100, url: "https://x19.fp.ps.netease.com/new.mp4" }] },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(calls.length, 1);
 });
 
 test("price types, tiers, field types and text limits are validated before mutation", () => {

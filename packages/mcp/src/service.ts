@@ -1092,14 +1092,14 @@ export class McpService {
             "blockquote",
             "img",
           ],
-          allowedAttributes: { img: ["src", "alt"] },
+          allowedAttributes: { img: ["src"] },
           transformTags: {
             img: (_tag, attrs) => {
               let src = attrs.src ?? "";
               if (src.startsWith("glaze-asset:"))
                 src = assets.find((asset) => asset.id === src.slice(12))?.receipt?.url ?? "";
               if (!allowedUrl(src)) throw new McpError("forbidden", "详情图片必须来自本作品或已上传材料");
-              return { tagName: "img", attribs: { src, ...(attrs.alt ? { alt: attrs.alt } : {}) } };
+              return { tagName: "img", attribs: { src } };
             },
           },
           allowedSchemes: ["https"],

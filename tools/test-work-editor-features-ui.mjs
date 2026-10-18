@@ -52,7 +52,11 @@ try {
   /** Save the active section and inspect the actual mock RPC payload */
   const save = async () => {
     const before = (await calls("works.save")).length;
-    await page.getByRole("button", { name: "保存此分区", exact: true }).first().click();
+    await page
+      .locator("button:enabled")
+      .filter({ hasText: /^保存此分区$/ })
+      .first()
+      .click();
     await page.waitForFunction(
       (before) => workEditorFixture.requests.filter((r) => r.method === "works.save").length > before,
       before,
@@ -298,6 +302,16 @@ try {
   await page.getByRole("button", { name: "选择", exact: true }).click();
   const pc = await save();
   assert.equal(pc.sync_item_info.requirement.length, 2);
+  await page.getByRole("tab", { name: "图片与视频", exact: true }).click();
+  await page.getByRole("button", { name: "更新视频与封面", exact: true }).click();
+  await page.getByRole("button", { name: "上传 / 替换视频", exact: true }).click();
+  await page.getByText("fixture.mp4", { exact: true }).waitFor();
+  const videos = (await save()).video_info_list;
+  assert.equal(videos[0].url.file_type, "video");
+  assert.equal(videos[0].url.sign, "fixture-signature");
+  assert.equal(videos[0].size, 128);
+  await page.getByText("fixture.mp4", { exact: true }).waitFor();
+  assert.equal(await page.getByRole("button", { name: "上传 / 替换视频", exact: true }).isDisabled(), true);
   assert.equal(pc.sync_item_info.requirement[0].item_id, "9000000000000000001");
   assert.equal("id" in pc.sync_item_info.requirement[0], false);
   assert.match(pc.sync_item_info.info, /探索新的魔法材料/);

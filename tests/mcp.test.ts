@@ -1385,7 +1385,7 @@ test("direct uploads are reusable by their work and cannot cross work or client 
     assert.equal(JSON.stringify(uploaded).includes("host-only"), false);
     const details = (await f.call("works_save", {
       itemId: "123",
-      patch: { info: `<p><img src="glaze-asset:${uploaded.assetId}"></p>` },
+      patch: { info: `<p><img src="glaze-asset:${uploaded.assetId}" alt="作品图片"></p>` },
       idempotencyKey: "save-detail-image",
     })) as McpOperation;
     assert.equal(details.state, "succeeded");
