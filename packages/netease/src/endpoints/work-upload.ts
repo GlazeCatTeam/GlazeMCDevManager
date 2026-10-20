@@ -41,7 +41,7 @@ export function parseWorkUploadReply(
   }
 }
 
-/** Upload the chosen file as a streaming Blob with a platform-issued policy */
+/** Upload with a secure resource policy or the standard image/video policy, retaining signed replies */
 export async function uploadWorkFile(
   session: NeteaseSession,
   file: Blob,
@@ -51,7 +51,7 @@ export async function uploadWorkFile(
 ): Promise<Result<WorkUpload>> {
   const token = await getMcDevData(
     "filepicker.file_token",
-    withQuery("/filepicker/file_token", { file_type: fileType, secure: "false" }),
+    withQuery("/filepicker/file_token", { file_type: fileType, secure: fileType === "zip_package" ? "true" : "false" }),
     session,
   );
   if (!token.ok) return token;

@@ -2,7 +2,7 @@
   "name": "@glaze/desktop",
   "license": "Apache-2.0",
   "author": "GlazeCatTeam",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "description": "Electron 桌面应用：主进程、preload、渲染进程外壳",
   "type": "module",

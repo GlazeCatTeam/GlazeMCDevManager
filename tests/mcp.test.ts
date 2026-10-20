@@ -896,6 +896,7 @@ test("review treats a host upload receipt and its returned media URL as the same
   f.service.data.assets.push({
     id: "material",
     draftId: draft.id,
+    channelId: 1,
     name: "a.png",
     size: 1,
     hash: "hash",

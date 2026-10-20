@@ -23,6 +23,7 @@ import {
   workSections,
 } from "@glaze/contracts";
 import sanitizeHtml from "sanitize-html";
+import { validateWorkAssetUsage } from "./asset-usage";
 import { cleanMaterials, resolveLocalMaterial, resolveMaterial, snapshotMaterial, verifyMaterial } from "./assets";
 import {
   canonical,
@@ -1039,12 +1040,13 @@ export class McpService {
     if (draft.locked) throw new McpError("conflict", "草稿正在执行或结果待核实，不能重复修改或提交");
     if (draft.revision !== revision) throw new McpError("conflict", "草稿版本已变化，请重新读取预览");
   }
-  /** Only host-generated material references may introduce new media */
+  /** Resolve host-owned media only after rechecking its validated purpose and destination */
   private resolvePatch(draft: McpDraft, patch: WorkRecord): WorkRecord {
     const original = canonical(draft.document.fields);
     const assets = this.data.assets.filter(
       (asset) => this.ownsAsset(draft, asset) && asset.receipt && asset.expiresAt > Date.now(),
     );
+    validateWorkAssetUsage(patch, draft.document.fields, assets);
     const allowedUrl = (url: string) =>
       !url || original.includes(JSON.stringify(url)) || assets.some((asset) => asset.receipt?.url === url);
     const resolve = (value: WorkValue, key: string): WorkValue => {
@@ -1096,8 +1098,18 @@ export class McpService {
           transformTags: {
             img: (_tag, attrs) => {
               let src = attrs.src ?? "";
-              if (src.startsWith("glaze-asset:"))
-                src = assets.find((asset) => asset.id === src.slice(12))?.receipt?.url ?? "";
+              if (src.startsWith("glaze-asset:")) {
+                const asset = assets.find((entry) => entry.id === src.slice(12));
+                if (asset?.receipt?.receipt.file_type !== "image")
+                  throw new McpError("validation", "详情图片材料尚未上传、已过期或不是图片");
+                src = asset.receipt.url;
+              }
+              if (
+                !original.includes(JSON.stringify(src)) &&
+                assets.some((asset) => asset.receipt?.url === src) &&
+                !assets.some((asset) => asset.receipt?.url === src && asset.receipt.receipt.file_type === "image")
+              )
+                throw new McpError("validation", "详情图片不能使用资源包或视频材料");
               if (!allowedUrl(src)) throw new McpError("forbidden", "详情图片必须来自本作品或已上传材料");
               return { tagName: "img", attribs: { src } };
             },

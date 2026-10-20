@@ -14,7 +14,7 @@ import {
 } from "../packages/contracts/src";
 import { Client } from "../packages/mcp/node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js";
 import { InMemoryTransport } from "../packages/mcp/node_modules/@modelcontextprotocol/sdk/dist/esm/inMemory.js";
-import { canonical, emptyMcpData, McpError, type McpPorts } from "../packages/mcp/src/model";
+import { canonical, emptyMcpData, McpError, type McpPorts, type StoredAsset } from "../packages/mcp/src/model";
 import { createMcpServer } from "../packages/mcp/src/server";
 import { McpService } from "../packages/mcp/src/service";
 import { buildWorkCreate, createWork } from "../packages/netease/src/endpoints/work-create";
@@ -22,6 +22,128 @@ import { buildWorkCreate, createWork } from "../packages/netease/src/endpoints/w
 const originalFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = originalFetch;
+});
+
+/** Seed a host-validated upload without touching files or real accounts */
+function uploadedMaterial(f: ReturnType<typeof fixture>, metadata: Partial<StoredAsset>) {
+  f.service.data.drafts.push({
+    id: "material-source",
+    clientId: f.client.id,
+    account: "create-test-account",
+    itemId: null,
+    document: {
+      itemId: "",
+      status: "init",
+      version: "0.1",
+      modCode: "",
+      guides: [],
+      fields: emptyWorkCreateFields(),
+    },
+    revision: 1,
+    patch: {},
+    updatedAt: Date.now(),
+    locked: false,
+  });
+  const url = "https://x19.fp.ps.netease.com/a.png";
+  const asset: StoredAsset = {
+    id: "material",
+    draftId: "material-source",
+    name: "a.png",
+    size: 10,
+    hash: "fixture",
+    path: "unused",
+    kind: "image",
+    platform: "pe",
+    channelId: 5,
+    uploaded: true,
+    expiresAt: Date.now() + 60000,
+    receipt: {
+      name: "a.png",
+      size: 10,
+      url,
+      receipt: { body: JSON.stringify({ url }), sign: "TEST_ONLY", file_type: "image" },
+    },
+    ...metadata,
+  };
+  f.service.data.assets.push(asset);
+  return asset;
+}
+
+for (const representation of ["reference", "receipt", "url"] as const) {
+  test(`create rejects mismatched image metadata through ${representation} before invoking the host`, async () => {
+    for (const metadata of [{ platform: "pc" as const }, { channelId: 1 }, { kind: "richImage" as const }]) {
+      const f = fixture();
+      const asset = uploadedMaterial(f, metadata);
+      const value =
+        representation === "reference"
+          ? { $asset: asset.id, as: "receipt" }
+          : representation === "receipt"
+            ? asset.receipt?.receipt
+            : asset.receipt?.url;
+      await assert.rejects(
+        f.call({
+          fields: { channel: [{ channel_id: 5, channel_url: value }] },
+          submitReview: true,
+          idempotencyKey: "bad-slot",
+        }),
+        /材料用途、平台、图片位或资源类别/,
+      );
+      assert.equal(f.creates.length, 0);
+    }
+  });
+}
+
+test("create preserves correct signed image receipts and the combined review flag", async () => {
+  const f = fixture();
+  const asset = uploadedMaterial(f, {});
+  const result = await f.call({
+    fields: { channel: [{ channel_id: 5, channel_url: { $asset: asset.id, as: "receipt" } }] },
+    submitReview: true,
+    idempotencyKey: "right-slot",
+  });
+  assert.equal(result.state, "succeeded");
+  assert.equal(f.creates[0]?.submitReview, true);
+  assert.deepEqual(f.creates[0]?.fields.channel, [{ channel_id: 5, channel_url: asset.receipt?.receipt }]);
+});
+
+test("create rejects resources uploaded for another category and images not validated as video covers", async () => {
+  const f = fixture();
+  const asset = uploadedMaterial(f, { kind: "resource", resourceType: 1 });
+  await assert.rejects(
+    f.call({
+      fields: {
+        pri_type: 2,
+        res: [{ res_name: "a.zip", res_url: { $asset: asset.id, as: "receipt" }, add_version: true }],
+      },
+      idempotencyKey: "wrong-category",
+    }),
+    /资源类别/,
+  );
+  asset.kind = "image";
+  await assert.rejects(
+    f.call({
+      fields: { video_info_list: [{ cover: { $asset: asset.id, as: "receipt" } }] },
+      idempotencyKey: "wrong-cover",
+    }),
+    /材料用途/,
+  );
+  assert.equal(f.creates.length, 0);
+});
+
+test("rich text rejects non-image and missing opaque materials before creation", async () => {
+  for (const source of ["glaze-asset:material", "https://x19.fp.ps.netease.com/a.png", "glaze-asset:missing"]) {
+    const f = fixture();
+    const asset = uploadedMaterial(f, { kind: "resource", resourceType: 2 });
+    if (asset.receipt) asset.receipt.receipt.file_type = "zip_package";
+    await assert.rejects(
+      f.call({
+        fields: { info: `<p><img src="${source}"></p>` },
+        idempotencyKey: "not-image",
+      }),
+      /详情图片/,
+    );
+    assert.equal(f.creates.length, 0);
+  }
 });
 
 /** Isolate creation, authorization and durable retries from real accounts and network writes */

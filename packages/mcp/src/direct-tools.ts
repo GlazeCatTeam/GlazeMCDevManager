@@ -105,7 +105,7 @@ export const directTools = [
     "上传作品材料",
     "works:upload",
     { ...account, itemId: itemId.optional(), ...material, ...key },
-    "后台上传作品材料并返回 assetId。优先传 filePath（运行 Glaze 的电脑上、用户明确指定的素材文件绝对路径），或 directoryId + relativePath 从已授权目录读取；仅 interactive=true 才打开文件选择器，缺少来源直接报错。不得自行扫描或上传无关文件。已有作品提供 itemId；新作品省略。材料绑定客户端、账号和作品，不返回本机路径或上传签名。",
+    "后台上传作品材料并返回 assetId。优先传 filePath（运行 Glaze 的电脑上、用户明确指定的素材文件绝对路径），或 directoryId + relativePath 从已授权目录读取；仅 interactive=true 才打开文件选择器，缺少来源直接报错。不得自行扫描或上传无关文件。已有作品提供 itemId；新作品省略。材料绑定客户端、账号和作品。kind=image 必须按目标 platform 和 channelId 上传；resourceType 必须与作品 pri_type 一致；视频封面使用 kind=videoCover，推广图使用 banner，授权证明使用 proof。改变用途或图片位须重新上传，不返回本机路径或上传签名。",
   ),
   tool(
     "works_operation_get",
