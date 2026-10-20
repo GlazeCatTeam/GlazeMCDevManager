@@ -12,7 +12,7 @@ import { normalizeWorkAdvanced, validateWorkAdvanced } from "./work-advanced";
 import { workCreateDefaults } from "./work-create-defaults";
 import { getWorkEditorOptions, validateWorkPatch } from "./work-editor";
 
-/** Validate a new PE work using primary-category detail groups and signed upload receipts */
+/** Validate a new PE work, signed uploads and the complete video required for paid addons */
 export function validateWorkCreate(fields: WorkRecord, options: WorkEditorOptions): string | null {
   const invalid = validateWorkPatch(fields, fields);
   if (invalid) return invalid;
@@ -80,6 +80,14 @@ export function validateWorkCreate(fields: WorkRecord, options: WorkEditorOption
     )
   )
     return "新作品视频和封面必须使用上传回执";
+  if (
+    fields.pri_type === 2 &&
+    fields.price_type === "diamond" &&
+    (!Array.isArray(fields.video_info_list) ||
+      !fields.video_info_list.length ||
+      fields.video_info_list.some((row) => !isWorkRecord(row) || !isWorkRecord(row.cover) || Number(row.size) <= 0))
+  )
+    return "钻石付费模组请上传完整视频和视频封面";
   return null;
 }
 

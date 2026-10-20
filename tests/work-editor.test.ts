@@ -733,6 +733,60 @@ const createConstants = {
     { id: "diamond", min: 300, max: 20000, step: 100 },
   ],
 };
+
+for (const submitReview of [false, true]) {
+  test(`diamond addon creation requires a complete video before POST (review=${submitReview})`, async () => {
+    const fields = { ...newWorkFields(), price_type: "diamond", price_rank: 0, price: 300 };
+    const complete = {
+      ...fields.video_info_list[0],
+      cover: { body: "{}", sign: "test-cover", file_type: "image" },
+    };
+    for (const [video_info_list, accepted] of [
+      [[], false],
+      [fields.video_info_list, false],
+      [[{ ...complete, size: 0 }], false],
+      [[complete], true],
+    ] as const) {
+      const calls = mockFetch((url, init) =>
+        init.method === "POST" ? response() : response(url.endsWith("/item-tag/") ? { tag_list: [] } : createConstants),
+      );
+      const result = await createWork(session, {
+        account: "a",
+        fields: { ...fields, video_info_list: [...video_info_list] },
+        submitReview,
+      });
+      assert.equal(result.ok, accepted);
+      const posts = calls.filter((call) => call.init.method === "POST");
+      assert.equal(posts.length, accepted ? 1 : 0);
+      if (!result.ok) assert.match(result.error.kind === "business" ? result.error.message : "", /完整视频和视频封面/);
+      if (accepted) {
+        const sent = JSON.parse(String(posts[0]?.init.body));
+        assert.equal(sent.is_check_apply, submitReview);
+        assert.deepEqual(sent.video_info_list[0].cover, complete.cover);
+      }
+    }
+  });
+}
+
+test("upload policies request secure resource receipts while keeping image and video policies unchanged", async () => {
+  for (const fileType of ["zip_package", "image", "video"] as const) {
+    const token = `Policy signature:${btoa(JSON.stringify({ url: "https://x19.pfp.ps.netease.com/x19/file/new/" }))}`;
+    const calls = mockFetch((_url, _init, index) =>
+      index === 0
+        ? response({ token })
+        : new Response('{"url":"https://x19.pfp.ps.netease.com/uploaded"}', {
+            headers: { "x-ntes-signature": "signed-receipt" },
+          }),
+    );
+    const uploaded = await uploadWorkFile(session, new Blob(["fixture"]), "fixture", fileType);
+    assert.equal(uploaded.ok, true);
+    const query = new URL(calls[0]?.url ?? "").searchParams;
+    assert.equal(query.get("file_type"), fileType);
+    assert.equal(query.get("secure"), fileType === "zip_package" ? "true" : "false");
+    if (uploaded.ok) assert.equal(uploaded.value.receipt.file_type, fileType);
+    assert.equal(new Headers(calls[1]?.init.headers).has("Cookie"), false);
+  }
+});
 /** Local signed-receipt fixtures model the create schema, not update URL strings */
 function newWorkFields() {
   return {
