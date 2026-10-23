@@ -19,6 +19,7 @@ export * from "./rpc/promotion";
 export * from "./rpc/rank";
 export * from "./rpc/session-settings";
 export * from "./rpc/update";
+export * from "./rpc/videos";
 export * from "./rpc/work-assets";
 export * from "./rpc/work-create";
 export * from "./rpc/work-editor";

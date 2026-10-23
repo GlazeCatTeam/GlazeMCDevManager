@@ -57,7 +57,6 @@ function linePath(values: (number | null)[], xStep: number, ceiling: number, plo
 
 /** Inspect date values in a floating readout with compact series toggles */
 export function TrendChart({ labels, series: allSeries, metric, unit, kind = "line" }: TrendChartProps) {
-  const titleId = useId();
   const readoutId = useId();
   const [activeDate, setActiveDate] = useState("");
   const [hover, setHover] = useState<string | null>(null);
@@ -218,13 +217,10 @@ export function TrendChart({ labels, series: allSeries, metric, unit, kind = "li
         <svg
           viewBox={`0 0 ${size.width} ${size.height}`}
           role="img"
-          aria-labelledby={titleId}
+          aria-label={`${unit}趋势：${labels[0]} 至 ${labels.at(-1)}，${series.map((item) => item.label).join("、")}`}
           onPointerMove={(event) => inspectPointer(event)}
           onPointerDown={(event) => inspectPointer(event, true)}
         >
-          <title id={titleId}>
-            {`${unit}趋势：${labels[0]} 至 ${labels.at(-1)}，${series.map((item) => item.label).join("、")}`}
-          </title>
           {GRID_STEPS.map((step) => {
             const y = TOP + plotHeight - (step / 4) * plotHeight;
             return (

@@ -142,6 +142,7 @@ export {
   messageTypes,
   normalizePcRequirements,
   remoteImageUrl,
+  remoteVideoUrl,
   validWorkCrop,
   workDiamondPrices,
   workResourceAllowed,
