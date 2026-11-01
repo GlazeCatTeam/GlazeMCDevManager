@@ -1714,6 +1714,127 @@ test("manual connections ask to connect and get the recommended level once allow
   assert.throws(() => f.service.answer(request?.id ?? "", "always"), /已处理/);
 });
 
+test("retrying a connection request reopens it and preserves the waiting AI call", async () => {
+  const f = fixture(false);
+  f.service.accessWaitMs = 1000;
+  const manual = f.service.registerClient("Cherry Studio");
+  f.service.connected(manual.id, () => {});
+  const notices: string[] = [];
+  assert.match(f.service.describe(manual.id).hint, /当前没有待处理/);
+  f.ports.notify = (request) => notices.push(request.id);
+  const waiting = f.service.requestAccessTool(manual.id, {});
+  const first = f.service.snapshot().requests[0];
+  assert.ok(first);
+  assert.equal(f.service.describe(manual.id).waitingForUser, true);
+  f.service.requestConnect(manual.id);
+  assert.equal(f.service.snapshot().requests[0]?.id, first.id);
+  f.service.requestConnect(manual.id, true);
+  const renewed = f.service.snapshot().requests[0];
+  assert.ok(renewed);
+  assert.notEqual(renewed.id, first.id);
+  assert.equal(f.service.snapshot().requests.length, 1);
+  assert.deepEqual(notices, [first.id, renewed.id]);
+  assert.equal(manual.approved, false);
+  assert.deepEqual(manual.permissions, []);
+  assert.throws(() => f.service.answer(first.id, "always"), /已处理或已过期/);
+  f.service.answer(renewed.id, "always");
+  assert.equal((await waiting).outcome, "always");
+  assert.equal(manual.approved, true);
+  assert.deepEqual(manual.permissions, mcpLevels.assist.permissions);
+  assert.equal(f.service.snapshot().requests.length, 0);
+  assert.equal(capabilities["mcp.requestConnect"].caller, "shell");
+  assert.equal(capabilities["mcp.requestConnect"].mcp, undefined);
+});
+
+test("expired or denied connection requests can be renewed while the session is live", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
+  const f = fixture(false);
+  const manual = f.service.registerClient("Cherry Studio");
+  f.service.connected(manual.id, () => {});
+  f.service.requestConnect(manual.id);
+  const expired = f.service.snapshot().requests[0];
+  assert.ok(expired);
+  t.mock.timers.tick(600_001);
+  // Answering does its own expiry check even if no view has refreshed
+  assert.throws(() => f.service.answer(expired.id, "always"), /已处理或已过期/);
+  assert.equal(manual.approved, false);
+  assert.equal(f.service.snapshot().requests.length, 0);
+  assert.equal(f.service.describe(manual.id).waitingForUser, false);
+  assert.match(f.service.describe(manual.id).hint, /当前没有待处理/);
+  f.service.requestConnect(manual.id, true);
+  const denied = f.service.snapshot().requests[0];
+  assert.ok(denied);
+  assert.ok(manual.expiresAt > Date.now());
+  f.service.answer(denied.id, "deny");
+  assert.equal(manual.approved, false);
+  f.service.requestConnect(manual.id, true);
+  const renewed = f.service.snapshot().requests[0];
+  assert.ok(renewed);
+  assert.notEqual(renewed.id, denied.id);
+  f.service.answer(renewed.id, "always");
+  assert.equal(manual.approved, true);
+});
+
+test("offline or stopped sessions cannot renew or approve stale connection requests", () => {
+  const f = fixture(false);
+  const manual = f.service.registerClient("Cherry Studio");
+  const close = f.service.connected(manual.id, () => {});
+  f.service.requestConnect(manual.id);
+  const request = f.service.snapshot().requests[0];
+  assert.ok(request);
+  close();
+  assert.throws(() => f.service.requestConnect(manual.id, true), /连接已断开/);
+  assert.throws(() => f.service.answer(request.id, "always"), /连接已断开/);
+  f.service.sessionClosed(manual.id);
+  assert.equal(f.service.snapshot().requests.length, 0);
+  assert.equal(manual.approved, false);
+  f.service.connected(manual.id, () => {});
+  f.service.disable();
+  assert.throws(() => f.service.requestConnect(manual.id, true), /开启 AI 连接服务/);
+  assert.equal(f.service.snapshot().requests.length, 0);
+});
+
+test("authorization diagnostics correlate prompts, decisions, expiry and disconnect without client text", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
+  const f = fixture(false);
+  const logs: string[] = [];
+  f.ports.log = (_level, message) => logs.push(message);
+  const manual = f.service.registerClient("private-client-name");
+  const close = f.service.connected(manual.id, () => {});
+  f.service.requestConnect(manual.id);
+  const first = f.service.snapshot().requests[0];
+  assert.ok(first);
+  f.service.promptEvent(first.id, "shown");
+  f.service.promptEvent(first.id, "dismissed");
+  f.service.requestConnect(manual.id, true);
+  const renewed = f.service.snapshot().requests[0];
+  assert.ok(renewed);
+  f.service.answer(renewed.id, "deny");
+  f.service.requestConnect(manual.id, true);
+  t.mock.timers.tick(600_001);
+  f.service.snapshot();
+  f.service.requestConnect(manual.id, true);
+  close();
+  f.service.sessionClosed(manual.id);
+  for (const event of [
+    "授权请求已创建",
+    "授权弹窗已渲染",
+    "授权弹窗已关闭",
+    "重新申请连接授权",
+    "决定=deny",
+    "授权请求已过期",
+    "连接授权请求因断线取消",
+  ])
+    assert.ok(
+      logs.some((entry) => entry.includes(event)),
+      event,
+    );
+  assert.ok(logs.filter((entry) => entry.includes(first.id)).length >= 4);
+  assert.doesNotMatch(logs.join("\n"), /private-client-name/);
+  assert.equal(capabilities["mcp.promptEvent"].caller, "shell");
+  assert.equal(capabilities["mcp.promptEvent"].mcp, undefined);
+});
+
 test("Codex config edits replace only the glaze server table", () => {
   const text = [
     'model = "gpt"',
@@ -2576,4 +2697,58 @@ test("application tools retain plugin guards and account-independent write dedup
     throw new McpError("forbidden", "对应插件已停用");
   };
   await assert.rejects(f.call("app_settings_get"), /停用/);
+});
+
+test("detail edits retain existing PE and PC inline images without reuploading", async () => {
+  const f = fixture(false);
+  f.remote.fields.info = '<p>旧介绍<img src="https://x19.fp.ps.netease.com/pe-only.png"></p>';
+  f.remote.fields.sync_item_info = { info: "<p><img src='https://x19.fp.ps.netease.com/pc-only.png'></p>" };
+  const patch = {
+    info: '<p>本次与上版更新<img src="https://x19.fp.ps.netease.com/pe-only.png"></p>',
+    sync_item_info: { info: '<p>更新记录<img src="https://x19.fp.ps.netease.com/pc-only.png"></p>' },
+  };
+  const result = (await f.call("works_save", {
+    itemId: "123",
+    patch,
+    idempotencyKey: "retain-inline-images",
+  })) as McpOperation;
+  assert.equal(result.state, "succeeded");
+  assert.equal(f.remote.fields.info, patch.info);
+  assert.equal(f.remote.fields.sync_item_info.info, patch.sync_item_info.info);
+  assert.equal(f.counts.upload, 0);
+});
+
+test("inline image matching decodes HTML entities without granting URLs mentioned only as text", async () => {
+  const f = fixture(false);
+  f.remote.fields.info = '<p><img src="https://x19.fp.ps.netease.com/image?a=1&amp;b=2"></p>';
+  const patch = { info: '<p>新说明<img src="https://x19.fp.ps.netease.com/image?a=1&amp;b=2"></p>' };
+  const saved = (await f.call("works_save", {
+    itemId: "123",
+    patch,
+    idempotencyKey: "encoded-inline",
+  })) as McpOperation;
+  assert.equal(saved.state, "succeeded");
+  f.remote.fields.info = "<p>https://x19.fp.ps.netease.com/text-only.png</p>";
+  await assert.rejects(
+    f.call("works_save", {
+      itemId: "123",
+      patch: { info: '<img src="https://x19.fp.ps.netease.com/text-only.png">' },
+      idempotencyKey: "text-is-not-image",
+    }),
+    /详情图片必须来自/,
+  );
+});
+
+test("retaining existing inline images never authorizes a new image URL", async () => {
+  const f = fixture(false);
+  f.remote.fields.info = '<img src="https://x19.fp.ps.netease.com/own.png">';
+  await assert.rejects(
+    f.call("works_save", {
+      itemId: "123",
+      patch: { info: '<img src="https://x19.fp.ps.netease.com/foreign.png">' },
+      idempotencyKey: "reject-foreign-inline",
+    }),
+    /详情图片必须来自/,
+  );
+  assert.equal(f.counts.save, 0);
 });

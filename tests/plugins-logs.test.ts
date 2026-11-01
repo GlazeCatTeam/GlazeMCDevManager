@@ -12,6 +12,8 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { fromNeteaseError } from "../apps/desktop/src/main/ipc/errors";
+import { describeLogError } from "../apps/desktop/src/main/logs/errors";
 import { LogService, redactLog } from "../apps/desktop/src/main/logs/service";
 import { readPluginZip } from "../apps/desktop/src/main/plugins/archive";
 import { PluginRegistry } from "../apps/desktop/src/main/plugins/registry";
@@ -191,6 +193,71 @@ test("real logs redact credentials, filter/export, survive restart and clear onl
     );
   }));
 
+test("diagnostic errors retain reasons and platform codes while disk and exports hide sensitive values", () =>
+  workspace((root) => {
+    const logs = new LogService(join(root, "logs"));
+    const error = fromNeteaseError({
+      kind: "business",
+      code: "server_error",
+      httpStatus: 500,
+      message:
+        '服务器异常；token="a\\"quoted-token" sign=private-sign；receipt=private-receipt；NTES_SESS=private-cookie；Authorization: Bearer private-auth',
+    });
+    logs.write("error", "rpc", `操作失败：works.create；${describeLogError(error)}`);
+    logs.write(
+      "error",
+      "mcp",
+      describeLogError(
+        new Error(
+          '文件打开失败："C:\\Users\\Private Person\\work.zip"；dev@example.com；Bearer private-bearer；https://host.example/upload?sign=private-url；body={"nested":{"sign":"private-body","title":"用户作品标题"}}',
+        ),
+      ),
+    );
+    const parse = fromNeteaseError({
+      kind: "parse",
+      endpoint: "items.pe.create",
+      detail: "响应内容不是有效 JSON（HTTP 502）",
+    });
+    logs.write("error", "rpc", describeLogError(parse));
+    const text = logs.export({ level: "all" }).text;
+    assert.match(text, /works.create；类别=business；错误码=server_error；HTTP=500；原因=服务器异常/);
+    assert.match(text, /类别=parse；接口=items.pe.create/);
+    assert.match(text, /响应内容不是有效 JSON（HTTP 502）/);
+    assert.match(text, /文件打开失败/);
+    const raw = readdirSync(logs.directory)
+      .map((name) => readFileSync(join(logs.directory, name), "utf8"))
+      .join();
+    for (const output of [raw, text, JSON.stringify(logs.list({ level: "all" }))])
+      assert.doesNotMatch(output, /quoted-token|private-|Private Person|dev@example|host\.example|用户作品标题/);
+    const circular: Record<string, unknown> = {
+      kind: "validation",
+      message: "请选择资源分类",
+      params: "private-params",
+    };
+    circular.cause = circular;
+    assert.equal(describeLogError(circular), "类别=validation；原因=请选择资源分类");
+    assert.match(describeLogError(new Error("解析失败 <html>private-response</html>")), /解析失败/);
+    assert.doesNotMatch(describeLogError(new Error("解析失败 <html>private-response</html>")), /private-response/);
+    assert.equal(describeLogError(null), "类别=internal；原因=未知错误");
+    assert.doesNotMatch(describeLogError(new Error('请求解析失败 {"title":"private-incomplete')), /private-incomplete/);
+    assert.doesNotMatch(redactLog('Cookie="a\\"private-escaped"'), /private-escaped/);
+    assert.equal(
+      redactLog("读取失败 C:\\Users\\Private Person\\work.zip；文件不存在"),
+      "读取失败 [本地路径已隐藏]；文件不存在",
+    );
+    const network = fromNeteaseError({ kind: "network", cause: "ECONNRESET token=private-network" });
+    assert.match(describeLogError(network), /类别=network.*ECONNRESET/);
+    assert.doesNotMatch(describeLogError(network), /private-network/);
+    assert.equal(
+      describeLogError({
+        get message() {
+          throw new Error("cannot read message");
+        },
+      }),
+      "类别=internal；原因=错误诊断信息无法读取",
+    );
+  }));
+
 test("logs bound the viewer, rotate before overflow and retain only fourteen days", () =>
   workspace((root) => {
     let now = new Date("2026-10-16T00:00:00Z");
@@ -200,7 +267,7 @@ test("logs bound the viewer, rotate before overflow and retain only fourteen day
       () => {},
       () => now,
     );
-    for (let index = 0; index < 1400; index++) logs.write("info", "test", `${index} ${"a".repeat(1490)}`);
+    for (let index = 0; index < 1400; index++) logs.write("info", "test", `${index} ${"日志轮转测试 ".repeat(220)}`);
     assert.ok(existsSync(join(directory, "2026-10-16.1.jsonl")));
     const page = logs.list({ level: "all" });
     assert.equal(page.entries.length, 500);

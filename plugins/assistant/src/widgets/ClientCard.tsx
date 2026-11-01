@@ -3,6 +3,7 @@ import {
   Button,
   callHost,
   Dialog,
+  type McpAccessRequest,
   type McpClient,
   type McpLevel,
   mcpLevelOf,
@@ -27,10 +28,14 @@ const levelOptions = [
 /** Show configured tools with their live connection, permission level and account scope */
 export function ClientCard({
   client,
+  request,
+  serviceRunning,
   accounts,
   action,
 }: {
   client: McpClient;
+  request: McpAccessRequest | undefined;
+  serviceRunning: boolean;
   accounts: AccountSummary[];
   action: ReturnType<typeof useAction>;
 }) {
@@ -38,8 +43,17 @@ export function ClientCard({
   const [removing, setRemoving] = useState(false);
   const level = mcpLevelOf(client.permissions);
   const names = accounts.filter((account) => client.accounts.includes(account.id)).map((a) => a.nickname);
+  const waiting = serviceRunning && client.connected && !!request && request.expiresAt > Date.now();
   const state = !client.approved
-    ? "等待你允许"
+    ? !serviceRunning
+      ? "AI 连接服务未运行"
+      : !client.connected
+        ? "连接已断开"
+        : waiting
+          ? "等待你允许"
+          : client.expiresAt <= Date.now()
+            ? "授权请求已过期"
+            : "尚未授权"
     : client.connected
       ? "使用中"
       : client.lastSeen
@@ -109,9 +123,29 @@ export function ClientCard({
           )}
         </>
       ) : (
-        <p className={styles.muted}>这个工具想连接 Glaze，请在弹窗中点「允许」。</p>
+        <p className={styles.muted}>
+          {!serviceRunning
+            ? "请先在设置中开启 AI 连接服务，再让 AI 工具重新连接。"
+            : !client.connected
+              ? "请让 AI 工具重新连接 Glaze，再申请授权；也可以使用「连接 AI 工具」一键连接。"
+              : waiting
+                ? "请在弹窗或页面上方「等你允许」中允许连接。没看到弹窗时，可点击「重新申请授权」。"
+                : "当前没有待处理的授权请求，点击「重新申请授权」后再允许连接。"}
+        </p>
       )}
       <div className={styles.actions}>
+        {!client.approved && (
+          <Button
+            disabled={action.busy || !client.connected || !serviceRunning}
+            onClick={() =>
+              void action.run(async () => {
+                unwrap(await callHost("mcp.requestConnect", { clientId: client.id }));
+              })
+            }
+          >
+            重新申请授权
+          </Button>
+        )}
         {client.approved && (
           <TextButton disabled={action.busy} onClick={() => setManaging(true)}>
             账号与详细权限

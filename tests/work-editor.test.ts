@@ -1387,3 +1387,58 @@ test("POST and PUT redirects never replay a write or mark the account offline", 
     if (!result.ok) assert.equal(result.error.kind, "business");
   }
 });
+
+test("saving omits unchanged duplicate PC aliases but rejects unknown or unique legacy images", async () => {
+  const legacy = [8, 13, 16].map((id) => ({
+    channel_id: id,
+    channel_url: "https://x19.fp.ps.netease.com/current.png",
+  }));
+  const current = { channel_id: 7, channel_url: "https://x19.fp.ps.netease.com/current.png", version: 1 };
+  const sync = { channel: [current, ...legacy] };
+  for (const scenario of ["preserved", "edited", "added", "unique", "invalid-version"]) {
+    const snapshot = structuredClone(sync);
+    if (scenario === "unique") {
+      const image = snapshot.channel[1];
+      assert.ok(image);
+      image.channel_url = "https://x19.fp.ps.netease.com/unique.png";
+    }
+    const calls = mockFetch((url, init) => {
+      if (init.method === "POST") return response();
+      if (url.endsWith(itemId)) return response({ ...fixture, sync_pc_flag: true, sync_item_info: snapshot });
+      if (url.endsWith("/item-tag/")) return response({ tag_list: [] });
+      return response({
+        pri_type: { pe: [] },
+        channel: {
+          pe: [],
+          comp: [{ id: 7, title: "Current", width: 160, height: 90, version: scenario === "invalid-version" ? 0 : 2 }],
+        },
+      });
+    });
+    const changed = structuredClone(sync);
+    if (scenario === "edited") {
+      const legacyImage = changed.channel[1];
+      assert.ok(legacyImage);
+      legacyImage.channel_url = "https://x19.fp.ps.netease.com/changed.png";
+    }
+    if (scenario === "added")
+      changed.channel.push({ channel_id: 9999, channel_url: "https://x19.fp.ps.netease.com/added.png" });
+    const editing = scenario === "edited" || scenario === "added";
+    const result = await saveWorkEditor(session, {
+      itemId,
+      base: editing ? { sync_item_info: sync } : { item_name: fixture.item_name },
+      patch: editing ? { sync_item_info: changed } : { item_name: "Updated resource" },
+    });
+    assert.equal(result.ok, scenario === "preserved", JSON.stringify({ scenario, result }));
+    const writes = calls.filter((call) => call.init.method === "POST");
+    assert.equal(writes.length, scenario === "preserved" ? 1 : 0, scenario);
+    if (scenario === "preserved") {
+      const body = JSON.parse(String(writes[0]?.init.body));
+      assert.equal(body.sync_item_info.channel.length, 1);
+      assert.equal(body.sync_item_info.channel[0].channel_url, current.channel_url);
+      assert.equal(body.sync_item_info.channel[0].version, 2);
+      assert.equal(body.is_check_apply, false);
+    } else if (!result.ok) {
+      assert.equal(result.error.kind === "business" && result.error.code, "validation");
+    }
+  }
+});

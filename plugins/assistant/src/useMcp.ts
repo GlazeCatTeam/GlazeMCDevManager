@@ -33,6 +33,18 @@ export function useMcp() {
       window.clearInterval(timer);
     };
   }, [reload]);
+  useEffect(() => {
+    if (!snapshot) return;
+    const now = Date.now();
+    const deadlines = [
+      ...snapshot.requests.map((entry) => entry.expiresAt),
+      ...snapshot.clients.filter((client) => !client.approved).map((client) => client.expiresAt),
+    ];
+    const next = Math.min(...deadlines.filter((expiresAt) => expiresAt > now));
+    if (!Number.isFinite(next)) return;
+    const timer = window.setTimeout(() => void reload(), next - now + 1);
+    return () => window.clearTimeout(timer);
+  }, [snapshot, reload]);
   return { snapshot, accounts, error, reload };
 }
 

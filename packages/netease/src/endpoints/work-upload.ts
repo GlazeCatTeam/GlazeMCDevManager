@@ -11,12 +11,14 @@ export function resolveWorkUploadUrl(token: string): string {
   const url = new URL(payload.url);
   if (
     url.protocol !== "https:" ||
-    !["x19.fp.ps.netease.com", "x19.pfp.ps.netease.com", "fp.ps.netease.com"].includes(url.hostname) ||
+    !["x19.fp.ps.netease.com", "x19.pfp.ps.netease.com", "fp.ps.netease.com", "pfp.ps.netease.com"].includes(
+      url.hostname,
+    ) ||
     url.port ||
     url.username ||
     url.password
   )
-    throw new Error("上传服务地址不受支持");
+    throw new Error(`上传服务地址不受支持（协议=${url.protocol}，主机=${url.hostname}，端口=${url.port || "默认"}）`);
   return url.href;
 }
 
@@ -57,12 +59,16 @@ export async function uploadWorkFile(
   if (!token.ok) return token;
   if (!isWorkRecord(token.value) || typeof token.value.token !== "string")
     return fail({ kind: "parse", endpoint: "filepicker.file_token" });
+  let stage = "上传地址校验";
   try {
     const target = resolveWorkUploadUrl(token.value.token);
+    stage = "上传表单构造";
     const form = new FormData();
     form.append("Authorization", token.value.token);
     form.append("fpfile", file, name);
+    stage = "上传权限复核";
     beforeWrite?.();
+    stage = "上传传输";
     const response = await fetch(target, {
       method: "POST",
       body: form,
@@ -70,6 +76,7 @@ export async function uploadWorkFile(
       signal: AbortSignal.timeout(600_000),
     });
     if (!response.ok) return fail({ kind: "business", code: String(response.status), message: "文件上传失败" });
+    stage = "上传响应读取";
     const uploaded = parseWorkUploadReply(
       await response.text(),
       response.headers.get("x-ntes-signature"),
@@ -79,8 +86,22 @@ export async function uploadWorkFile(
     );
     return uploaded ? ok(uploaded) : fail({ kind: "parse", endpoint: "filepicker.upload" });
   } catch (error) {
+    const name = error instanceof Error && /^[a-z]+$/i.test(error.name) ? error.name : "Error";
+    const cause = error instanceof Error ? error.cause : undefined;
+    const code = cause && typeof cause === "object" && "code" in cause ? cause.code : undefined;
+    const policy =
+      stage === "上传地址校验" &&
+      error instanceof Error &&
+      (error.message === "上传 token 缺少地址" || error.message.startsWith("上传服务地址不受支持（"))
+        ? `：${error.message}`
+        : "";
+    const suffix = typeof code === "string" && /^[a-z0-9_]{1,60}$/i.test(code) ? `，${code}` : "";
     return error instanceof DOMException && error.name === "TimeoutError"
       ? fail({ kind: "timeout" })
-      : fail({ kind: "business", code: "upload_failed", message: "文件上传失败，请检查文件及网络后重试" });
+      : fail({
+          kind: "business",
+          code: "upload_failed",
+          message: `文件上传失败（${stage}，${name}${suffix}）${policy}`,
+        });
   }
 }

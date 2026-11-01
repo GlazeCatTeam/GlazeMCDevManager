@@ -19,6 +19,7 @@
 
 - 回复用简体中文。
 - 提交和推送都要用户明确同意。提交信息：英文前缀 + 空格 + 中文正文（如 `feat: 新增账号切换回滚`）。
+- 后续主线更新通过 GitHub 拉取请求的 Squash and merge 生成带 Verified 的提交，再由 GitHub Actions 构建发布；不要用直接推送 main 代替该流程，也不要为此改写已发布提交或标签，见决定 #82。
 - 不复制 MCDevManager 源码（BNCL-1.0），只参考行为和接口。
 - 凭据只在主进程；插件只依赖 `@glaze/plugin-sdk`；渲染进程不依赖 core、netease、storage。
 - 设计任何功能都要考虑外部 AI 工具通过 MCP 接入：先在 `@glaze/contracts` 定义能力（权限、`risk`、`mcp` 说明），再写界面；不允许只有界面能做的业务逻辑。并在 [docs/architecture/13-mcp.md](docs/architecture/13-mcp.md) 的模块工具清单登记。

@@ -99,7 +99,7 @@ pnpm dev
 发布一个版本：
 
 1. 提升 `apps/desktop/package.json` 的 `version`，写 `docs/releases/v<版本>.md`（Release 正文和应用内更新说明都用它），在 PROJECT.md 记录。
-2. 提交后推送分支，再推送标签 `git tag v<版本>`、`git push origin v<版本>`。
+2. 提交并推送功能分支，拉取请求的 CI 全部通过后在 GitHub 使用 **Squash and merge** 生成主线提交；核对该提交显示 **Verified**，同步合并后的 `main`，再从该提交创建和推送标签 `git tag v<版本>`、`git push origin v<版本>`。按决定 #82，不直接推送本地提交到主线代替此流程，不改写既有发布标签。
 3. `.github/workflows/release.yml` 校验标签与版本一致、更新说明存在，跑类型检查、Biome、测试，然后 `pnpm --filter @glaze/desktop release` 打包，并把安装包、`.blockmap` 和 `latest.yml` 上传到**草稿** Release。
 4. 维护者在 GitHub 上检查草稿：下载安装包试装，核对正文后点「Publish release」。发布前，用户和更新程序都看不到它。
 
@@ -136,3 +136,4 @@ pnpm dev
 
 - `main` 始终可构建、可发布。
 - 功能开发在 `feat/<简述>` 分支，通过拉取请求合并，CI 全部通过才能合并。
+- 主线通过 GitHub 的 Squash and merge 生成带签名提交，合并后核对 Verified；本地功能分支提交可以不签名。GitHub Actions 负责构建与发布，构建成功本身不会给本地提交补签。

@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
+import { fromNeteaseError } from "../apps/desktop/src/main/ipc/errors";
+import { describeLogError } from "../apps/desktop/src/main/logs/errors";
 import {
   type AccountSummary,
   emptyWorkCreateFields,
@@ -195,6 +197,56 @@ function fixture(permissions: McpPermission[] = [...mcpLevels.full.permissions])
     service.call(client.id, "works_create", params) as Promise<McpOperation>;
   return { service, client, ports, creates, call, durable: () => durable };
 }
+
+test("creation failures log the operation phase and redacted platform reason without payloads", async () => {
+  const f = fixture();
+  const logs: string[] = [];
+  f.ports.log = (_level, message, error) =>
+    logs.push(`${message}；${error === undefined ? "" : describeLogError(error)}`);
+  f.ports.createWork = async (_draft, _fields, beforeWrite) => {
+    beforeWrite();
+    throw fromNeteaseError({
+      kind: "business",
+      code: "server_error",
+      httpStatus: 500,
+      message: "服务器异常 sign=private-sign",
+    });
+  };
+  const failed = await f.call({ fields: { item_name: "private-title" }, idempotencyKey: "private-key" });
+  assert.equal(failed.state, "failed");
+  const diagnostic = logs.find((entry) => entry.includes("AI 操作失败"));
+  assert.ok(diagnostic?.includes(failed.id));
+  assert.match(diagnostic ?? "", /动作=create；阶段=creating；状态=failed/);
+  assert.match(diagnostic ?? "", /错误码=server_error；HTTP=500；原因=服务器异常/);
+  assert.doesNotMatch(logs.join("\n"), /private-sign|private-title|private-key/);
+
+  // A transport failure stays unknown and preserves its cause in diagnostics
+  f.ports.createWork = async (_draft, _fields, beforeWrite) => {
+    beforeWrite();
+    throw fromNeteaseError({ kind: "timeout" });
+  };
+  const uncertain = await f.call({ fields: { item_name: "超时作品" }, idempotencyKey: "uncertain" });
+  assert.equal(uncertain.state, "unknown");
+  assert.ok(logs.some((entry) => entry.includes(uncertain.id) && /状态=unknown；类别=timeout/.test(entry)));
+});
+
+test("validation failures are logged before execution and broken diagnostics cannot change creation", async () => {
+  const f = fixture();
+  const logs: string[] = [];
+  f.ports.log = (_level, message, error) => logs.push(`${message}；${describeLogError(error)}`);
+  await assert.rejects(f.call({ fields: {}, submitReview: "invalid", idempotencyKey: "bad" }), /expected boolean/);
+  assert.match(logs.join("\n"), /AI 工具调用失败；工具=works_create.*类别=validation/);
+  await assert.rejects(f.service.call(f.client.id, "TEST_PRIVATE_UNKNOWN_TOOL", {}), /工具不存在/);
+  assert.match(logs.join("\n"), /工具=unknown_tool/);
+  assert.doesNotMatch(logs.join("\n"), /TEST_PRIVATE_UNKNOWN_TOOL/);
+  assert.equal(f.creates.length, 0);
+  f.ports.log = () => {
+    throw new Error("Log disk full");
+  };
+  const result = await f.call({ fields: { item_name: "日志故障仍可创建" }, idempotencyKey: "logger-failed" });
+  assert.equal(result.state, "succeeded");
+  assert.equal(f.creates.length, 1);
+});
 
 test("plain creation succeeds without an ID, does not submit review and allows another intentional creation", async () => {
   const f = fixture(["works:save"]);

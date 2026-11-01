@@ -11,12 +11,20 @@ const MAX_ENTRIES = 500;
 export function redactLog(value: string): string {
   return (
     value
-      .replace(/\b(?:cookie|set-cookie|authorization)\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\r\n]*)/gi, "[凭据已隐藏]")
       .replace(
-        /\b(?:NTES_SESS|P_INFO|password|passwd|token|secret|sessionCookie)\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s;,]+)/gi,
+        /\b(?:cookie|set-cookie|authorization)\b["']?\s*[:=]\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\r\n]*)/gi,
+        "[凭据已隐藏]",
+      )
+      .replace(
+        /\b(?:NTES_SESS|P_INFO|password|passwd|token|secret|session[_-]?cookie|access[_-]?token|refresh[_-]?token|api[_-]?key|private[_-]?key|sign|signature|receipt|uploadReceipt|passport|email|nickname|userName)\b["']?\s*[:=]\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s;,，；]+)/gi,
         "[凭据已隐藏]",
       )
       .replace(/https?:\/\/[^\s]+/gi, "[链接已隐藏]")
+      .replace(/\bBearer\s+[a-z\d._~+/-]+=*/gi, "[凭据已隐藏]")
+      .replace(/\b[a-z\d._%+-]+@[a-z\d.-]+\.[a-z]{2,}\b/gi, "[邮箱已隐藏]")
+      .replace(/["'](?:[a-z]:[\\/]|\\\\)[^"'\r\n]*["']/gi, "[本地路径已隐藏]")
+      .replace(/(?:[a-z]:[\\/]|\\\\)[^"'<>,;，；\r\n]+/gi, "[本地路径已隐藏]")
+      .replace(/\b[a-z\d+/_=-]{48,}\b/gi, "[长凭据已隐藏]")
       // biome-ignore lint/suspicious/noControlCharactersInRegex: remove log control characters and newline injection
       .replace(/[\u0000-\u001f\u007f]/g, " ")
       .slice(0, 1500)

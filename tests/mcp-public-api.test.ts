@@ -112,3 +112,34 @@ test("SDK instructions execute explicitly requested, granted writes without repe
     await server.close();
   }
 });
+
+test("SDK exposes BP/RP-only mod packaging rules before upload", async () => {
+  const f = queryFixture();
+  const server = createMcpServer(f.service, f.client.id);
+  const client = new Client({ name: "packaging-rules-test", version: "1" });
+  const [host, peer] = InMemoryTransport.createLinkedPair();
+  try {
+    await server.connect(host);
+    await client.connect(peer);
+    const instructions = client.getInstructions() ?? "";
+    assert.match(instructions, /behavior_pack.*resource_pack/);
+    assert.match(instructions, /ZIP 顶层.*BP.*RP/);
+    const upload = (await client.listTools()).tools.find((tool) => tool.name === "works_upload");
+    assert.ok(upload);
+    for (const description of [instructions, upload.description ?? ""]) {
+      assert.match(description, /只打包.*BP.*RP/);
+      assert.match(description, /所有文件和目录必须完整保留.*空目录.*隐藏文件.*未被 Git 跟踪或被忽略/);
+      assert.match(description, /不得筛除内部/);
+      assert.match(description, /必须原样保留 RP 的 entities 文件夹及其全部内容/);
+      assert.match(description, /不得修改 BP\/RP 的任何文件，包括源文件与打包副本/);
+      assert.match(description, /不得重写 UUID.*manifest.*版本号.*免费\/付费开关.*格式化文件/);
+      assert.match(description, /只排除 BP\/RP 之外的测试与开发辅助内容/);
+      assert.match(description, /ZIP 必须显式写入空目录条目/);
+      assert.match(description, /上传前.*源目录.*全部文件和目录清单（包括空目录）.*逐文件.*哈希/);
+      assert.doesNotMatch(description, /即使位于 BP\/RP 内.*须排除|即使这些文件在包内.*不纳入/);
+    }
+  } finally {
+    await client.close();
+    await server.close();
+  }
+});

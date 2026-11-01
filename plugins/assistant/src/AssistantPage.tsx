@@ -70,7 +70,14 @@ export function AssistantPage() {
           <Panel title="AI 工具" badge={<Tag>{clients.length}</Tag>} className={styles.clients} aria-label="AI 工具">
             <div className={styles.clientList}>
               {clients.map((client) => (
-                <ClientCard key={client.id} client={client} accounts={accounts} action={action} />
+                <ClientCard
+                  key={client.id}
+                  client={client}
+                  request={snapshot.requests.find((entry) => entry.clientId === client.id && entry.kind === "connect")}
+                  serviceRunning={snapshot.enabled && snapshot.status === "running"}
+                  accounts={accounts}
+                  action={action}
+                />
               ))}
             </div>
           </Panel>

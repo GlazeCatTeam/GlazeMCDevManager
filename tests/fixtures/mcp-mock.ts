@@ -116,7 +116,7 @@ export function installMcpMock(): void {
       });
   };
   const calls: { method: string; params: unknown }[] = [];
-  const failures = { connect: "", preserveConnection: false, clearAudit: "" };
+  const failures = { connect: "", preserveConnection: false, clearAudit: "", requestConnect: "" };
   Object.assign(globalThis, {
     __mcpCalls: calls,
     __mcpState: state,
@@ -132,7 +132,32 @@ export function installMcpMock(): void {
       rpc: async (method: string, params: Record<string, unknown> | undefined) => {
         calls.push({ method, params });
         if (method === "account.list") return { ok: true, value: [account] };
-        if (method === "mcp.snapshot") return { ok: true, value: structuredClone(state) };
+        if (method === "mcp.promptEvent") return { ok: true, value: undefined };
+        if (method === "mcp.snapshot") {
+          state.requests = state.requests.filter((entry) => entry.expiresAt > Date.now());
+          return { ok: true, value: structuredClone(state) };
+        }
+        if (method === "mcp.requestConnect") {
+          if (failures.requestConnect)
+            return { ok: false, error: { kind: "unavailable", message: failures.requestConnect } };
+          const client = state.clients.find((entry) => entry.id === params?.clientId);
+          if (!client?.connected || !state.enabled)
+            return { ok: false, error: { kind: "unavailable", message: "连接已断开" } };
+          state.requests = state.requests.filter((entry) => entry.clientId !== client.id || entry.kind !== "connect");
+          client.expiresAt = Date.now() + 600_000;
+          state.requests.push({
+            id: crypto.randomUUID(),
+            clientId: client.id,
+            clientName: client.name,
+            kind: "connect",
+            permissions: assist,
+            reason: "想要连接 Glaze，帮你管理作品与数据",
+            createdAt: Date.now(),
+            expiresAt: client.expiresAt,
+          });
+          emit();
+          return { ok: true, value: undefined };
+        }
         if (method === "mcp.installers")
           return {
             ok: true,
@@ -202,6 +227,8 @@ export function installMcpMock(): void {
           const client = state.clients.find((entry) => entry.id === request?.clientId);
           if (client && params?.decision === "always")
             client.permissions = [...client.permissions, ...(request?.permissions ?? [])];
+          if (client && request?.kind === "connect" && params?.decision === "always")
+            Object.assign(client, { approved: true, accounts: [account.id], defaultAccount: account.id });
           emit();
           return { ok: true, value: undefined };
         }

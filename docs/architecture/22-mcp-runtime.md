@@ -69,11 +69,13 @@
 
 **手动连接**：不带密钥的地址仍可使用。连接后弹出「允许连接」，允许后获得「帮我打理」权限，只在本次会话有效；新会话不会根据自报名称继承授权。
 
+未授权卡片按真实状态显示「尚未授权」「等待你允许」「授权请求已过期」「连接已断开」或「AI 连接服务未运行」，只有在线且服务运行时可点「重新申请授权」。`mcp.requestConnect { clientId }` 仅供可信界面调用：重建或续期连接请求，用新的请求 ID 重新打开曾关闭的弹窗，同时保留正在等待的 AI 调用；仍需用户在弹窗或页面上方「等你允许」中明确允许，不自动授予权限。请求到期后界面刷新并移除授权入口，断线时取消该会话的连接请求；过期、失效或断线请求不能被批准。AI 的 `glaze_status` 同样根据真实请求提示恢复路径。
+
 **内置指令**（MCP prompts）：`daily_report` 今日数据简报、`reply_reviews` 处理差评、`check_works` 检查作品状态、`income_review` 本月收益分析、`feedback_summary` 整理玩家反馈。服务端 `instructions` 要求 AI 用简单中文交流、先调 `glaze_status`、缺权限直接调用让应用弹窗。用户已明确要求且权限已允许的写操作直接执行，无需重复询问，可以简短告知执行内容；删除 / 上架 / 提审 / 回复玩家仍必须符合用户已表达的意图。
 
 无需生成邀请、启动桥进程、创建 AI 草稿或逐次确认保存。原内部快照数据在启动时清理；仅保留仍被上传材料或未解决操作引用的后台快照。
 
-宿主 RPC：`mcp.snapshot`（含 `requests`）、`mcp.installers`、`mcp.connect`、`mcp.answer`、`mcp.grant`、`mcp.revoke`（同时清理配置）、`mcp.directory`、`mcp.setEnabled`、`mcp.resolveOperation`，均为 shellOnly。事件 `mcp.changed` 携带 `pendingCount`、`requestCount`、`connectedCount`。
+宿主 RPC：`mcp.snapshot`（含 `requests`）、`mcp.installers`、`mcp.connect`、`mcp.requestConnect`、`mcp.promptEvent`（只上报已有请求的 shown/dismissed 事件）、`mcp.answer`、`mcp.grant`、`mcp.revoke`（同时清理配置）、`mcp.directory`、`mcp.setEnabled`、`mcp.resolveOperation`，均为 shellOnly。事件 `mcp.changed` 携带 `pendingCount`、`requestCount`、`connectedCount`。授权生命周期、通知路由和 AI 操作失败进入脱敏运行日志，详见 [19 插件与日志](19-plugins-and-logs.md)。
 
 ## 直接修改作品
 
@@ -91,6 +93,8 @@
 `base` 可选，用于核对 AI 读取时的原值。宿主仍会在实际保存前复核平台数据和作品状态。`patch` 支持现有编辑器全部可写分区字段，包括基本信息、定价、详情、资源、图片、视频、PC 同步、更新与上架设置；只读平台字段不可伪造。普通保存默认不提审；`submitReview: true` 需要提审权限。
 
 `works_create` 接收 `fields` 和可选 `submitReview`（默认 false）。普通新增仅要求保存授权；明确要求新增并提审时设为 true，同时检查保存与提审授权，由同一次创建请求设置 `is_check_apply=true`，不查询 ID 或另发提审请求。平台确认成功后返回 `succeeded`，结果包含 `{ created: true, submittedReview: boolean, itemId: null }`；仅缺少返回 ID 不要求人工核对。后续修改或补配置仍须准确 ID，不按名称猜测；MCP 创建传入 PC 同步、关联、授权证明或折扣等后续配置时在写入前报错，避免静默忽略。旧版 `created_id_unresolved` 记录和未知写入继续要求核实，不随升级自动解除。`works_submit_review` 仍用于按准确 ID 提审已有作品。见 [ADR-0017](../adr/0017-mcp-create-and-review.md)。
+
+**AI 模组打包规范**：只选用户指定模组当前的完整 BP（行为包）和 RP（资源包）目录，根据 `manifest.json` 确认 `BP` / `RP`、`behavior_pack_...` / `resource_pack_...` 等实际名称；ZIP 顶层保留两个原目录及内部相对路径，不额外套工程目录。**BP/RP 内全部文件与目录原样保留，包括空目录、隐藏文件、未被 Git 跟踪或被忽略的文件；不筛除内部任何内容**，RP 的 `entities` 及其全部内容也必须保留。打包不得修改源文件或打包副本，不重写 UUID、manifest、版本号、免费/付费开关，不格式化文件。测试与开发辅助内容只在 BP/RP 之外排除；禁止整仓库压缩或仅导出 Git 跟踪文件。ZIP 必须显式写入空目录条目。上传前检查 ZIP 完整性，与源目录逐项比对全部文件、目录及空目录清单，并逐文件核对解压后内容哈希，确认完整且字节内容未变、没有范围外条目。此规范同时通过连接初始化的 `instructions` 和 `works_upload` 描述提供给 AI；上传服务不自动改包或强制拦截 ZIP 内容。
 
 `works_upload` 直接导入并上传材料，返回 `assetId`。优先传 `filePath`（运行 Glaze 的电脑上、用户明确指定的素材绝对路径），在已有上传授权内后台完成，不操作窗口；也可用 `directoryId` + `relativePath` 读取已授权目录。三种来源互斥，只有显式传 `interactive: true` 才打开文件选择器；缺少来源、目录参数不完整或来源冲突时直接报错。`promotion_upload` 使用相同来源规则。
 

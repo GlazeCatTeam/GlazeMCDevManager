@@ -85,6 +85,8 @@ flowchart LR
 
 侧边栏「AI 助手」提供一键连接（自动写入 Claude Code、Codex、Cursor、VS Code、Windsurf、Gemini CLI 的配置，其他工具生成一句话让 AI 自己配置）、已连接工具与三档权限、待处理请求和操作记录；服务开关和端口收进高级设置。一键连接的地址带独立连接密钥，重连无需再次授权；不带密钥的手动连接每次会话需在弹窗中允许。旧 stdio 桥与命名管道已移除。
 
+手动连接卡片提供「重新申请授权」（`mcp.requestConnect`，shellOnly，不向 AI 开放）；重新打开或续期请求，仍需用户明确允许。卡片按实际请求、有效期与在线状态显示提示，断线后需先重连。AI 使用已有 `glaze_request_access` 申请同一连接授权，详见 [22 MCP 实装](22-mcp-runtime.md)。
+
 ## 安全
 
 MCP 客户端是新的调用者身份，走同一个权限代理：

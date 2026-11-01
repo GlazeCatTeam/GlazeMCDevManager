@@ -1,5 +1,6 @@
 import type {
   AccountSummary,
+  LogLevel,
   McpAccessRequest,
   McpAsset,
   McpAudit,
@@ -52,6 +53,8 @@ export interface McpData {
 export interface McpPorts {
   save(data: McpData): void;
   changed(): void;
+  /** Host-owned diagnostics apply redaction before persisting; no business payloads belong here */
+  log?(level: LogLevel, message: string, error?: unknown): void;
   /** Tell the user a tool is waiting for an answer, e.g. with a system notification */
   notify?(request: McpAccessRequest): void;
   accounts(): AccountSummary[];
@@ -128,8 +131,9 @@ export class McpError extends Error {
   constructor(
     public readonly kind: string,
     message: string,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
   }
 }
 

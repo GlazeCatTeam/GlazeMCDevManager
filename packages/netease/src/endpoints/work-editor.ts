@@ -514,14 +514,28 @@ export async function saveWorkEditor(
     if (body.sync_pc_flag) {
       const sync = record(body.sync_item_info);
       const channels = records(sync.channel);
+      const existingChannels = records(record(fields.sync_item_info).channel);
+      const currentChannels = [];
       for (const image of channels) {
         const slot = choices.value.pcImages.find((s) => s.id === image.channel_id);
+        // Old platform aliases duplicate supported slots but cannot be sent in a new PC update
+        if (
+          !slot &&
+          existingChannels.some((existing) => canonical(existing) === canonical(image)) &&
+          channels.some(
+            (current) =>
+              current.channel_url === image.channel_url &&
+              choices.value.pcImages.some((s) => s.id === current.channel_id && s.version > 0),
+          )
+        )
+          continue;
         if (!slot || slot.version <= 0)
           return fail({ kind: "business", code: "validation", message: "PC 图片位版本无法匹配，请刷新平台配置" });
         image.version = slot.version;
         image.channel_required = false;
+        currentChannels.push(image);
       }
-      body.sync_item_info = { ...sync, channel: channels };
+      body.sync_item_info = { ...sync, channel: currentChannels };
     }
   }
   beforeWrite?.();
