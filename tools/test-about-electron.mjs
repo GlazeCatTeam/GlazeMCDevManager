@@ -148,7 +148,9 @@ try {
     });
     globalThis.__failRead = "app.getAbout";
   });
-  await page.getByRole("button", { name: "外观", exact: true }).click();
+  // A fresh renderer keeps the successful metadata cache from bypassing the injected read failure
+  await page.reload();
+  await page.getByRole("button", { name: "设置", exact: true }).click();
   await page.getByRole("button", { name: "关于", exact: true }).click();
   await page.getByText("版本信息读取失败：离线读取失败", { exact: true }).waitFor();
   await application.evaluate(() => {

@@ -10,6 +10,7 @@ import {
 } from "@glaze/plugin-sdk";
 import { EditorSection, type EditorSectionActions } from "./EditorSection";
 import { type EditorSectionProps, object, rows, text } from "./fields";
+import { VideoPreview } from "./VideoPreview";
 import styles from "./WorkEditor.module.css";
 
 export type UploadFile = (
@@ -120,6 +121,7 @@ export function MediaSections({
   const actions = { disabled, save, dirty, editing, beginEdit, creating };
   const videos = rows(value.video_info_list);
   const video = videos[0];
+  const videoSource = mediaUrl(video?.url);
   /** Replace one video while retaining any remaining server records */
   const replaceVideo = async () => {
     const file = await upload("video");
@@ -177,13 +179,27 @@ export function MediaSections({
           </div>
         </div>
       </EditorSection>
-      <EditorSection section="video" title="视频与封面" {...actions}>
+      <EditorSection
+        section="video"
+        title="视频与封面"
+        preview={
+          videoSource ? (
+            <VideoPreview key={videoSource} source={videoSource} cover={mediaUrl(video?.cover)} />
+          ) : undefined
+        }
+        {...actions}
+      >
         <div className={styles.fields}>
           <div className={styles.stack}>
             <strong>作品视频</strong>
             <span className={styles.fileName}>
               {video ? mediaUrl(video.url).split("/").pop() || "已上传视频" : "暂无视频"}
             </span>
+            {video && !videoSource && (
+              <span className={styles.danger} role="alert">
+                平台未返回可播放的视频地址
+              </span>
+            )}
             <span className={styles.hint}>
               MP4 · H.264 / AAC · 16:9
               <br />

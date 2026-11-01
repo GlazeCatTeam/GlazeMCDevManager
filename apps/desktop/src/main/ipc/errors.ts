@@ -6,13 +6,14 @@ export class CapabilityError extends Error {
   constructor(
     readonly kind: AccountErrorKind | "internal" | "validation" | "account_changed",
     message: string,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
   }
 }
 
 /** Turn a NetEase error into a capability error with a readable message */
 export function fromNeteaseError(error: NeteaseError): CapabilityError {
   const kind = error.kind === "parse" ? "business" : error.kind;
-  return new CapabilityError(kind, describeError(error));
+  return new CapabilityError(kind, describeError(error), { cause: error });
 }

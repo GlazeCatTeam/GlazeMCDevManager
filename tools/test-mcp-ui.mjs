@@ -53,9 +53,85 @@ try {
   assert.equal(grant.grant.permissions.includes("works:save"), false);
   assert.deepEqual(grant.grant.accounts, ["account-a"]);
   assert.equal(await page.getByText("临时连接", { exact: true }).count(), 1);
-  assert.equal(await page.getByText("等待你允许", { exact: true }).count(), 1);
+  assert.equal(await page.getByText("尚未授权", { exact: true }).count(), 1);
+  assert.equal(await page.getByText("等待你允许", { exact: true }).count(), 0);
   await page.getByText("请到开发者平台确认结果", { exact: false }).waitFor();
   await page.screenshot({ path: join(output, "mcp-assistant.png"), fullPage: true });
+
+  // A manual client can recover a missing/dismissed/expired prompt without reconnecting
+  const manual = page.locator("article").filter({ has: page.getByText("Cherry Studio", { exact: true }) });
+  const retry = manual.getByRole("button", { name: "重新申请授权", exact: true });
+  await page.evaluate(() => {
+    globalThis.__mcpFailures.requestConnect = "授权请求创建失败，请重试";
+  });
+  await retry.click();
+  await page.getByText("授权请求创建失败，请重试", { exact: true }).waitFor();
+  assert.equal(await page.getByRole("dialog").count(), 0);
+  await page.evaluate(() => {
+    globalThis.__mcpFailures.requestConnect = "";
+  });
+  await retry.click();
+  const authorization = page.getByRole("dialog", { name: "Cherry Studio 想连接 Glaze", exact: true });
+  await authorization.waitFor();
+  const firstId = await page.evaluate(() => globalThis.__mcpState.requests[0].id);
+  await page.keyboard.press("Escape");
+  await authorization.waitFor({ state: "hidden" });
+  await manual.getByText("等待你允许", { exact: true }).waitFor();
+  await retry.click();
+  await authorization.waitFor();
+  assert.notEqual(await page.evaluate(() => globalThis.__mcpState.requests[0].id), firstId);
+  assert.equal(await page.evaluate(() => globalThis.__mcpState.requests.length), 1);
+
+  // Expiry updates both views even when no host event arrives at the deadline
+  await page.evaluate(() => {
+    const expiresAt = Date.now() + 1000;
+    globalThis.__mcpState.requests[0].expiresAt = expiresAt;
+    globalThis.__mcpState.clients.find((entry) => entry.id === "client-b").expiresAt = expiresAt;
+    globalThis.__mcpEmit();
+  });
+  await manual.getByText("授权请求已过期", { exact: true }).waitFor();
+  await authorization.waitFor({ state: "hidden" });
+  assert.equal(await page.getByRole("region", { name: "等你允许", exact: true }).count(), 0);
+  await page.screenshot({ path: join(output, "mcp-authorization-expired.png"), fullPage: true });
+  await retry.click();
+  await authorization.waitFor();
+  await authorization.getByRole("button", { name: "拒绝", exact: true }).click();
+  await manual.getByText("尚未授权", { exact: true }).waitFor();
+  await retry.click();
+  await authorization.waitFor();
+  await page.keyboard.press("Escape");
+  const pending = page.getByRole("region", { name: "等你允许", exact: true });
+  await pending.getByRole("button", { name: "允许连接", exact: true }).waitFor();
+  await page.screenshot({ path: join(output, "mcp-authorization-fallback.png"), fullPage: true });
+
+  // Offline clients and a stopped service provide instructions instead of an unusable action
+  await page.evaluate(() => {
+    globalThis.__mcpState.clients.find((entry) => entry.id === "client-b").connected = false;
+    globalThis.__mcpState.requests = [];
+    globalThis.__mcpEmit();
+  });
+  await manual.getByText("连接已断开", { exact: true }).waitFor();
+  assert.equal(await retry.isDisabled(), true);
+  await page.evaluate(() => {
+    globalThis.__mcpState.clients.find((entry) => entry.id === "client-b").connected = true;
+    globalThis.__mcpState.enabled = false;
+    globalThis.__mcpState.status = "off";
+    globalThis.__mcpEmit();
+  });
+  await manual.getByText("AI 连接服务未运行", { exact: true }).waitFor();
+  assert.equal(await retry.isDisabled(), true);
+  await page.evaluate(() => {
+    globalThis.__mcpState.enabled = true;
+    globalThis.__mcpState.status = "running";
+    globalThis.__mcpEmit();
+  });
+  await retry.click();
+  await authorization.waitFor();
+  await page.keyboard.press("Escape");
+  await pending.getByRole("button", { name: "允许连接", exact: true }).click();
+  await manual.getByText("使用中", { exact: true }).waitFor();
+  assert.equal(await retry.count(), 0);
+  assert.equal(await page.evaluate(() => globalThis.__mcpState.requests.length), 0);
 
   // One-click connect preselects a detected tool and the recommended level
   await page.getByRole("button", { name: "连接 AI 工具", exact: true }).click();
@@ -198,7 +274,7 @@ try {
   await page.screenshot({ path: join(output, "mcp-onboarding.png"), fullPage: true });
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: AI assistant page, permission request, connection states, audit clear confirmation/cancel/failure/retry, unresolved operations and new records",
+    "PASS: AI assistant page, authorization recovery/expiry/denial/offline/fallback, connection states, audit clear confirmation/cancel/failure/retry, unresolved operations and new records",
   );
 } finally {
   await browser?.close();

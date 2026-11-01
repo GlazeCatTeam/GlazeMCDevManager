@@ -97,6 +97,9 @@ const document: WorkEditorDocument = {
     },
   },
 };
+if (new URLSearchParams(location.search).has("videoPreview")) {
+  document.fields.video_info_list = [{ url: "https://x19.fp.ps.netease.com/existing.mp4", size: 128, cover: "" }];
+}
 const options: WorkEditorOptions = {
   tags: ["剑", "魔法", "剑与魔法"],
   tagLimit: 5,

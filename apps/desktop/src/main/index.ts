@@ -1,11 +1,13 @@
 import { app } from "electron";
 import { createServices } from "./bootstrap/services";
 import { registerRpc } from "./ipc/rpc";
-import { handleRemoteImages, registerRemoteImageScheme } from "./protocols/remote-image";
+import { handleRemoteImages } from "./protocols/remote-image";
+import { registerRemoteMediaSchemes } from "./protocols/remote-media";
+import { handleRemoteVideos } from "./protocols/remote-video";
 import { WindowLifecycle } from "./windows/lifecycle";
 import { createMainWindow } from "./windows/main-window";
 
-registerRemoteImageScheme();
+registerRemoteMediaSchemes();
 
 let lifecycle: WindowLifecycle | undefined;
 
@@ -22,6 +24,7 @@ if (process.argv.includes("--mcp")) {
     if (process.platform === "win32")
       app.setAppUserModelId(app.isPackaged ? "com.glaze.mcdevmanager" : process.execPath);
     handleRemoteImages();
+    handleRemoteVideos();
     const services = createServices(
       () => {
         if (!lifecycle) throw new Error("窗口服务尚未就绪");

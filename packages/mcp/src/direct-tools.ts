@@ -105,7 +105,7 @@ export const directTools = [
     "上传作品材料",
     "works:upload",
     { ...account, itemId: itemId.optional(), ...material, ...key },
-    "后台上传作品材料并返回 assetId。优先传 filePath（运行 Glaze 的电脑上、用户明确指定的素材文件绝对路径），或 directoryId + relativePath 从已授权目录读取；仅 interactive=true 才打开文件选择器，缺少来源直接报错。不得自行扫描或上传无关文件。已有作品提供 itemId；新作品省略。材料绑定客户端、账号和作品。kind=image 必须按目标 platform 和 channelId 上传；resourceType 必须与作品 pri_type 一致；视频封面使用 kind=videoCover，推广图使用 banner，授权证明使用 proof。改变用途或图片位须重新上传，不返回本机路径或上传签名。",
+    "后台上传作品材料并返回 assetId。kind=resource 且为模组发行包时，只打包当前完整 BP/RP（如 behavior_pack_...、resource_pack_...），ZIP 顶层保留原目录。BP/RP 内所有文件和目录必须完整保留，包括空目录、隐藏文件、未被 Git 跟踪或被忽略的文件；不得筛除内部任何内容。必须原样保留 RP 的 entities 文件夹及其全部内容。不得修改 BP/RP 的任何文件，包括源文件与打包副本；不得重写 UUID、manifest、版本号、免费/付费开关或格式化文件。只排除 BP/RP 之外的测试与开发辅助内容，不得整仓库压缩，也不得仅导出 Git 跟踪文件。ZIP 必须显式写入空目录条目；上传前与源目录核对全部文件和目录清单（包括空目录）、逐文件哈希及 ZIP 完整性。优先传 filePath（运行 Glaze 的电脑上、用户明确指定的素材文件绝对路径），或 directoryId + relativePath 从已授权目录读取；仅 interactive=true 才打开文件选择器，缺少来源直接报错。不得自行扫描或上传无关文件。已有作品提供 itemId；新作品省略。材料绑定客户端、账号和作品。kind=image 必须按目标 platform 和 channelId 上传；resourceType 必须与作品 pri_type 一致；视频封面使用 kind=videoCover，推广图使用 banner，授权证明使用 proof。改变用途或图片位须重新上传，不返回本机路径或上传签名。",
   ),
   tool(
     "works_operation_get",

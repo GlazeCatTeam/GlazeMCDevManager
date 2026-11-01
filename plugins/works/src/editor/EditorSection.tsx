@@ -16,13 +16,14 @@ export function EditorSection({
   section,
   title,
   children,
+  preview,
   disabled,
   editing,
   beginEdit,
   dirty,
   save,
   creating = false,
-}: EditorSectionActions & { section: WorkSection; title: string; children: ReactNode }) {
+}: EditorSectionActions & { section: WorkSection; title: string; children: ReactNode; preview?: ReactNode }) {
   const unlocked = creating || editing(section);
   return (
     <Panel
@@ -46,6 +47,7 @@ export function EditorSection({
         ))
       }
     >
+      {preview}
       <fieldset className={styles.sectionFields} disabled={disabled || !unlocked} aria-label={`${title}内容`}>
         {children}
       </fieldset>

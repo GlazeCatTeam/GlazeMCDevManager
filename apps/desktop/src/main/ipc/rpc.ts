@@ -65,6 +65,7 @@ import {
   submitWorkReview,
 } from "@glaze/netease";
 import { BrowserWindow, type IpcMainInvokeEvent, ipcMain } from "electron";
+import { describeLogError } from "../logs/errors";
 import type { LogService } from "../logs/service";
 import type { McpHost } from "../mcp/host";
 import type { PluginRegistry } from "../plugins/registry";
@@ -640,8 +641,8 @@ export function registerRpc(
         );
       return { ok: true, value };
     } catch (error) {
-      // Never record request parameters, remote response bodies or exception text containing credentials
-      if (!method.startsWith("logs.")) logs.write("error", "rpc", `操作失败：${method}`);
+      // Keep a bounded, redacted explanation without serializing parameters or remote payloads
+      if (!method.startsWith("logs.")) logs.write("error", "rpc", `操作失败：${method}；${describeLogError(error)}`);
       if (error instanceof CapabilityError || error instanceof McpError) {
         return { ok: false, error: { kind: error.kind, message: error.message } };
       }

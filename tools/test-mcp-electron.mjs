@@ -148,8 +148,60 @@ try {
     ["glaze_status", "glaze_request_access"],
   );
   const ask = page.getByRole("dialog", { name: "Cherry Studio 想连接 Glaze" });
-  await ask.getByRole("button", { name: "允许连接", exact: true }).click();
+  await ask.waitFor();
+  await page.keyboard.press("Escape");
   await ask.waitFor({ state: "hidden" });
+  const manualCard = page.getByRole("article").filter({ hasText: "Cherry Studio" });
+  await manualCard.getByText("等待你允许", { exact: true }).waitFor();
+  const beforeRetry = await page.evaluate(() => window.glaze.rpc("mcp.snapshot"));
+  const originalRequest = beforeRetry.value.requests.find((entry) => entry.clientName === "Cherry Studio");
+  const waitingAccess = manual.client.callTool({ name: "glaze_request_access", arguments: {} });
+  await manualCard.getByRole("button", { name: "重新申请授权", exact: true }).click();
+  await ask.waitFor();
+  const afterRetry = await page.evaluate(() => window.glaze.rpc("mcp.snapshot"));
+  assert.equal(afterRetry.value.requests.length, 1);
+  assert.notEqual(afterRetry.value.requests[0].id, originalRequest.id);
+  assert.equal(afterRetry.value.clients.find((entry) => entry.name === "Cherry Studio").approved, false);
+  // The page remains an independent authorization path after the popup is dismissed
+  await page.keyboard.press("Escape");
+  await page
+    .getByRole("region", { name: "等你允许", exact: true })
+    .getByRole("button", { name: "允许连接", exact: true })
+    .click();
+  await ask.waitFor({ state: "hidden" });
+  assert.equal((await waitingAccess).structuredContent.result.outcome, "always");
+  await manualCard.getByText("使用中", { exact: true }).waitFor();
+  // Both UI and AI failures must reach real persisted diagnostics without copying inputs
+  const invalidUiCreate = await page.evaluate(() =>
+    window.glaze.rpc("works.create", { invalidField: "TEST_PRIVATE_UI_PAYLOAD" }),
+  );
+  assert.equal(invalidUiCreate.ok, false);
+  const invalidAiCreate = await manual.client.callTool({
+    name: "works_create",
+    arguments: {
+      fields: { item_name: "TEST_PRIVATE_AI_PAYLOAD" },
+      idempotencyKey: "log-invalid",
+      submitReview: "invalid",
+    },
+  });
+  assert.equal(invalidAiCreate.isError, true);
+  const diagnostics = await page.evaluate(() => window.glaze.rpc("logs.list", { level: "all" }));
+  assert.equal(diagnostics.ok, true);
+  const diagnosticText = diagnostics.value.entries.map((entry) => entry.message).join("\n");
+  assert.match(diagnosticText, /操作失败：works.create；类别=validation；原因=新建作品参数无效/);
+  assert.match(diagnosticText, /AI 工具调用失败；工具=works_create.*类别=validation/);
+  for (const label of [
+    "授权请求已创建",
+    "授权弹窗已渲染",
+    "授权弹窗已关闭",
+    "重新申请连接授权",
+    "决定=always",
+    "决定=deny",
+  ])
+    assert.ok(diagnosticText.includes(label), label);
+  assert.ok(diagnosticText.includes(originalRequest.id));
+  assert.ok(diagnosticText.includes(afterRetry.value.requests[0].id));
+  assert.doesNotMatch(diagnosticText, /TEST_PRIVATE_UI_PAYLOAD|TEST_PRIVATE_AI_PAYLOAD|TEST_ONLY_NOT_A_REAL_COOKIE/);
   assert.ok((await manual.client.listTools()).tools.some((tool) => tool.name === "account_list"));
   await manual.transport.terminateSession();
   await manual.client.close();

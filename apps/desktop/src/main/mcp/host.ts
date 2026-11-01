@@ -48,6 +48,7 @@ import { getAboutInfo, getDependencyLicenses } from "../ipc/about";
 import { changedModule } from "../ipc/data-changes";
 import { sendEvent } from "../ipc/rpc";
 import { uploadSelectedWorkFile } from "../ipc/work-files";
+import { describeLogError } from "../logs/errors";
 import type { LogService } from "../logs/service";
 import { bundledPlugins } from "../plugins/bundled";
 import type { PluginRegistry } from "../plugins/registry";
@@ -67,7 +68,8 @@ import { createMcpWorkReads } from "./work-visibility";
 
 /** Keep ambiguous platform responses distinguishable from an explicit business rejection */
 function writeResult<T>(result: Result<T>): Result<T> {
-  if (!result.ok && result.error.kind === "parse") throw new McpError("parse", "平台写入响应无法确认");
+  if (!result.ok && result.error.kind === "parse")
+    throw new McpError("parse", "平台写入响应无法确认", { cause: result.error });
   return result;
 }
 
@@ -208,6 +210,8 @@ export function createMcpHost(
     plugins.assertMethodEnabled(promotion ? "promotion.upload" : "works.save");
   };
   const ports: McpPorts = {
+    log: (level, message, error) =>
+      logs.write(level, "mcp", error === undefined ? message : `${message}；${describeLogError(error)}`),
     assertWorkAccess: (account, itemIds, includeArchived) =>
       workArchive.assertAccess(account, itemIds, includeArchived),
     invokePlugin: (id, tool, params, guard, beforeWrite) => pluginCalls.invoke(id, tool, params, guard, beforeWrite),
@@ -234,12 +238,23 @@ export function createMcpHost(
     accounts: () => sessions.list(),
     notify: (request) => {
       // The in-app dialog is enough while the user is looking at Glaze
-      if (BrowserWindow.getFocusedWindow() || !Notification.isSupported()) return;
+      if (BrowserWindow.getFocusedWindow()) {
+        logs.write("info", "mcp", `授权提示交由应用内弹窗；请求=${request.id}`);
+        return;
+      }
+      if (!Notification.isSupported()) {
+        logs.write("warn", "mcp", `系统通知不可用，请求保留在应用内；请求=${request.id}`);
+        return;
+      }
       try {
         const notification = new Notification({
           title: request.kind === "connect" ? `${request.clientName} 想连接 Glaze` : `${request.clientName} 请求权限`,
           body: `${request.reason}。点击回到 Glaze 处理。`,
         });
+        notification.on("show", () => logs.write("info", "mcp", `授权系统通知已显示；请求=${request.id}`));
+        notification.on("failed", (_event, error) =>
+          logs.write("warn", "mcp", `授权系统通知失败；请求=${request.id}；${describeLogError(error)}`),
+        );
         notification.on("click", () => {
           const win = appWindows()[0];
           if (!win) return;
@@ -248,8 +263,12 @@ export function createMcpHost(
           win.focus();
         });
         notification.show();
-      } catch {
-        // Notifications are a convenience; the request stays visible in the app
+      } catch (error) {
+        logs.write(
+          "warn",
+          "mcp",
+          `授权系统通知创建失败，请求保留在应用内；请求=${request.id}；${describeLogError(error)}`,
+        );
       }
     },
     assertEnabled: (method) => {
@@ -526,6 +545,14 @@ export function createMcpHost(
     },
     "mcp.answer": (params: { requestId: string; decision: McpDecision }) => {
       service.answer(params?.requestId, params?.decision);
+      return undefined;
+    },
+    "mcp.requestConnect": (params: { clientId: string }) => {
+      service.requestConnect(params?.clientId, true);
+      return undefined;
+    },
+    "mcp.promptEvent": (params: RpcMethods["mcp.promptEvent"]["params"]) => {
+      service.promptEvent(params?.requestId, params?.event);
       return undefined;
     },
     "mcp.directory": async (params: RpcMethods["mcp.directory"]["params"]) => {

@@ -9,7 +9,7 @@ import {
   Notice,
   onHostEvent,
 } from "@glaze/plugin-sdk";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "./AccessRequestDialog.module.css";
 
 /** App-wide prompt for AI connection and permission requests, shown on whichever page is open */
@@ -19,21 +19,37 @@ export function AccessRequestDialog() {
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const serial = useRef(0);
   const reload = useCallback(async () => {
+    const turn = ++serial.current;
     try {
       const result = await callHost("mcp.snapshot");
-      if (result.ok) setRequests(result.value.requests);
+      if (turn === serial.current && result.ok) setRequests(result.value.requests);
     } catch {
       // The next change event retries
     }
   }, []);
   useEffect(() => {
     void reload();
-    return onHostEvent("mcp.changed", () => void reload());
+    const off = onHostEvent("mcp.changed", () => void reload());
+    return () => {
+      serial.current++;
+      off();
+    };
   }, [reload]);
+  useEffect(() => {
+    const next = Math.min(...requests.map((entry) => entry.expiresAt));
+    if (!Number.isFinite(next)) return;
+    const timer = window.setTimeout(() => void reload(), Math.max(0, next - Date.now() + 1));
+    return () => window.clearTimeout(timer);
+  }, [requests, reload]);
 
-  const waiting = requests.filter((entry) => !dismissed.includes(entry.id));
+  const waiting = requests.filter((entry) => entry.expiresAt > Date.now() && !dismissed.includes(entry.id));
   const request = waiting[0];
+  const requestId = request?.id;
+  useEffect(() => {
+    if (requestId) void callHost("mcp.promptEvent", { requestId, event: "shown" }).catch(() => undefined);
+  }, [requestId]);
   if (!request) return null;
   /** Send the decision; the waiting tool call continues on the host */
   const answer = async (decision: McpDecision) => {
@@ -53,7 +69,10 @@ export function AccessRequestDialog() {
     <Dialog
       className={styles.dialog}
       title={connect ? `${request.clientName} 想连接 Glaze` : `${request.clientName} 需要你的允许`}
-      onClose={() => setDismissed([...dismissed, request.id])}
+      onClose={() => {
+        setDismissed([...dismissed, request.id]);
+        void callHost("mcp.promptEvent", { requestId: request.id, event: "dismissed" }).catch(() => undefined);
+      }}
       actions={
         connect ? (
           <>

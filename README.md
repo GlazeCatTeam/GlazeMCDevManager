@@ -13,7 +13,7 @@ Glaze MC Dev Manager：网易我的世界开发者管理工具（Windows 桌面�
 
 ## 状态
 
-公开测试版 v0.1.2。功能进度与已知限制见 [项目文档](docs/PROJECT.md)「当前进度」和各版本的 [更新说明](docs/releases)。
+公开测试版 v0.1.5。功能进度与已知限制见 [项目文档](docs/PROJECT.md)「当前进度」和各版本的 [更新说明](docs/releases)。
 
 ## 目录
 

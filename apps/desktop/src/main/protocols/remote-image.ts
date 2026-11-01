@@ -21,11 +21,6 @@ export function clearRemoteImageCache(): void {
   cache.clear();
 }
 
-/** Register the scheme as secure and standard; must run before the app is ready */
-export function registerRemoteImageScheme(): void {
-  protocol.registerSchemesAsPrivileged([{ scheme: REMOTE_IMAGE_SCHEME, privileges: { standard: true, secure: true } }]);
-}
-
 /** Response for a request the proxy refuses or cannot serve */
 function failed(status: number): Response {
   return new Response(null, { status });

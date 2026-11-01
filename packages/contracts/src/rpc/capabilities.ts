@@ -34,6 +34,8 @@ export const capabilities: Record<RpcMethod, Capability> = {
   "mcp.installers": shellOnly(null, "read"),
   "mcp.connect": shellOnly(null, "write"),
   "mcp.answer": shellOnly(null, "write"),
+  "mcp.requestConnect": shellOnly(null, "write"),
+  "mcp.promptEvent": shellOnly(null, "write"),
   "mcp.repair": shellOnly(null, "write"),
   "promotion.activities": {
     caller: "any",

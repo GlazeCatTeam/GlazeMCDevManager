@@ -4,6 +4,7 @@ import {
   emptyWorkCreateFields,
   isWorkRecord,
   isWorkValue,
+  type LogLevel,
   type McpAccessRequest,
   type McpAction,
   type McpDecision,
@@ -122,6 +123,15 @@ export class McpService {
     this.ports.changed();
   }
 
+  /** Diagnostics must never change a business result, even if a host logger fails */
+  private log(level: LogLevel, message: string, error?: unknown): void {
+    try {
+      this.ports.log?.(level, message, error);
+    } catch {
+      // The host log viewer reports storage failures independently
+    }
+  }
+
   /** Clear displayed history without losing operation results or durable replay protection */
   clearAudit(): void {
     const previous = this.data.audit;
@@ -207,6 +217,7 @@ export class McpService {
     for (const [id, entry] of this.access)
       if (entry.request.expiresAt < Date.now()) {
         this.access.delete(id);
+        this.log("warn", `授权请求已过期；请求=${id}；客户端=${entry.request.clientId}；类型=${entry.request.kind}`);
         for (const resolve of entry.waiters) resolve("timeout");
         changed = true;
       }
@@ -245,6 +256,7 @@ export class McpService {
     };
     this.data.clients.push(client);
     this.commit();
+    this.log("info", `临时连接已登记；客户端=${client.id}`);
     return client;
   }
 
@@ -265,6 +277,7 @@ export class McpService {
     };
     this.data.clients.push(client);
     this.commit();
+    this.log("info", `一键连接授权已创建；客户端=${client.id}；权限档位=${level}`);
     return { client, key };
   }
 
@@ -289,11 +302,37 @@ export class McpService {
     };
   }
 
-  /** Ask the user, through the app, to let a manually configured tool connect */
-  requestConnect(id: string): void {
+  /** Ask to connect; a trusted UI retry reopens dismissed prompts without losing waiting calls */
+  requestConnect(id: string, reopen = false): void {
+    this.expire();
     const client = this.client(id, false);
-    if (client.approved || [...this.access.values()].some((entry) => entry.request.clientId === id)) return;
-    this.openRequest(client, "connect", mcpLevels.assist.permissions, "想要连接 Glaze，帮你管理作品与数据");
+    if (client.approved) return;
+    if (reopen && (!this.data.enabled || this.status !== "running"))
+      throw new McpError("unavailable", "请先开启 AI 连接服务");
+    if (reopen && !this.connections.get(id)?.size)
+      throw new McpError("unavailable", "连接已断开，请让 AI 工具重新连接 Glaze 后再申请授权");
+    const pending = [...this.access.values()].find(
+      (entry) => entry.request.clientId === id && entry.request.kind === "connect",
+    );
+    if (pending && !reopen) return;
+    if (pending) {
+      const previousId = pending.request.id;
+      this.access.delete(pending.request.id);
+      Object.assign(pending.request, {
+        id: randomUUID(),
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 10 * 60_000,
+      });
+      this.access.set(pending.request.id, pending);
+      this.log("info", `重新申请连接授权；客户端=${id}；原请求=${previousId}；请求=${pending.request.id}`);
+      this.ports.notify?.(pending.request);
+    }
+    const entry =
+      pending ??
+      this.openRequest(client, "connect", mcpLevels.assist.permissions, "想要连接 Glaze，帮你管理作品与数据");
+    if (reopen && !pending)
+      this.log("info", `重新申请连接授权；客户端=${id}；请求=${entry.request.id}；原请求已失效或不存在`);
+    client.expiresAt = entry.request.expiresAt;
     this.commit();
   }
 
@@ -328,6 +367,10 @@ export class McpService {
       waiters: new Set(),
     };
     this.access.set(entry.request.id, entry);
+    this.log(
+      "info",
+      `授权请求已创建；请求=${entry.request.id}；客户端=${client.id}；类型=${kind}；权限=${permissions.join(",")}`,
+    );
     this.ports.notify?.(entry.request);
     return entry;
   }
@@ -341,7 +384,13 @@ export class McpService {
         entry.waiters.delete(done);
         resolve(outcome);
       };
-      const timer = setTimeout(() => done("timeout"), this.accessWaitMs);
+      const timer = setTimeout(() => {
+        this.log(
+          "warn",
+          `AI 等待授权超时；请求=${entry.request.id}；客户端=${entry.request.clientId}；请求仍可在有效期内处理`,
+        );
+        done("timeout");
+      }, this.accessWaitMs);
       timer.unref?.();
       entry.waiters.add(done);
     });
@@ -349,12 +398,15 @@ export class McpService {
 
   /** Apply the user's answer from the trusted UI and release any waiting tool call */
   answer(requestId: string, decision: McpDecision): void {
+    this.expire();
     const entry = this.access.get(requestId);
     if (!entry) throw new McpError("expired", "这条请求已处理或已过期");
     if (!["always", "once", "deny"].includes(decision)) throw new McpError("validation", "请选择允许或拒绝");
     const client = this.client(entry.request.clientId, false);
     if (decision !== "deny") {
       if (entry.request.kind === "connect") {
+        if (!this.data.enabled || this.status !== "running" || !this.connections.get(client.id)?.size)
+          throw new McpError("unavailable", "连接已断开，请让 AI 工具重新连接 Glaze 后再申请授权");
         const grant = this.defaultGrant(entry.request.permissions);
         if (!grant.accounts.length) throw new McpError("validation", "请先在 Glaze 登录至少一个账号");
         this.invalidate(client.id, "客户端权限已变化");
@@ -371,6 +423,21 @@ export class McpService {
     this.access.delete(requestId);
     for (const resolve of [...entry.waiters]) resolve(decision);
     this.commit();
+    this.log(
+      "info",
+      `授权决定已保存；请求=${requestId}；客户端=${client.id}；类型=${entry.request.kind}；决定=${decision}`,
+    );
+  }
+
+  /** Accept only a current request's fixed UI lifecycle event, never arbitrary renderer log text */
+  promptEvent(requestId: string, event: "shown" | "dismissed"): void {
+    if (!["shown", "dismissed"].includes(event)) throw new McpError("validation", "授权弹窗事件无效");
+    const entry = this.access.get(requestId);
+    if (!entry || entry.request.expiresAt <= Date.now()) return;
+    this.log(
+      "info",
+      `${event === "shown" ? "授权弹窗已渲染" : "授权弹窗已关闭，页面内请求仍可处理"}；请求=${requestId}；客户端=${entry.request.clientId}`,
+    );
   }
 
   /** Number of access requests waiting for the user */
@@ -391,17 +458,19 @@ export class McpService {
 
   /** Describe the connection for the AI in plain language, before or after approval */
   describe(id: string) {
+    this.expire();
     const client = this.client(id, false);
     const accounts = this.ports.accounts();
     const missing = mcpPermissions.filter(
       (permission) => permission !== "works:draft" && !client.permissions.includes(permission),
     );
     const level = mcpLevelOf(client.permissions);
+    const waitingForUser = [...this.access.values()].some((entry) => entry.request.clientId === id);
     return {
       app: "Glaze MC Dev Manager（网易我的世界开发者管理工具）",
       tool: client.name,
       approved: client.approved,
-      waitingForUser: [...this.access.values()].some((entry) => entry.request.clientId === id),
+      waitingForUser,
       level: client.approved ? (level === "custom" ? "自定义" : mcpLevels[level].title) : null,
       accounts: accounts
         .filter((account) => client.accounts.includes(account.id))
@@ -415,7 +484,13 @@ export class McpService {
       needsPermission: missing.map((permission) => ({ permission, label: mcpPermissionLabels[permission] })),
       hint: client.approved
         ? "直接调用需要的工具即可。缺少权限时 Glaze 会弹窗询问用户，用户允许后调用会自动继续。"
-        : "用户还没有允许连接。请告诉用户：在 Glaze 窗口弹出的提示中点击「允许」，或在 Glaze 侧边栏「AI 助手」里一键连接。",
+        : !this.data.enabled || this.status !== "running"
+          ? "AI 连接服务未运行，请在 Glaze 设置中开启后重新连接。"
+          : !this.connections.get(id)?.size
+            ? "连接已断开，请重新连接 Glaze 后再申请授权。"
+            : waitingForUser
+              ? "请在 Glaze 弹窗或「AI 助手」页面上方「等你允许」中允许连接。没看到弹窗时，可在工具卡片点击「重新申请授权」。"
+              : "当前没有待处理的授权请求。请调用 glaze_request_access 重新申请，或让用户在 Glaze 的 AI 工具卡片点击「重新申请授权」。",
     };
   }
 
@@ -495,8 +570,12 @@ export class McpService {
 
   /** Keep a keyed client's grant when one of its sessions ends; other sessions stay connected */
   sessionClosed(id: string): void {
-    if (!this.connections.get(id)?.size) this.invalidate(id, "连接已断开");
+    if (!this.connections.get(id)?.size) {
+      this.invalidate(id, "连接已断开");
+      this.cancelConnectRequest(id);
+    }
     this.commit();
+    this.log("info", `AI 会话已关闭；客户端=${id}；仍有连接=${!!this.connections.get(id)?.size}`);
   }
 
   /** Drop a client created for a session that never finished initializing */
@@ -513,6 +592,7 @@ export class McpService {
     const client = this.data.clients.find((entry) => entry.id === id);
     if (client) client.lastSeen = new Date().toISOString();
     this.commit();
+    this.log("info", `AI 会话已连接；客户端=${id}；已授权=${!!client?.approved}`);
     return () => {
       set.delete(close);
       if (!set.size) this.connections.delete(id);
@@ -538,14 +618,25 @@ export class McpService {
     this.invalidate(id, "客户端权限已变化");
     Object.assign(client, structuredClone(grant), { approved: true });
     this.commit();
+    this.log("info", `客户端授权已更新；客户端=${id}；权限=${grant.permissions.join(",")}`);
   }
 
   /** Revoke pending requests and interrupt transports on explicit disconnect or removal */
   disconnect(id: string): void {
     this.invalidate(id, "连接已断开");
+    this.cancelConnectRequest(id);
     for (const close of this.connections.get(id) ?? []) close();
     this.connections.delete(id);
     this.commit();
+  }
+  /** A stale connection prompt must not outlive the session it would authorize */
+  private cancelConnectRequest(id: string): void {
+    for (const [requestId, entry] of this.access)
+      if (entry.request.clientId === id && entry.request.kind === "connect") {
+        this.access.delete(requestId);
+        this.log("info", `连接授权请求因断线取消；请求=${requestId}；客户端=${id}`);
+        for (const resolve of [...entry.waiters]) resolve("deny");
+      }
   }
   /** Remove the grant and terminate the associated HTTP session */
   revoke(id: string): StoredClient | undefined {
@@ -559,6 +650,7 @@ export class McpService {
     this.once.delete(id);
     this.data.clients = this.data.clients.filter((entry) => entry.id !== id);
     this.commit();
+    if (client) this.log("info", `客户端授权已移除；客户端=${id}`);
     return client;
   }
   /** Stop all clients and invalidate unexecuted approvals */
@@ -626,8 +718,22 @@ export class McpService {
       : [];
   }
 
-  /** Validate inputs, enforce rate limits and account isolation, then audit one tool invocation */
+  /** Capture failures before validation as well as failures returned by the business executor */
   async call(id: string, name: string, input: unknown): Promise<unknown> {
+    try {
+      return await this.callTool(id, name, input);
+    } catch (error) {
+      const tool =
+        this.definitions.some((entry) => entry.name === name) || ["glaze_status", "glaze_request_access"].includes(name)
+          ? name
+          : "unknown_tool";
+      this.log("error", `AI 工具调用失败；工具=${tool}；客户端=${id}`, error);
+      throw error;
+    }
+  }
+
+  /** Validate inputs, enforce rate limits and account isolation, then audit one tool invocation */
+  private async callTool(id: string, name: string, input: unknown): Promise<unknown> {
     let account: string | null = null;
     let outcome = "failed";
     if (name === "glaze_status") return this.describe(id);
@@ -1022,6 +1128,11 @@ export class McpService {
           : error instanceof Error
             ? error.message
             : "操作失败";
+      this.log(
+        "error",
+        `AI 业务操作失败；操作=${op.id}；客户端=${client.id}；方法=${method}；阶段=${op.phase}；状态=${op.state}`,
+        error,
+      );
     } finally {
       this.writes.delete(target);
       this.commit();
@@ -1049,6 +1160,23 @@ export class McpService {
     validateWorkAssetUsage(patch, draft.document.fields, assets);
     const allowedUrl = (url: string) =>
       !url || original.includes(JSON.stringify(url)) || assets.some((asset) => asset.receipt?.url === url);
+    // Existing detail images live inside HTML strings rather than standalone JSON URL values
+    const originalDetailImages = new Set<string>();
+    const pc = draft.document.fields.sync_item_info;
+    for (const html of [draft.document.fields.info, isWorkRecord(pc) ? pc.info : undefined]) {
+      if (typeof html !== "string") continue;
+      sanitizeHtml(html, {
+        allowedTags: ["img"],
+        allowedAttributes: { img: ["src"] },
+        transformTags: {
+          img: (tagName, attribs) => {
+            if (attribs.src) originalDetailImages.add(attribs.src);
+            return { tagName, attribs };
+          },
+        },
+      });
+    }
+
     const resolve = (value: WorkValue, key: string): WorkValue => {
       if (Array.isArray(value)) return value.map((entry) => resolve(entry, key));
       if (isWorkRecord(value)) {
@@ -1105,12 +1233,14 @@ export class McpService {
                 src = asset.receipt.url;
               }
               if (
+                !originalDetailImages.has(src) &&
                 !original.includes(JSON.stringify(src)) &&
                 assets.some((asset) => asset.receipt?.url === src) &&
                 !assets.some((asset) => asset.receipt?.url === src && asset.receipt.receipt.file_type === "image")
               )
                 throw new McpError("validation", "详情图片不能使用资源包或视频材料");
-              if (!allowedUrl(src)) throw new McpError("forbidden", "详情图片必须来自本作品或已上传材料");
+              if (!allowedUrl(src) && !originalDetailImages.has(src))
+                throw new McpError("forbidden", "详情图片必须来自本作品或已上传材料");
               return { tagName: "img", attribs: { src } };
             },
           },
@@ -1467,6 +1597,7 @@ export class McpService {
       operation.phase = "validating";
       operation.message = "正在复核请求";
       this.commit();
+      this.log("info", `AI 操作开始；操作=${operation.id}；客户端=${operation.clientId}；动作=${operation.action}`);
       guard();
       if (operation.action === "import") {
         const client = this.client(operation.clientId);
@@ -1597,6 +1728,11 @@ export class McpService {
           (error instanceof Error && /数据格式无法识别|响应无法确认/.test(error.message)));
       operation.state = uncertain ? "unknown" : "failed";
       operation.message = `${saved ? "保存已成功；后续步骤失败。" : ""}${uncertain ? "平台写入结果待核实，禁止自动重试" : error instanceof Error ? error.message : "操作失败"}`;
+      this.log(
+        "error",
+        `AI 操作失败；操作=${operation.id}；客户端=${operation.clientId}；动作=${operation.action}；阶段=${operation.phase}；状态=${operation.state}`,
+        error,
+      );
     } finally {
       draft.locked =
         ["unknown", "created_id_unresolved", "platform_action"].includes(operation.state) ||
@@ -1605,6 +1741,10 @@ export class McpService {
       if (operation.action === "import") this.importing = false;
       this.commit();
       this.audit(operation.clientId, operation.action, operation.account, operation.state);
+      this.log(
+        operation.state === "succeeded" ? "info" : "warn",
+        `AI 操作结束；操作=${operation.id}；动作=${operation.action}；阶段=${operation.phase}；状态=${operation.state}`,
+      );
     }
   }
 }
